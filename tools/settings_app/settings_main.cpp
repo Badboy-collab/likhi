@@ -197,8 +197,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
             HINSTANCE hInst = ((LPCREATESTRUCT)lParam)->hInstance;
 
-            // Load Application Icon
-            hAppIcon = LoadIconW(hInst, MAKEINTRESOURCEW(1));
+            // Load Application Icon (High-res for UI rendering)
+            hAppIcon = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(1), IMAGE_ICON, 256, 256, LR_DEFAULTCOLOR);
             if (!hAppIcon) {
                 hAppIcon = (HICON)LoadImageW(NULL, L"assets/icon.ico", IMAGE_ICON, 256, 256, LR_LOADFROMFILE);
             }
@@ -701,17 +701,27 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     icex.dwICC = ICC_STANDARD_CLASSES | ICC_WIN95_CLASSES;
     InitCommonControlsEx(&icex);
 
+    HICON hIconBig = (HICON)LoadImageW(hInstance, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_DEFAULTCOLOR);
+    HICON hIconSm = (HICON)LoadImageW(hInstance, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR);
+
+    if (!hIconBig) {
+        hIconBig = (HICON)LoadImageW(NULL, L"assets/icon.ico", IMAGE_ICON, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_LOADFROMFILE);
+    }
+    if (!hIconSm) {
+        hIconSm = (HICON)LoadImageW(NULL, L"assets/icon.ico", IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_LOADFROMFILE);
+    }
+
     WNDCLASSEXW wcex;
     memset(&wcex, 0, sizeof(WNDCLASSEXW));
     wcex.cbSize = sizeof(WNDCLASSEXW);
     wcex.style = CS_HREDRAW | CS_VREDRAW;
     wcex.lpfnWndProc = WndProc;
     wcex.hInstance = hInstance;
-    wcex.hIcon = LoadIconW(hInstance, MAKEINTRESOURCEW(1));
+    wcex.hIcon = hIconBig;
     wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
     wcex.hbrBackground = CreateSolidBrush(RGB(248, 250, 252));
     wcex.lpszClassName = L"LikhiFluentSettingsClass";
-    wcex.hIconSm = LoadIconW(hInstance, MAKEINTRESOURCEW(1));
+    wcex.hIconSm = hIconSm;
 
     RegisterClassExW(&wcex);
 
@@ -724,6 +734,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     );
 
     if (!hWnd) return FALSE;
+
+    if (hIconBig) {
+        SendMessageW(hWnd, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
+    }
+    if (hIconSm) {
+        SendMessageW(hWnd, WM_SETICON, ICON_SMALL, (LPARAM)hIconSm);
+    }
 
     ShowWindow(hWnd, nCmdShow);
     UpdateWindow(hWnd);

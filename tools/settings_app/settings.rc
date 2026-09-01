@@ -1,6 +1,7 @@
 #include <windows.h>
 
 1 24 "settings.manifest"
+1 ICON "../../assets/icon.ico"
 IDI_APP_ICON ICON "../../assets/icon.ico"
 IDB_LOGO_SIDEBAR BITMAP "../../assets/logo_sidebar.bmp"
 IDB_LOGO_ABOUT BITMAP "../../assets/logo_about.bmp"
