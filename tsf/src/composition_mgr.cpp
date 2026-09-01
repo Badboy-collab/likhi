@@ -322,51 +322,23 @@ bool CompositionManager::OnNumberSelection(ITfContext* pContext, int num_1_to_5)
     return CommitCurrentComposition(pContext, idx, /*append_space=*/false);
 }
 
-bool CompositionManager::OnDigit(ITfContext* pContext, char ascii_digit, bool allow_candidate_selection) {
+bool CompositionManager::CanSelectCandidate(char digit) {
+    if (!is_composing_ || current_candidates_w_.empty()) return false;
+    if (digit < '1' || digit > '5') return false;
+    size_t idx = static_cast<size_t>(digit - '1');
+    return idx < current_candidates_w_.size();
+}
+
+bool CompositionManager::OnDigit(ITfContext* pContext, char ascii_digit) {
     if (ascii_digit < '0' || ascii_digit > '9') {
         return false;
     }
 
-    // Candidate selection: If composing and candidate window has selectable candidates and digit is 1..5
-    if (allow_candidate_selection && is_composing_ && !current_candidates_w_.empty() && (ascii_digit >= '1' && ascii_digit <= '5')) {
-        size_t idx = static_cast<size_t>(ascii_digit - '1');
-        if (idx < current_candidates_w_.size()) {
-            return OnNumberSelection(pContext, ascii_digit - '0');
-        }
+    if (CanSelectCandidate(ascii_digit)) {
+        return OnNumberSelection(pContext, ascii_digit - '0');
     }
-
-    // If composing (e.g. typing 'ami' and then pressed '0'..'9' without selecting a candidate),
-    // commit current composition first (without appending space)
-    if (is_composing_) {
-        CommitCurrentComposition(pContext, selected_candidate_idx_, /*append_space=*/false);
-    }
-
-    // Convert ASCII digit (0-9) to exact Unicode Bengali digit (০-৯, U+09E6 to U+09EF)
-    wchar_t b_digit = static_cast<wchar_t>(0x09E6 + (ascii_digit - '0'));
-    std::wstring digit_str(1, b_digit);
-
-    if (pContext && service_) {
-        ITfEditSession* digitSession = new ActionEditSession(pContext, [this, digit_str, pContext](TfEditCookie ec) -> HRESULT {
-            ITfInsertAtSelection* pInsertAtSelection = nullptr;
-            if (SUCCEEDED(pContext->QueryInterface(IID_ITfInsertAtSelection, (void**)&pInsertAtSelection))) {
-                ITfRange* pRange = nullptr;
-                pInsertAtSelection->InsertTextAtSelection(ec, 0, digit_str.c_str(), (LONG)digit_str.length(), &pRange);
-                if (pRange) pRange->Release();
-                pInsertAtSelection->Release();
-            }
-            return S_OK;
-        });
-
-        HRESULT hr = S_OK;
-        HRESULT hrSession = S_OK;
-        hr = pContext->RequestEditSession(service_->GetClientId(), digitSession, TF_ES_READWRITE | TF_ES_SYNC, &hrSession);
-        if (hr == TF_E_SYNCHRONOUS) {
-            pContext->RequestEditSession(service_->GetClientId(), digitSession, TF_ES_READWRITE, &hrSession);
-        }
-        digitSession->Release();
-    }
-
-    return true;
+    
+    return false; // Not a valid candidate selection. Host natively handles numbers.
 }
 
 bool CompositionManager::OnPunctuation(ITfContext* pContext, char punct) {
@@ -402,6 +374,7 @@ bool CompositionManager::OnPunctuation(ITfContext* pContext, char punct) {
 }
 
 bool CompositionManager::CommitCurrentComposition(ITfContext* pContext, size_t candidate_idx, bool append_space) {
+    (void)append_space; // Space is always committed by the host, never by us
     if (!is_composing_) {
         return false;
     }
@@ -417,18 +390,15 @@ bool CompositionManager::CommitCurrentComposition(ITfContext* pContext, size_t c
 
     std::string chosen_u8 = Utf16ToUtf8(chosen_w);
 
-    if (append_space) {
-        chosen_w += L" ";
-    }
-
     if (pContext && service_) {
-        // Commit via TSF Edit Session
+        // Commit the Bengali text cleanly — NO trailing space, NO extra characters.
+        // The caller (OnKeyDown for Space) returns pfEaten=FALSE so the host
+        // inserts exactly one real space natively. This is the only reliable approach.
         ITfEditSession* commitSession = new ActionEditSession(pContext, [this, chosen_w](TfEditCookie ec) -> HRESULT {
             if (this->active_composition_) {
                 ITfRange* pRange = nullptr;
                 if (SUCCEEDED(this->active_composition_->GetRange(&pRange)) && pRange) {
                     pRange->SetText(ec, 0, chosen_w.c_str(), (LONG)chosen_w.length());
-                    // Move insertion point to end of committed word
                     pRange->Collapse(ec, TF_ANCHOR_END);
                     pRange->Release();
                 }
@@ -527,4 +497,5 @@ void CompositionManager::OnCandidateWindowSelection(size_t index) {
 }
 
 } // namespace bangla_tsf
+
 
