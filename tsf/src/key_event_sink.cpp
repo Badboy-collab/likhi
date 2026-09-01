@@ -195,7 +195,7 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* pic, WPARAM wParam, LPARAM lPara
         bool is_numlock_on = (GetKeyState(VK_NUMLOCK) & 0x0001) != 0;
         if (is_numlock_on) {
             char digit = '0' + static_cast<char>(wParam - VK_NUMPAD0);
-            *pfEaten = composition_mgr_.OnDigit(pic, digit);
+            *pfEaten = composition_mgr_.OnDigit(pic, digit, /*allow_candidate_selection=*/false);
             return S_OK;
         } else {
             // Num Lock OFF -> Native keypad navigation
@@ -210,7 +210,7 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* pic, WPARAM wParam, LPARAM lPara
     // 6. Top-Row Numeric Keys ('0' - '9'):
     if (wParam >= '0' && wParam <= '9') {
         char digit = static_cast<char>(wParam);
-        *pfEaten = composition_mgr_.OnDigit(pic, digit);
+        *pfEaten = composition_mgr_.OnDigit(pic, digit, /*allow_candidate_selection=*/true);
         return S_OK;
     }
 

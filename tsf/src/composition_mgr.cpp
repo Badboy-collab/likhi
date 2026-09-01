@@ -270,14 +270,15 @@ bool CompositionManager::OnSpace(ITfContext* pContext) {
     if (!is_composing_) {
         return false;
     }
-    return CommitCurrentComposition(pContext, selected_candidate_idx_);
+    // Single space commits the Bengali word AND inserts exactly one space
+    return CommitCurrentComposition(pContext, selected_candidate_idx_, /*append_space=*/true);
 }
 
 bool CompositionManager::OnEnter(ITfContext* pContext) {
     if (!is_composing_) {
         return false;
     }
-    return CommitCurrentComposition(pContext, selected_candidate_idx_);
+    return CommitCurrentComposition(pContext, selected_candidate_idx_, /*append_space=*/false);
 }
 
 bool CompositionManager::OnEscape(ITfContext* pContext) {
@@ -312,16 +313,16 @@ bool CompositionManager::OnNumberSelection(ITfContext* pContext, int num_1_to_5)
     if (!is_composing_ || idx >= current_candidates_w_.size()) {
         return false;
     }
-    return CommitCurrentComposition(pContext, idx);
+    return CommitCurrentComposition(pContext, idx, /*append_space=*/false);
 }
 
-bool CompositionManager::OnDigit(ITfContext* pContext, char ascii_digit) {
+bool CompositionManager::OnDigit(ITfContext* pContext, char ascii_digit, bool allow_candidate_selection) {
     if (ascii_digit < '0' || ascii_digit > '9') {
         return false;
     }
 
     // Candidate selection: If composing and candidate window has selectable candidates and digit is 1..5
-    if (is_composing_ && (ascii_digit >= '1' && ascii_digit <= '5')) {
+    if (allow_candidate_selection && is_composing_ && !current_candidates_w_.empty() && (ascii_digit >= '1' && ascii_digit <= '5')) {
         size_t idx = static_cast<size_t>(ascii_digit - '1');
         if (idx < current_candidates_w_.size()) {
             return OnNumberSelection(pContext, ascii_digit - '0');
@@ -329,9 +330,9 @@ bool CompositionManager::OnDigit(ITfContext* pContext, char ascii_digit) {
     }
 
     // If composing (e.g. typing 'ami' and then pressed '0'..'9' without selecting a candidate),
-    // commit current composition first
+    // commit current composition first (without appending space)
     if (is_composing_) {
-        CommitCurrentComposition(pContext, selected_candidate_idx_);
+        CommitCurrentComposition(pContext, selected_candidate_idx_, /*append_space=*/false);
     }
 
     // Convert ASCII digit (0-9) to exact Unicode Bengali digit (০-৯, U+09E6 to U+09EF)
@@ -360,7 +361,7 @@ bool CompositionManager::OnDigit(ITfContext* pContext, char ascii_digit) {
 
 bool CompositionManager::OnPunctuation(ITfContext* pContext, char punct) {
     if (is_composing_) {
-        CommitCurrentComposition(pContext, selected_candidate_idx_);
+        CommitCurrentComposition(pContext, selected_candidate_idx_, /*append_space=*/false);
     }
 
     // Convert standard '.' to Bengali Dāri '।'
@@ -386,7 +387,7 @@ bool CompositionManager::OnPunctuation(ITfContext* pContext, char punct) {
     return true;
 }
 
-bool CompositionManager::CommitCurrentComposition(ITfContext* pContext, size_t candidate_idx) {
+bool CompositionManager::CommitCurrentComposition(ITfContext* pContext, size_t candidate_idx, bool append_space) {
     if (!is_composing_) {
         return false;
     }
@@ -401,6 +402,10 @@ bool CompositionManager::CommitCurrentComposition(ITfContext* pContext, size_t c
     }
 
     std::string chosen_u8 = Utf16ToUtf8(chosen_w);
+
+    if (append_space) {
+        chosen_w += L" ";
+    }
 
     if (pContext && service_) {
         // Commit via TSF Edit Session

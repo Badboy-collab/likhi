@@ -31,7 +31,7 @@ public:
     bool OnEscape(ITfContext* pContext);
     bool OnArrow(ITfContext* pContext, bool down_next);
     bool OnNumberSelection(ITfContext* pContext, int num_1_to_5);
-    bool OnDigit(ITfContext* pContext, char ascii_digit);
+    bool OnDigit(ITfContext* pContext, char ascii_digit, bool allow_candidate_selection = true);
     bool OnPunctuation(ITfContext* pContext, char punct);
     bool HasVisibleCandidates() const { return is_composing_ && !current_candidates_w_.empty(); }
 
@@ -39,7 +39,7 @@ public:
     void OnFocusLost(ITfContext* pContext);
 
     // Commit methods
-    bool CommitCurrentComposition(ITfContext* pContext, size_t candidate_idx = 0);
+    bool CommitCurrentComposition(ITfContext* pContext, size_t candidate_idx = 0, bool append_space = false);
     bool CancelComposition(ITfContext* pContext);
 
     // Direct Candidate Window selection callback
