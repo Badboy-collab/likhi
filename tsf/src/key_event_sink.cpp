@@ -23,11 +23,11 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* pic, WPARAM wParam, LPARAM l
         return S_OK;
     }
 
-    // 1. Shortcut & Protected Combinations: If Ctrl, Alt, or Win is held, MUST pass directly to host app
-    bool is_ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0 || (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-    bool is_alt = (GetKeyState(VK_MENU) & 0x8000) != 0 || (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-    bool is_win = (GetKeyState(VK_LWIN) & 0x8000) != 0 || (GetKeyState(VK_RWIN) & 0x8000) != 0 ||
-                  (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
+    // 1. Shortcut & Protected Combinations
+    // FIX: Removed GetAsyncKeyState to prevent hardware-polling desyncs
+    bool is_ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    bool is_alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+    bool is_win = (GetKeyState(VK_LWIN) & 0x8000) != 0 || (GetKeyState(VK_RWIN) & 0x8000) != 0;
 
     if (is_ctrl || is_alt || is_win) {
         *pfEaten = FALSE;
@@ -35,14 +35,12 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* pic, WPARAM wParam, LPARAM l
     }
 
     // 2. Shift + Key Handling
-    bool is_shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0 || (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    bool is_shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
     if (is_shift) {
-        // Shift + Number (Top Row or Numpad) -> Native keyboard symbols (!, @, #, etc.)
         if ((wParam >= '0' && wParam <= '9') || (wParam >= VK_NUMPAD0 && wParam <= VK_NUMPAD9)) {
             *pfEaten = FALSE;
             return S_OK;
         }
-        // Shift + Non-letter -> Pass through
         if (wParam < 'A' || wParam > 'Z') {
             if (wParam < 'a' || wParam > 'z') {
                 *pfEaten = FALSE;
@@ -51,46 +49,41 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* pic, WPARAM wParam, LPARAM l
         }
     }
 
-    // 3. Function Keys (F1-F24), Media Keys, Special System Keys: NEVER eat
+    // 3. Function Keys, Media Keys, System Keys
     if ((wParam >= VK_F1 && wParam <= VK_F24) ||
-        wParam == VK_NUMLOCK ||
-        wParam == VK_SCROLL ||
-        wParam == VK_SNAPSHOT ||
-        wParam == VK_PAUSE ||
-        wParam == VK_INSERT ||
-        wParam == VK_CAPITAL ||
-        wParam == VK_APPS) {
+        wParam == VK_NUMLOCK || wParam == VK_SCROLL ||
+        wParam == VK_SNAPSHOT || wParam == VK_PAUSE ||
+        wParam == VK_INSERT || wParam == VK_CAPITAL || wParam == VK_APPS) {
         *pfEaten = FALSE;
         return S_OK;
     }
 
-    // 4. Physical Numeric Keypad Operators: NEVER eat (+, -, *, /, .)
+    // 4. Physical Numeric Keypad Operators
     if (wParam == VK_ADD || wParam == VK_SUBTRACT || wParam == VK_MULTIPLY ||
         wParam == VK_DIVIDE || wParam == VK_DECIMAL || wParam == VK_SEPARATOR) {
         *pfEaten = FALSE;
         return S_OK;
     }
 
-    // 5. Physical Numeric Keypad Digits (VK_NUMPAD0 - VK_NUMPAD9):
+    // 5. Physical Numeric Keypad Digits
     if (wParam >= VK_NUMPAD0 && wParam <= VK_NUMPAD9) {
         bool is_numlock_on = (GetKeyState(VK_NUMLOCK) & 0x0001) != 0;
         if (is_numlock_on) {
             *pfEaten = TRUE;
             return S_OK;
         } else {
-            // Num Lock OFF -> Native keypad navigation (Home, End, PgUp, PgDn, Arrows, Ins, Del)
             *pfEaten = FALSE;
             return S_OK;
         }
     }
 
-    // 6. Top-Row Numeric Keys ('0' - '9'):
+    // 6. Top-Row Numeric Keys
     if (wParam >= '0' && wParam <= '9') {
         *pfEaten = TRUE;
         return S_OK;
     }
 
-    // 7. Alphanumeric Character Keys (A-Z, a-z)
+    // 7. Alphanumeric Character Keys
     if ((wParam >= 'A' && wParam <= 'Z') || (wParam >= 'a' && wParam <= 'z')) {
         *pfEaten = TRUE;
         return S_OK;
@@ -99,14 +92,19 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* pic, WPARAM wParam, LPARAM l
     // 8. Active Composition Control Keys
     bool is_composing = composition_mgr_.IsComposing();
     if (is_composing) {
-        if (wParam == VK_SPACE ||
-            wParam == VK_RETURN ||
+        // FIX: Removed VK_SPACE. Space is NEVER eaten in OnTestKeyDown so the host app receives it natively.
+        if (wParam == VK_RETURN ||
             wParam == VK_BACK ||
             wParam == VK_ESCAPE ||
             wParam == VK_UP ||
             wParam == VK_DOWN ||
             wParam == VK_OEM_PERIOD) {
             *pfEaten = TRUE;
+            return S_OK;
+        }
+        
+        if (wParam == VK_SPACE) {
+            *pfEaten = FALSE;
             return S_OK;
         }
     }
@@ -127,11 +125,10 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* pic, WPARAM wParam, LPARAM lPara
         return S_OK;
     }
 
-    // 1. Shortcut Combinations: If Ctrl, Alt, or Win is held, cancel composition and pass to host
-    bool is_ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0 || (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-    bool is_alt = (GetKeyState(VK_MENU) & 0x8000) != 0 || (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-    bool is_win = (GetKeyState(VK_LWIN) & 0x8000) != 0 || (GetKeyState(VK_RWIN) & 0x8000) != 0 ||
-                  (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
+    // 1. Shortcut Combinations
+    bool is_ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    bool is_alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+    bool is_win = (GetKeyState(VK_LWIN) & 0x8000) != 0 || (GetKeyState(VK_RWIN) & 0x8000) != 0;
 
     if (is_ctrl || is_alt || is_win) {
         if (composition_mgr_.IsComposing()) {
@@ -142,21 +139,19 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* pic, WPARAM wParam, LPARAM lPara
     }
 
     // 2. Shift + Key Handling
-    bool is_shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0 || (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    bool is_shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
     if (is_shift) {
-        // Shift + Number -> Native symbols (!, @, #, etc.)
         if ((wParam >= '0' && wParam <= '9') || (wParam >= VK_NUMPAD0 && wParam <= VK_NUMPAD9)) {
             if (composition_mgr_.IsComposing()) {
-                composition_mgr_.OnSpace(pic);
+                composition_mgr_.OnEnter(pic); // Commit without space
             }
             *pfEaten = FALSE;
             return S_OK;
         }
-        // Shift + Non-letter -> Pass through
         if (wParam < 'A' || wParam > 'Z') {
             if (wParam < 'a' || wParam > 'z') {
                 if (composition_mgr_.IsComposing()) {
-                    composition_mgr_.OnSpace(pic);
+                    composition_mgr_.OnEnter(pic);
                 }
                 *pfEaten = FALSE;
                 return S_OK;
@@ -166,63 +161,58 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* pic, WPARAM wParam, LPARAM lPara
 
     // 3. Function Keys, Media Keys, Special System Keys
     if ((wParam >= VK_F1 && wParam <= VK_F24) ||
-        wParam == VK_NUMLOCK ||
-        wParam == VK_SCROLL ||
-        wParam == VK_SNAPSHOT ||
-        wParam == VK_PAUSE ||
-        wParam == VK_INSERT ||
-        wParam == VK_CAPITAL ||
-        wParam == VK_APPS) {
+        wParam == VK_NUMLOCK || wParam == VK_SCROLL ||
+        wParam == VK_SNAPSHOT || wParam == VK_PAUSE ||
+        wParam == VK_INSERT || wParam == VK_CAPITAL || wParam == VK_APPS) {
         if (composition_mgr_.IsComposing()) {
-            composition_mgr_.OnSpace(pic);
+            composition_mgr_.OnEnter(pic);
         }
         *pfEaten = FALSE;
         return S_OK;
     }
 
-    // 4. Physical Numeric Keypad Operators: (+, -, *, /, .) -> Pass through natively
+    // 4. Physical Numeric Keypad Operators
     if (wParam == VK_ADD || wParam == VK_SUBTRACT || wParam == VK_MULTIPLY ||
         wParam == VK_DIVIDE || wParam == VK_DECIMAL || wParam == VK_SEPARATOR) {
         if (composition_mgr_.IsComposing()) {
-            composition_mgr_.OnSpace(pic);
+            composition_mgr_.OnEnter(pic);
         }
         *pfEaten = FALSE;
         return S_OK;
     }
 
-    // 5. Physical Numeric Keypad Digits (VK_NUMPAD0 - VK_NUMPAD9):
+    // 5. Physical Numeric Keypad Digits
     if (wParam >= VK_NUMPAD0 && wParam <= VK_NUMPAD9) {
         bool is_numlock_on = (GetKeyState(VK_NUMLOCK) & 0x0001) != 0;
         if (is_numlock_on) {
             char digit = '0' + static_cast<char>(wParam - VK_NUMPAD0);
-            *pfEaten = composition_mgr_.OnDigit(pic, digit, /*allow_candidate_selection=*/false);
+            *pfEaten = composition_mgr_.OnDigit(pic, digit, false);
             return S_OK;
         } else {
-            // Num Lock OFF -> Native keypad navigation
             if (composition_mgr_.IsComposing()) {
-                composition_mgr_.OnSpace(pic);
+                composition_mgr_.OnEnter(pic);
             }
             *pfEaten = FALSE;
             return S_OK;
         }
     }
 
-    // 6. Top-Row Numeric Keys ('0' - '9'):
+    // 6. Top-Row Numeric Keys
     if (wParam >= '0' && wParam <= '9') {
         char digit = static_cast<char>(wParam);
-        *pfEaten = composition_mgr_.OnDigit(pic, digit, /*allow_candidate_selection=*/true);
+        *pfEaten = composition_mgr_.OnDigit(pic, digit, true);
         return S_OK;
     }
 
-    // 7. Cursor navigation / edit keys during composition: Commit word then allow movement
+    // 7. Cursor navigation / edit keys
     bool is_composing = composition_mgr_.IsComposing();
     if (is_composing && (wParam == VK_LEFT || wParam == VK_RIGHT || wParam == VK_HOME || wParam == VK_END || wParam == VK_DELETE || wParam == VK_TAB || wParam == VK_PRIOR || wParam == VK_NEXT)) {
-        composition_mgr_.OnSpace(pic);
+        composition_mgr_.OnEnter(pic);
         *pfEaten = FALSE;
         return S_OK;
     }
 
-    // 8. Alphanumeric input (A-Z, a-z)
+    // 8. Alphanumeric input
     if ((wParam >= 'A' && wParam <= 'Z') || (wParam >= 'a' && wParam <= 'z')) {
         char ch = static_cast<char>(wParam);
         bool is_caps = (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
@@ -243,9 +233,10 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* pic, WPARAM wParam, LPARAM lPara
         return S_OK;
     }
 
-    // 10. Space
+    // 10. Space - FIX: Commit without space, then pass through natively
     if (wParam == VK_SPACE && is_composing) {
-        *pfEaten = composition_mgr_.OnSpace(pic);
+        composition_mgr_.OnEnter(pic); // Commit word
+        *pfEaten = FALSE;              // Let host app process the actual Space keystroke
         return S_OK;
     }
 
@@ -261,13 +252,13 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* pic, WPARAM wParam, LPARAM lPara
         return S_OK;
     }
 
-    // 13. Arrow Navigation (Up / Down) during composition
+    // 13. Arrow Navigation
     if (is_composing && (wParam == VK_UP || wParam == VK_DOWN)) {
         *pfEaten = composition_mgr_.OnArrow(pic, wParam == VK_DOWN);
         return S_OK;
     }
 
-    // 14. Period (Bengali Dāri transliteration during active composition)
+    // 14. Period
     if (wParam == VK_OEM_PERIOD && is_composing) {
         *pfEaten = composition_mgr_.OnPunctuation(pic, '.');
         return S_OK;

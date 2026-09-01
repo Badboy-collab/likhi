@@ -218,7 +218,10 @@ void CompositionManager::UpdateCompositionAndUI(ITfContext* pContext) {
             });
 
             HRESULT hrSession = S_OK;
-            pContext->RequestEditSession(service_->GetClientId(), startSession, TF_ES_READWRITE | TF_ES_SYNC, &hrSession);
+            HRESULT hr = pContext->RequestEditSession(service_->GetClientId(), startSession, TF_ES_READWRITE | TF_ES_SYNC, &hrSession);
+            if (hr == TF_E_SYNCHRONOUS) {
+                pContext->RequestEditSession(service_->GetClientId(), startSession, TF_ES_READWRITE, &hrSession);
+            }
             startSession->Release();
         }
         pContextComp->Release();
@@ -236,7 +239,10 @@ void CompositionManager::UpdateCompositionAndUI(ITfContext* pContext) {
         });
 
         HRESULT hrSession = S_OK;
-        pContext->RequestEditSession(service_->GetClientId(), setTextSession, TF_ES_READWRITE | TF_ES_SYNC, &hrSession);
+        HRESULT hr = pContext->RequestEditSession(service_->GetClientId(), setTextSession, TF_ES_READWRITE | TF_ES_SYNC, &hrSession);
+        if (hr == TF_E_SYNCHRONOUS) {
+            pContext->RequestEditSession(service_->GetClientId(), setTextSession, TF_ES_READWRITE, &hrSession);
+        }
         setTextSession->Release();
     }
 
@@ -352,7 +358,11 @@ bool CompositionManager::OnDigit(ITfContext* pContext, char ascii_digit, bool al
         });
 
         HRESULT hr = S_OK;
-        pContext->RequestEditSession(service_->GetClientId(), digitSession, TF_ES_READWRITE | TF_ES_SYNC, &hr);
+        HRESULT hrSession = S_OK;
+        hr = pContext->RequestEditSession(service_->GetClientId(), digitSession, TF_ES_READWRITE | TF_ES_SYNC, &hrSession);
+        if (hr == TF_E_SYNCHRONOUS) {
+            pContext->RequestEditSession(service_->GetClientId(), digitSession, TF_ES_READWRITE, &hrSession);
+        }
         digitSession->Release();
     }
 
@@ -380,7 +390,11 @@ bool CompositionManager::OnPunctuation(ITfContext* pContext, char punct) {
         });
 
         HRESULT hr = S_OK;
-        pContext->RequestEditSession(service_->GetClientId(), punctSession, TF_ES_READWRITE | TF_ES_SYNC, &hr);
+        HRESULT hrSession = S_OK;
+        hr = pContext->RequestEditSession(service_->GetClientId(), punctSession, TF_ES_READWRITE | TF_ES_SYNC, &hrSession);
+        if (hr == TF_E_SYNCHRONOUS) {
+            pContext->RequestEditSession(service_->GetClientId(), punctSession, TF_ES_READWRITE, &hrSession);
+        }
         punctSession->Release();
     }
 
@@ -426,7 +440,11 @@ bool CompositionManager::CommitCurrentComposition(ITfContext* pContext, size_t c
         });
 
         HRESULT hr = S_OK;
-        pContext->RequestEditSession(service_->GetClientId(), commitSession, TF_ES_READWRITE | TF_ES_SYNC, &hr);
+        HRESULT hrSession = S_OK;
+        hr = pContext->RequestEditSession(service_->GetClientId(), commitSession, TF_ES_READWRITE | TF_ES_SYNC, &hrSession);
+        if (hr == TF_E_SYNCHRONOUS) {
+            pContext->RequestEditSession(service_->GetClientId(), commitSession, TF_ES_READWRITE, &hrSession);
+        }
         commitSession->Release();
     }
 
@@ -509,3 +527,4 @@ void CompositionManager::OnCandidateWindowSelection(size_t index) {
 }
 
 } // namespace bangla_tsf
+
