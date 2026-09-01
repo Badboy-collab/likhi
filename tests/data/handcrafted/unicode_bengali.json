@@ -1,0 +1,241 @@
+[
+  {
+    "name": "Khyo conjunct",
+    "input": "khema",
+    "expected": "ক্ষমা",
+    "hex": [
+      "0995",
+      "09CD",
+      "09B7",
+      "09AE",
+      "09BE"
+    ]
+  },
+  {
+    "name": "Ggyo conjunct",
+    "input": "ggan",
+    "expected": "জ্ঞান",
+    "hex": [
+      "099C",
+      "09CD",
+      "099E",
+      "09BE",
+      "09A8"
+    ]
+  },
+  {
+    "name": "Ncho conjunct",
+    "input": "onchol",
+    "expected": "অঞ্চল",
+    "hex": [
+      "0985",
+      "099E",
+      "09CD",
+      "099A",
+      "09B2"
+    ]
+  },
+  {
+    "name": "Njo conjunct",
+    "input": "gonj",
+    "expected": "গঞ্জ",
+    "hex": [
+      "0997",
+      "099E",
+      "09CD",
+      "099C"
+    ]
+  },
+  {
+    "name": "Ngko conjunct",
+    "input": "pongkoj",
+    "expected": "পঙ্কজ",
+    "hex": [
+      "09AA",
+      "0999",
+      "09CD",
+      "0995",
+      "099C"
+    ]
+  },
+  {
+    "name": "Ccho conjunct",
+    "input": "iccha",
+    "expected": "ইচ্ছা",
+    "hex": [
+      "0987",
+      "099A",
+      "09CD",
+      "099B",
+      "09BE"
+    ]
+  },
+  {
+    "name": "Jjo conjunct",
+    "input": "ujjwol",
+    "expected": "উজ্জ্বল",
+    "hex": [
+      "0989",
+      "099C",
+      "09CD",
+      "099C",
+      "09CD",
+      "09AC",
+      "09B2"
+    ]
+  },
+  {
+    "name": "Tto conjunct",
+    "input": "chitto",
+    "expected": "চিত্ত",
+    "hex": [
+      "099A",
+      "09BF",
+      "09A4",
+      "09CD",
+      "09A4"
+    ]
+  },
+  {
+    "name": "Ntro conjunct",
+    "input": "antorjatik",
+    "expected": "আন্তর্জাতিক",
+    "hex": [
+      "0986",
+      "09A8",
+      "09CD",
+      "09A4",
+      "09CD",
+      "09B0",
+      "099C",
+      "09BE",
+      "09A4",
+      "09BF",
+      "0995"
+    ]
+  },
+  {
+    "name": "Stho conjunct",
+    "input": "shwastho",
+    "expected": "স্বাস্থ্য",
+    "hex": [
+      "09B8",
+      "09CD",
+      "09AC",
+      "09BE",
+      "09B8",
+      "09CD",
+      "09A5",
+      "09CD",
+      "09AF"
+    ]
+  },
+  {
+    "name": "Dondwo conjunct",
+    "input": "dondwo",
+    "expected": "দ্বন্দ্ব",
+    "hex": [
+      "09A6",
+      "09CD",
+      "09AC",
+      "09A8",
+      "09CD",
+      "09A6",
+      "09CD",
+      "09AC"
+    ]
+  },
+  {
+    "name": "Brohmoputro",
+    "input": "brohmoputro",
+    "expected": "ব্রহ্মপুত্র",
+    "hex": [
+      "09AC",
+      "09CD",
+      "09B0",
+      "09B9",
+      "09CD",
+      "09AE",
+      "09AA",
+      "09C1",
+      "09A4",
+      "09CD",
+      "09B0"
+    ]
+  },
+  {
+    "name": "Shringkhola",
+    "input": "shringkhola",
+    "expected": "শৃঙ্খলা",
+    "hex": [
+      "09B6",
+      "09CD",
+      "09B0",
+      "09C3",
+      "0999",
+      "09CD",
+      "0996",
+      "09B2",
+      "09BE"
+    ]
+  },
+  {
+    "name": "Ref + consonant",
+    "input": "bormo",
+    "expected": "বর্ম",
+    "hex": [
+      "09AC",
+      "09B0",
+      "09CD",
+      "09AE"
+    ]
+  },
+  {
+    "name": "Khanda-Ta",
+    "input": "utshob",
+    "expected": "উৎসব",
+    "hex": [
+      "0989",
+      "09CE",
+      "09B8",
+      "09AC"
+    ]
+  },
+  {
+    "name": "Chandrabindu",
+    "input": "chand",
+    "expected": "চাঁদ",
+    "hex": [
+      "099A",
+      "0981",
+      "09BE",
+      "09A6"
+    ]
+  },
+  {
+    "name": "Visarga",
+    "input": "dukho",
+    "expected": "দুঃখ",
+    "hex": [
+      "09A6",
+      "09C1",
+      "0983",
+      "0996"
+    ]
+  },
+  {
+    "name": "Bengali Dari",
+    "input": "ami jabo.",
+    "expected": "আমি যাব।",
+    "hex": [
+      "0986",
+      "09AE",
+      "09BF",
+      "0020",
+      "09AF",
+      "09BE",
+      "09AC",
+      "0964"
+    ]
+  }
+]

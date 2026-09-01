@@ -1,0 +1,62 @@
+[
+  {
+    "name": "Khyo conjunct",
+    "input": "khema",
+    "expected": "ক্ষমা",
+    "unicode_hex": ["0995", "09CD", "09B7", "09AE", "09BE"]
+  },
+  {
+    "name": "Ggyo conjunct",
+    "input": "ggan",
+    "expected": "জ্ঞান",
+    "unicode_hex": ["099C", "09CD", "099E", "09BE", "09A8"]
+  },
+  {
+    "name": "Nch conjunct",
+    "input": "onchol",
+    "expected": "অঞ্চল",
+    "unicode_hex": ["0985", "099E", "09CD", "099A", "09B2"]
+  },
+  {
+    "name": "Ref with consonant",
+    "input": "bormo",
+    "expected": "বর্ম",
+    "unicode_hex": ["09AC", "09B0", "09CD", "09AE"]
+  },
+  {
+    "name": "Ja-fala",
+    "input": "bakko",
+    "expected": "বাক্য",
+    "unicode_hex": ["09AC", "09BE", "0995", "09CD", "09AF"]
+  },
+  {
+    "name": "Ra-fala",
+    "input": "prothom",
+    "expected": "প্রথম",
+    "unicode_hex": ["09AA", "09CD", "09B0", "09A5", "09AE"]
+  },
+  {
+    "name": "Khanda-Ta",
+    "input": "utshob",
+    "expected": "উৎসব",
+    "unicode_hex": ["0989", "09CE", "09B8", "09AC"]
+  },
+  {
+    "name": "Anusvara vs Nga",
+    "input": "rong",
+    "expected": "রং",
+    "unicode_hex": ["09B0", "0982"]
+  },
+  {
+    "name": "Chandrabindu",
+    "input": "chand",
+    "expected": "চাঁদ",
+    "unicode_hex": ["099A", "0981", "09BE", "09A6"]
+  },
+  {
+    "name": "Bengali Dari punctuation",
+    "input": "ami jabo.",
+    "expected": "আমি যাব।",
+    "unicode_hex": ["0986", "09AE", "09BF", "0020", "09AF", "09BE", "09AC", "0964"]
+  }
+]

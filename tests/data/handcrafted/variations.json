@@ -1,0 +1,42 @@
+[
+  {
+    "canonical": "আমি",
+    "inputs": ["ami", "aami", "amii", "Ami", "AMI"]
+  },
+  {
+    "canonical": "তুমি",
+    "inputs": ["tumi", "tume", "tumii", "Tumi"]
+  },
+  {
+    "canonical": "ভালো",
+    "inputs": ["valo", "bhalo", "vaalo", "bhaalo", "bhaloo", "Valo"]
+  },
+  {
+    "canonical": "আজকে",
+    "inputs": ["ajke", "aajke", "aajkey", "ajkey", "Ajke"]
+  },
+  {
+    "canonical": "অফিস",
+    "inputs": ["office", "ophis", "offis", "ofis", "Office"]
+  },
+  {
+    "canonical": "সুন্দর",
+    "inputs": ["shundor", "sundor", "shundur", "sundur", "shundoor"]
+  },
+  {
+    "canonical": "সন্ধ্যা",
+    "inputs": ["shondha", "sondha", "shondhya", "sondhya", "shondha"]
+  },
+  {
+    "canonical": "বাংলাদেশ",
+    "inputs": ["bangladesh", "bangladeesh", "Bangladesh", "banglaadesh"]
+  },
+  {
+    "canonical": "কাজ",
+    "inputs": ["kaaj", "kaj", "kajj", "Kaaj", "Kaj"]
+  },
+  {
+    "canonical": "বৃষ্টি",
+    "inputs": ["brishti", "bristi", "bryshti", "brishtee"]
+  }
+]

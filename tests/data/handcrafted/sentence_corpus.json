@@ -1,0 +1,52 @@
+[
+  {
+    "input": "ami ajke office e jabo",
+    "expected": "আমি আজকে অফিসে যাব",
+    "description": "Standard daily commute sentence"
+  },
+  {
+    "input": "tumi kemon acho",
+    "expected": "তুমি কেমন আছ",
+    "description": "Standard greeting"
+  },
+  {
+    "input": "ami banglay gan gai",
+    "expected": "আমি বাংলায় গান গাই",
+    "description": "Sentence with Bengali Anusvara and Kar"
+  },
+  {
+    "input": "apnar shathe kotha bole valo laglo",
+    "expected": "আপনার সাথে কথা বলে ভালো লাগল",
+    "description": "Formal conversation"
+  },
+  {
+    "input": "amra shobai eksathe kaaj korbo",
+    "expected": "আমরা সবাই একসাথে কাজ করব",
+    "description": "Teamwork statement"
+  },
+  {
+    "input": "ajke brishti hocche",
+    "expected": "আজকে বৃষ্টি হচ্ছে",
+    "description": "Weather observation with Ri-kar and Juktakkhor"
+  },
+  {
+    "input": "ei boi ta onek shundor",
+    "expected": "এই বই টা অনেক সুন্দর",
+    "description": "Opinion sentence"
+  },
+  {
+    "input": "tumi ki bhat kheyecho",
+    "expected": "তুমি কি ভাত খেয়েছ",
+    "description": "Question sentence"
+  },
+  {
+    "input": "she ekhon shob bujhte parbe",
+    "expected": "সে এখন সব বুঝতে পারবে",
+    "description": "Future capability sentence"
+  },
+  {
+    "input": "bangladesh amar jonmobhumi",
+    "expected": "বাংলাদেশ আমার জন্মভূমি",
+    "description": "Patriotic sentence with conjuncts"
+  }
+]

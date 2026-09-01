@@ -1,0 +1,2602 @@
+[
+  {
+    "input": "ami ajke office e jabo",
+    "expected": "আমি আজকে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ajke bashay jabo",
+    "expected": "আমি আজকে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ajke barite jabo",
+    "expected": "আমি আজকে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ajke kaj korbo",
+    "expected": "আমি আজকে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ajke boi porbo",
+    "expected": "আমি আজকে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ajke bhat khabo",
+    "expected": "আমি আজকে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ajke gan shunbo",
+    "expected": "আমি আজকে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami protidin office e jabo",
+    "expected": "আমি প্রতিদিন অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami protidin bashay jabo",
+    "expected": "আমি প্রতিদিন বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami protidin barite jabo",
+    "expected": "আমি প্রতিদিন বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami protidin kaj korbo",
+    "expected": "আমি প্রতিদিন কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami protidin boi porbo",
+    "expected": "আমি প্রতিদিন বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami protidin bhat khabo",
+    "expected": "আমি প্রতিদিন ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami protidin gan shunbo",
+    "expected": "আমি প্রতিদিন গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ekhon office e jabo",
+    "expected": "আমি এখন অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ekhon bashay jabo",
+    "expected": "আমি এখন বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ekhon barite jabo",
+    "expected": "আমি এখন বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ekhon kaj korbo",
+    "expected": "আমি এখন কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ekhon boi porbo",
+    "expected": "আমি এখন বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ekhon bhat khabo",
+    "expected": "আমি এখন ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ekhon gan shunbo",
+    "expected": "আমি এখন গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami shokale office e jabo",
+    "expected": "আমি সকালে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami shokale bashay jabo",
+    "expected": "আমি সকালে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami shokale barite jabo",
+    "expected": "আমি সকালে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami shokale kaj korbo",
+    "expected": "আমি সকালে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami shokale boi porbo",
+    "expected": "আমি সকালে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami shokale bhat khabo",
+    "expected": "আমি সকালে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami shokale gan shunbo",
+    "expected": "আমি সকালে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami bikale office e jabo",
+    "expected": "আমি বিকালে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami bikale bashay jabo",
+    "expected": "আমি বিকালে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami bikale barite jabo",
+    "expected": "আমি বিকালে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami bikale kaj korbo",
+    "expected": "আমি বিকালে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami bikale boi porbo",
+    "expected": "আমি বিকালে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami bikale bhat khabo",
+    "expected": "আমি বিকালে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami bikale gan shunbo",
+    "expected": "আমি বিকালে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami rate office e jabo",
+    "expected": "আমি রাতে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami rate bashay jabo",
+    "expected": "আমি রাতে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami rate barite jabo",
+    "expected": "আমি রাতে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami rate kaj korbo",
+    "expected": "আমি রাতে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami rate boi porbo",
+    "expected": "আমি রাতে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami rate bhat khabo",
+    "expected": "আমি রাতে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami rate gan shunbo",
+    "expected": "আমি রাতে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ajke office e jabo",
+    "expected": "তুমি আজকে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ajke bashay jabo",
+    "expected": "তুমি আজকে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ajke barite jabo",
+    "expected": "তুমি আজকে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ajke kaj korbo",
+    "expected": "তুমি আজকে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ajke boi porbo",
+    "expected": "তুমি আজকে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ajke bhat khabo",
+    "expected": "তুমি আজকে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ajke gan shunbo",
+    "expected": "তুমি আজকে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi protidin office e jabo",
+    "expected": "তুমি প্রতিদিন অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi protidin bashay jabo",
+    "expected": "তুমি প্রতিদিন বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi protidin barite jabo",
+    "expected": "তুমি প্রতিদিন বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi protidin kaj korbo",
+    "expected": "তুমি প্রতিদিন কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi protidin boi porbo",
+    "expected": "তুমি প্রতিদিন বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi protidin bhat khabo",
+    "expected": "তুমি প্রতিদিন ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi protidin gan shunbo",
+    "expected": "তুমি প্রতিদিন গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ekhon office e jabo",
+    "expected": "তুমি এখন অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ekhon bashay jabo",
+    "expected": "তুমি এখন বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ekhon barite jabo",
+    "expected": "তুমি এখন বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ekhon kaj korbo",
+    "expected": "তুমি এখন কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ekhon boi porbo",
+    "expected": "তুমি এখন বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ekhon bhat khabo",
+    "expected": "তুমি এখন ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ekhon gan shunbo",
+    "expected": "তুমি এখন গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi shokale office e jabo",
+    "expected": "তুমি সকালে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi shokale bashay jabo",
+    "expected": "তুমি সকালে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi shokale barite jabo",
+    "expected": "তুমি সকালে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi shokale kaj korbo",
+    "expected": "তুমি সকালে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi shokale boi porbo",
+    "expected": "তুমি সকালে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi shokale bhat khabo",
+    "expected": "তুমি সকালে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi shokale gan shunbo",
+    "expected": "তুমি সকালে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi bikale office e jabo",
+    "expected": "তুমি বিকালে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi bikale bashay jabo",
+    "expected": "তুমি বিকালে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi bikale barite jabo",
+    "expected": "তুমি বিকালে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi bikale kaj korbo",
+    "expected": "তুমি বিকালে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi bikale boi porbo",
+    "expected": "তুমি বিকালে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi bikale bhat khabo",
+    "expected": "তুমি বিকালে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi bikale gan shunbo",
+    "expected": "তুমি বিকালে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi rate office e jabo",
+    "expected": "তুমি রাতে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi rate bashay jabo",
+    "expected": "তুমি রাতে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi rate barite jabo",
+    "expected": "তুমি রাতে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi rate kaj korbo",
+    "expected": "তুমি রাতে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi rate boi porbo",
+    "expected": "তুমি রাতে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi rate bhat khabo",
+    "expected": "তুমি রাতে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi rate gan shunbo",
+    "expected": "তুমি রাতে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ajke office e jabo",
+    "expected": "সে আজকে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ajke bashay jabo",
+    "expected": "সে আজকে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ajke barite jabo",
+    "expected": "সে আজকে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ajke kaj korbo",
+    "expected": "সে আজকে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ajke boi porbo",
+    "expected": "সে আজকে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ajke bhat khabo",
+    "expected": "সে আজকে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ajke gan shunbo",
+    "expected": "সে আজকে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she protidin office e jabo",
+    "expected": "সে প্রতিদিন অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she protidin bashay jabo",
+    "expected": "সে প্রতিদিন বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she protidin barite jabo",
+    "expected": "সে প্রতিদিন বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she protidin kaj korbo",
+    "expected": "সে প্রতিদিন কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she protidin boi porbo",
+    "expected": "সে প্রতিদিন বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she protidin bhat khabo",
+    "expected": "সে প্রতিদিন ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she protidin gan shunbo",
+    "expected": "সে প্রতিদিন গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ekhon office e jabo",
+    "expected": "সে এখন অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ekhon bashay jabo",
+    "expected": "সে এখন বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ekhon barite jabo",
+    "expected": "সে এখন বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ekhon kaj korbo",
+    "expected": "সে এখন কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ekhon boi porbo",
+    "expected": "সে এখন বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ekhon bhat khabo",
+    "expected": "সে এখন ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ekhon gan shunbo",
+    "expected": "সে এখন গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she shokale office e jabo",
+    "expected": "সে সকালে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she shokale bashay jabo",
+    "expected": "সে সকালে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she shokale barite jabo",
+    "expected": "সে সকালে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she shokale kaj korbo",
+    "expected": "সে সকালে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she shokale boi porbo",
+    "expected": "সে সকালে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she shokale bhat khabo",
+    "expected": "সে সকালে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she shokale gan shunbo",
+    "expected": "সে সকালে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she bikale office e jabo",
+    "expected": "সে বিকালে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she bikale bashay jabo",
+    "expected": "সে বিকালে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she bikale barite jabo",
+    "expected": "সে বিকালে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she bikale kaj korbo",
+    "expected": "সে বিকালে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she bikale boi porbo",
+    "expected": "সে বিকালে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she bikale bhat khabo",
+    "expected": "সে বিকালে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she bikale gan shunbo",
+    "expected": "সে বিকালে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she rate office e jabo",
+    "expected": "সে রাতে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she rate bashay jabo",
+    "expected": "সে রাতে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she rate barite jabo",
+    "expected": "সে রাতে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she rate kaj korbo",
+    "expected": "সে রাতে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she rate boi porbo",
+    "expected": "সে রাতে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she rate bhat khabo",
+    "expected": "সে রাতে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she rate gan shunbo",
+    "expected": "সে রাতে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ajke office e jabo",
+    "expected": "আমরা আজকে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ajke bashay jabo",
+    "expected": "আমরা আজকে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ajke barite jabo",
+    "expected": "আমরা আজকে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ajke kaj korbo",
+    "expected": "আমরা আজকে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ajke boi porbo",
+    "expected": "আমরা আজকে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ajke bhat khabo",
+    "expected": "আমরা আজকে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ajke gan shunbo",
+    "expected": "আমরা আজকে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra protidin office e jabo",
+    "expected": "আমরা প্রতিদিন অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra protidin bashay jabo",
+    "expected": "আমরা প্রতিদিন বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra protidin barite jabo",
+    "expected": "আমরা প্রতিদিন বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra protidin kaj korbo",
+    "expected": "আমরা প্রতিদিন কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra protidin boi porbo",
+    "expected": "আমরা প্রতিদিন বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra protidin bhat khabo",
+    "expected": "আমরা প্রতিদিন ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra protidin gan shunbo",
+    "expected": "আমরা প্রতিদিন গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ekhon office e jabo",
+    "expected": "আমরা এখন অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ekhon bashay jabo",
+    "expected": "আমরা এখন বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ekhon barite jabo",
+    "expected": "আমরা এখন বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ekhon kaj korbo",
+    "expected": "আমরা এখন কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ekhon boi porbo",
+    "expected": "আমরা এখন বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ekhon bhat khabo",
+    "expected": "আমরা এখন ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ekhon gan shunbo",
+    "expected": "আমরা এখন গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra shokale office e jabo",
+    "expected": "আমরা সকালে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra shokale bashay jabo",
+    "expected": "আমরা সকালে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra shokale barite jabo",
+    "expected": "আমরা সকালে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra shokale kaj korbo",
+    "expected": "আমরা সকালে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra shokale boi porbo",
+    "expected": "আমরা সকালে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra shokale bhat khabo",
+    "expected": "আমরা সকালে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra shokale gan shunbo",
+    "expected": "আমরা সকালে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra bikale office e jabo",
+    "expected": "আমরা বিকালে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra bikale bashay jabo",
+    "expected": "আমরা বিকালে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra bikale barite jabo",
+    "expected": "আমরা বিকালে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra bikale kaj korbo",
+    "expected": "আমরা বিকালে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra bikale boi porbo",
+    "expected": "আমরা বিকালে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra bikale bhat khabo",
+    "expected": "আমরা বিকালে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra bikale gan shunbo",
+    "expected": "আমরা বিকালে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra rate office e jabo",
+    "expected": "আমরা রাতে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra rate bashay jabo",
+    "expected": "আমরা রাতে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra rate barite jabo",
+    "expected": "আমরা রাতে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra rate kaj korbo",
+    "expected": "আমরা রাতে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra rate boi porbo",
+    "expected": "আমরা রাতে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra rate bhat khabo",
+    "expected": "আমরা রাতে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra rate gan shunbo",
+    "expected": "আমরা রাতে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ajke office e jabo",
+    "expected": "আপনি আজকে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ajke bashay jabo",
+    "expected": "আপনি আজকে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ajke barite jabo",
+    "expected": "আপনি আজকে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ajke kaj korbo",
+    "expected": "আপনি আজকে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ajke boi porbo",
+    "expected": "আপনি আজকে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ajke bhat khabo",
+    "expected": "আপনি আজকে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ajke gan shunbo",
+    "expected": "আপনি আজকে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni protidin office e jabo",
+    "expected": "আপনি প্রতিদিন অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni protidin bashay jabo",
+    "expected": "আপনি প্রতিদিন বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni protidin barite jabo",
+    "expected": "আপনি প্রতিদিন বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni protidin kaj korbo",
+    "expected": "আপনি প্রতিদিন কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni protidin boi porbo",
+    "expected": "আপনি প্রতিদিন বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni protidin bhat khabo",
+    "expected": "আপনি প্রতিদিন ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni protidin gan shunbo",
+    "expected": "আপনি প্রতিদিন গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ekhon office e jabo",
+    "expected": "আপনি এখন অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ekhon bashay jabo",
+    "expected": "আপনি এখন বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ekhon barite jabo",
+    "expected": "আপনি এখন বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ekhon kaj korbo",
+    "expected": "আপনি এখন কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ekhon boi porbo",
+    "expected": "আপনি এখন বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ekhon bhat khabo",
+    "expected": "আপনি এখন ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ekhon gan shunbo",
+    "expected": "আপনি এখন গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni shokale office e jabo",
+    "expected": "আপনি সকালে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni shokale bashay jabo",
+    "expected": "আপনি সকালে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni shokale barite jabo",
+    "expected": "আপনি সকালে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni shokale kaj korbo",
+    "expected": "আপনি সকালে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni shokale boi porbo",
+    "expected": "আপনি সকালে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni shokale bhat khabo",
+    "expected": "আপনি সকালে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni shokale gan shunbo",
+    "expected": "আপনি সকালে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni bikale office e jabo",
+    "expected": "আপনি বিকালে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni bikale bashay jabo",
+    "expected": "আপনি বিকালে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni bikale barite jabo",
+    "expected": "আপনি বিকালে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni bikale kaj korbo",
+    "expected": "আপনি বিকালে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni bikale boi porbo",
+    "expected": "আপনি বিকালে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni bikale bhat khabo",
+    "expected": "আপনি বিকালে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni bikale gan shunbo",
+    "expected": "আপনি বিকালে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni rate office e jabo",
+    "expected": "আপনি রাতে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni rate bashay jabo",
+    "expected": "আপনি রাতে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni rate barite jabo",
+    "expected": "আপনি রাতে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni rate kaj korbo",
+    "expected": "আপনি রাতে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni rate boi porbo",
+    "expected": "আপনি রাতে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni rate bhat khabo",
+    "expected": "আপনি রাতে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni rate gan shunbo",
+    "expected": "আপনি রাতে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara ajke office e jabo",
+    "expected": "তারা আজকে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara ajke bashay jabo",
+    "expected": "তারা আজকে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara ajke barite jabo",
+    "expected": "তারা আজকে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara ajke kaj korbo",
+    "expected": "তারা আজকে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara ajke boi porbo",
+    "expected": "তারা আজকে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara ajke bhat khabo",
+    "expected": "তারা আজকে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara ajke gan shunbo",
+    "expected": "তারা আজকে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara protidin office e jabo",
+    "expected": "তারা প্রতিদিন অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara protidin bashay jabo",
+    "expected": "তারা প্রতিদিন বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara protidin barite jabo",
+    "expected": "তারা প্রতিদিন বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara protidin kaj korbo",
+    "expected": "তারা প্রতিদিন কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara protidin boi porbo",
+    "expected": "তারা প্রতিদিন বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara protidin bhat khabo",
+    "expected": "তারা প্রতিদিন ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara protidin gan shunbo",
+    "expected": "তারা প্রতিদিন গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara ekhon office e jabo",
+    "expected": "তারা এখন অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara ekhon bashay jabo",
+    "expected": "তারা এখন বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara ekhon barite jabo",
+    "expected": "তারা এখন বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara ekhon kaj korbo",
+    "expected": "তারা এখন কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara ekhon boi porbo",
+    "expected": "তারা এখন বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara ekhon bhat khabo",
+    "expected": "তারা এখন ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara ekhon gan shunbo",
+    "expected": "তারা এখন গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara shokale office e jabo",
+    "expected": "তারা সকালে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara shokale bashay jabo",
+    "expected": "তারা সকালে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara shokale barite jabo",
+    "expected": "তারা সকালে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara shokale kaj korbo",
+    "expected": "তারা সকালে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara shokale boi porbo",
+    "expected": "তারা সকালে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara shokale bhat khabo",
+    "expected": "তারা সকালে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara shokale gan shunbo",
+    "expected": "তারা সকালে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara bikale office e jabo",
+    "expected": "তারা বিকালে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara bikale bashay jabo",
+    "expected": "তারা বিকালে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara bikale barite jabo",
+    "expected": "তারা বিকালে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara bikale kaj korbo",
+    "expected": "তারা বিকালে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara bikale boi porbo",
+    "expected": "তারা বিকালে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara bikale bhat khabo",
+    "expected": "তারা বিকালে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara bikale gan shunbo",
+    "expected": "তারা বিকালে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara rate office e jabo",
+    "expected": "তারা রাতে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara rate bashay jabo",
+    "expected": "তারা রাতে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara rate barite jabo",
+    "expected": "তারা রাতে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara rate kaj korbo",
+    "expected": "তারা রাতে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara rate boi porbo",
+    "expected": "তারা রাতে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara rate bhat khabo",
+    "expected": "তারা রাতে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tara rate gan shunbo",
+    "expected": "তারা রাতে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai ajke office e jabo",
+    "expected": "সবাই আজকে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai ajke bashay jabo",
+    "expected": "সবাই আজকে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai ajke barite jabo",
+    "expected": "সবাই আজকে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai ajke kaj korbo",
+    "expected": "সবাই আজকে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai ajke boi porbo",
+    "expected": "সবাই আজকে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai ajke bhat khabo",
+    "expected": "সবাই আজকে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai ajke gan shunbo",
+    "expected": "সবাই আজকে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai protidin office e jabo",
+    "expected": "সবাই প্রতিদিন অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai protidin bashay jabo",
+    "expected": "সবাই প্রতিদিন বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai protidin barite jabo",
+    "expected": "সবাই প্রতিদিন বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai protidin kaj korbo",
+    "expected": "সবাই প্রতিদিন কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai protidin boi porbo",
+    "expected": "সবাই প্রতিদিন বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai protidin bhat khabo",
+    "expected": "সবাই প্রতিদিন ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai protidin gan shunbo",
+    "expected": "সবাই প্রতিদিন গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai ekhon office e jabo",
+    "expected": "সবাই এখন অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai ekhon bashay jabo",
+    "expected": "সবাই এখন বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai ekhon barite jabo",
+    "expected": "সবাই এখন বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai ekhon kaj korbo",
+    "expected": "সবাই এখন কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai ekhon boi porbo",
+    "expected": "সবাই এখন বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai ekhon bhat khabo",
+    "expected": "সবাই এখন ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai ekhon gan shunbo",
+    "expected": "সবাই এখন গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai shokale office e jabo",
+    "expected": "সবাই সকালে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai shokale bashay jabo",
+    "expected": "সবাই সকালে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai shokale barite jabo",
+    "expected": "সবাই সকালে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai shokale kaj korbo",
+    "expected": "সবাই সকালে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai shokale boi porbo",
+    "expected": "সবাই সকালে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai shokale bhat khabo",
+    "expected": "সবাই সকালে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai shokale gan shunbo",
+    "expected": "সবাই সকালে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai bikale office e jabo",
+    "expected": "সবাই বিকালে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai bikale bashay jabo",
+    "expected": "সবাই বিকালে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai bikale barite jabo",
+    "expected": "সবাই বিকালে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai bikale kaj korbo",
+    "expected": "সবাই বিকালে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai bikale boi porbo",
+    "expected": "সবাই বিকালে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai bikale bhat khabo",
+    "expected": "সবাই বিকালে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai bikale gan shunbo",
+    "expected": "সবাই বিকালে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai rate office e jabo",
+    "expected": "সবাই রাতে অফিসে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai rate bashay jabo",
+    "expected": "সবাই রাতে বাসায় যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai rate barite jabo",
+    "expected": "সবাই রাতে বাড়িতে যাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai rate kaj korbo",
+    "expected": "সবাই রাতে কাজ করব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai rate boi porbo",
+    "expected": "সবাই রাতে বই পড়ব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai rate bhat khabo",
+    "expected": "সবাই রাতে ভাত খাব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "shobai rate gan shunbo",
+    "expected": "সবাই রাতে গান শুনব",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi kemon acho",
+    "expected": "তুমি কেমন আছ",
+    "domain": "conversational"
+  },
+  {
+    "input": "ami bhalo achi",
+    "expected": "আমি ভালো আছি",
+    "domain": "conversational"
+  },
+  {
+    "input": "apnar shathe kotha bole valo laglo",
+    "expected": "আপনার সাথে কথা বলে ভালো লাগল",
+    "domain": "conversational"
+  },
+  {
+    "input": "tumi ki bhat kheyecho",
+    "expected": "তুমি কি ভাত খেয়েছ",
+    "domain": "conversational"
+  },
+  {
+    "input": "she ekhon shob bujhte parbe",
+    "expected": "সে এখন সব বুঝতে পারবে",
+    "domain": "conversational"
+  },
+  {
+    "input": "amra shobai eksathe kaaj korbo",
+    "expected": "আমরা সবাই একসাথে কাজ করব",
+    "domain": "conversational"
+  },
+  {
+    "input": "ei boi ta onek shundor",
+    "expected": "এই বই টা অনেক সুন্দর",
+    "domain": "conversational"
+  },
+  {
+    "input": "ajke brishti hocche",
+    "expected": "আজকে বৃষ্টি হচ্ছে",
+    "domain": "conversational"
+  },
+  {
+    "input": "ami ajke office e jabo",
+    "expected": "আমি আজকে অফিসে যাব",
+    "domain": "conversational"
+  },
+  {
+    "input": "bangladesh amar jonmobhumi",
+    "expected": "বাংলাদেশ আমার জন্মভূমি",
+    "domain": "conversational"
+  },
+  {
+    "input": "ajke office e onek kaj ache",
+    "expected": "আজকে অফিসে অনেক কাজ আছে",
+    "domain": "office_and_work"
+  },
+  {
+    "input": "amader shobai ke shomoy moto kaj shesh korte hobe",
+    "expected": "আমাদের সবাই কে সময় মতো কাজ শেষ করতে হবে",
+    "domain": "office_and_work"
+  },
+  {
+    "input": "shob kormokorta o kormochari eksathe boithok korche",
+    "expected": "সব কর্মকর্তা ও কর্মচারী একসাথে বৈঠক করছে",
+    "domain": "office_and_work"
+  },
+  {
+    "input": "ei mash er beton shobar bank hishab e joma hobe",
+    "expected": "এই মাস এর বেতন সবার ব্যাংক হিসাব এ জমা হবে",
+    "domain": "office_and_work"
+  },
+  {
+    "input": "notun prokolpo amader company ke shofol korbe",
+    "expected": "নতুন প্রকল্প আমাদের কোম্পানি কে সফল করবে",
+    "domain": "office_and_work"
+  },
+  {
+    "input": "biggan o projukti amader desh ke notun rup dicche",
+    "expected": "বিজ্ঞান ও প্রযুক্তি আমাদের দেশ কে নতুন রূপ দিচ্ছে",
+    "domain": "technology_and_internet"
+  },
+  {
+    "input": "computer o mobile phone amader jibon ke shohoj koreche",
+    "expected": "কম্পিউটার ও মোবাইল ফোন আমাদের জীবন কে সহজ করেছে",
+    "domain": "technology_and_internet"
+  },
+  {
+    "input": "internet er maddhome amra shob tothyo pete pari",
+    "expected": "ইন্টারনেট এর মাধ্যমে আমরা সব তথ্য পেতে পারি",
+    "domain": "technology_and_internet"
+  },
+  {
+    "input": "software development ekta bhalo pesha",
+    "expected": "সফটওয়্যার ডেভেলপমেন্ট একটা ভালো পেশা",
+    "domain": "technology_and_internet"
+  },
+  {
+    "input": "amader shwastho shocheton hote hobe",
+    "expected": "আমাদের স্বাস্থ্য সচেতন হতে হবে",
+    "domain": "education_and_health"
+  },
+  {
+    "input": "shob shikkhok o chhatro eksathe porikkha dicche",
+    "expected": "সব শিক্ষক ও ছাত্র একসাথে পরীক্ষা দিচ্ছে",
+    "domain": "education_and_health"
+  },
+  {
+    "input": "shikkha holo jatir merudondo",
+    "expected": "শিক্ষা হলো জাতির মেরুদণ্ড",
+    "domain": "education_and_health"
+  },
+  {
+    "input": "protidin shokale hete shwastho bhalo rakha jay",
+    "expected": "প্রতিদিন সকালে হেঁটে স্বাস্থ্য ভালো রাখা যায়",
+    "domain": "education_and_health"
+  },
+  {
+    "input": "ami ajke office e jabo.",
+    "expected": "আমি আজকে অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ajke bashay jabo.",
+    "expected": "আমি আজকে বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ajke barite jabo.",
+    "expected": "আমি আজকে বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ajke kaj korbo.",
+    "expected": "আমি আজকে কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ajke boi porbo.",
+    "expected": "আমি আজকে বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ajke bhat khabo.",
+    "expected": "আমি আজকে ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ajke gan shunbo.",
+    "expected": "আমি আজকে গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami protidin office e jabo.",
+    "expected": "আমি প্রতিদিন অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami protidin bashay jabo.",
+    "expected": "আমি প্রতিদিন বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami protidin barite jabo.",
+    "expected": "আমি প্রতিদিন বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami protidin kaj korbo.",
+    "expected": "আমি প্রতিদিন কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami protidin boi porbo.",
+    "expected": "আমি প্রতিদিন বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami protidin bhat khabo.",
+    "expected": "আমি প্রতিদিন ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami protidin gan shunbo.",
+    "expected": "আমি প্রতিদিন গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ekhon office e jabo.",
+    "expected": "আমি এখন অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ekhon bashay jabo.",
+    "expected": "আমি এখন বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ekhon barite jabo.",
+    "expected": "আমি এখন বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ekhon kaj korbo.",
+    "expected": "আমি এখন কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ekhon boi porbo.",
+    "expected": "আমি এখন বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ekhon bhat khabo.",
+    "expected": "আমি এখন ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami ekhon gan shunbo.",
+    "expected": "আমি এখন গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami shokale office e jabo.",
+    "expected": "আমি সকালে অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami shokale bashay jabo.",
+    "expected": "আমি সকালে বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami shokale barite jabo.",
+    "expected": "আমি সকালে বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami shokale kaj korbo.",
+    "expected": "আমি সকালে কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami shokale boi porbo.",
+    "expected": "আমি সকালে বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami shokale bhat khabo.",
+    "expected": "আমি সকালে ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami shokale gan shunbo.",
+    "expected": "আমি সকালে গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami bikale office e jabo.",
+    "expected": "আমি বিকালে অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami bikale bashay jabo.",
+    "expected": "আমি বিকালে বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami bikale barite jabo.",
+    "expected": "আমি বিকালে বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami bikale kaj korbo.",
+    "expected": "আমি বিকালে কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami bikale boi porbo.",
+    "expected": "আমি বিকালে বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami bikale bhat khabo.",
+    "expected": "আমি বিকালে ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami bikale gan shunbo.",
+    "expected": "আমি বিকালে গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami rate office e jabo.",
+    "expected": "আমি রাতে অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami rate bashay jabo.",
+    "expected": "আমি রাতে বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami rate barite jabo.",
+    "expected": "আমি রাতে বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami rate kaj korbo.",
+    "expected": "আমি রাতে কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami rate boi porbo.",
+    "expected": "আমি রাতে বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami rate bhat khabo.",
+    "expected": "আমি রাতে ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "ami rate gan shunbo.",
+    "expected": "আমি রাতে গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ajke office e jabo.",
+    "expected": "তুমি আজকে অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ajke bashay jabo.",
+    "expected": "তুমি আজকে বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ajke barite jabo.",
+    "expected": "তুমি আজকে বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ajke kaj korbo.",
+    "expected": "তুমি আজকে কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ajke boi porbo.",
+    "expected": "তুমি আজকে বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ajke bhat khabo.",
+    "expected": "তুমি আজকে ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ajke gan shunbo.",
+    "expected": "তুমি আজকে গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi protidin office e jabo.",
+    "expected": "তুমি প্রতিদিন অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi protidin bashay jabo.",
+    "expected": "তুমি প্রতিদিন বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi protidin barite jabo.",
+    "expected": "তুমি প্রতিদিন বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi protidin kaj korbo.",
+    "expected": "তুমি প্রতিদিন কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi protidin boi porbo.",
+    "expected": "তুমি প্রতিদিন বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi protidin bhat khabo.",
+    "expected": "তুমি প্রতিদিন ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi protidin gan shunbo.",
+    "expected": "তুমি প্রতিদিন গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ekhon office e jabo.",
+    "expected": "তুমি এখন অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ekhon bashay jabo.",
+    "expected": "তুমি এখন বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ekhon barite jabo.",
+    "expected": "তুমি এখন বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ekhon kaj korbo.",
+    "expected": "তুমি এখন কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ekhon boi porbo.",
+    "expected": "তুমি এখন বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ekhon bhat khabo.",
+    "expected": "তুমি এখন ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi ekhon gan shunbo.",
+    "expected": "তুমি এখন গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi shokale office e jabo.",
+    "expected": "তুমি সকালে অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi shokale bashay jabo.",
+    "expected": "তুমি সকালে বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi shokale barite jabo.",
+    "expected": "তুমি সকালে বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi shokale kaj korbo.",
+    "expected": "তুমি সকালে কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi shokale boi porbo.",
+    "expected": "তুমি সকালে বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi shokale bhat khabo.",
+    "expected": "তুমি সকালে ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi shokale gan shunbo.",
+    "expected": "তুমি সকালে গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi bikale office e jabo.",
+    "expected": "তুমি বিকালে অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi bikale bashay jabo.",
+    "expected": "তুমি বিকালে বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi bikale barite jabo.",
+    "expected": "তুমি বিকালে বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi bikale kaj korbo.",
+    "expected": "তুমি বিকালে কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi bikale boi porbo.",
+    "expected": "তুমি বিকালে বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi bikale bhat khabo.",
+    "expected": "তুমি বিকালে ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi bikale gan shunbo.",
+    "expected": "তুমি বিকালে গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi rate office e jabo.",
+    "expected": "তুমি রাতে অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi rate bashay jabo.",
+    "expected": "তুমি রাতে বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi rate barite jabo.",
+    "expected": "তুমি রাতে বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi rate kaj korbo.",
+    "expected": "তুমি রাতে কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi rate boi porbo.",
+    "expected": "তুমি রাতে বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi rate bhat khabo.",
+    "expected": "তুমি রাতে ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "tumi rate gan shunbo.",
+    "expected": "তুমি রাতে গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ajke office e jabo.",
+    "expected": "সে আজকে অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ajke bashay jabo.",
+    "expected": "সে আজকে বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ajke barite jabo.",
+    "expected": "সে আজকে বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ajke kaj korbo.",
+    "expected": "সে আজকে কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ajke boi porbo.",
+    "expected": "সে আজকে বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ajke bhat khabo.",
+    "expected": "সে আজকে ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ajke gan shunbo.",
+    "expected": "সে আজকে গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she protidin office e jabo.",
+    "expected": "সে প্রতিদিন অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she protidin bashay jabo.",
+    "expected": "সে প্রতিদিন বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she protidin barite jabo.",
+    "expected": "সে প্রতিদিন বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she protidin kaj korbo.",
+    "expected": "সে প্রতিদিন কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she protidin boi porbo.",
+    "expected": "সে প্রতিদিন বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she protidin bhat khabo.",
+    "expected": "সে প্রতিদিন ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she protidin gan shunbo.",
+    "expected": "সে প্রতিদিন গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ekhon office e jabo.",
+    "expected": "সে এখন অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ekhon bashay jabo.",
+    "expected": "সে এখন বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ekhon barite jabo.",
+    "expected": "সে এখন বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ekhon kaj korbo.",
+    "expected": "সে এখন কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ekhon boi porbo.",
+    "expected": "সে এখন বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ekhon bhat khabo.",
+    "expected": "সে এখন ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she ekhon gan shunbo.",
+    "expected": "সে এখন গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she shokale office e jabo.",
+    "expected": "সে সকালে অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she shokale bashay jabo.",
+    "expected": "সে সকালে বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she shokale barite jabo.",
+    "expected": "সে সকালে বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she shokale kaj korbo.",
+    "expected": "সে সকালে কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she shokale boi porbo.",
+    "expected": "সে সকালে বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she shokale bhat khabo.",
+    "expected": "সে সকালে ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she shokale gan shunbo.",
+    "expected": "সে সকালে গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she bikale office e jabo.",
+    "expected": "সে বিকালে অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she bikale bashay jabo.",
+    "expected": "সে বিকালে বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she bikale barite jabo.",
+    "expected": "সে বিকালে বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she bikale kaj korbo.",
+    "expected": "সে বিকালে কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she bikale boi porbo.",
+    "expected": "সে বিকালে বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she bikale bhat khabo.",
+    "expected": "সে বিকালে ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she bikale gan shunbo.",
+    "expected": "সে বিকালে গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she rate office e jabo.",
+    "expected": "সে রাতে অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she rate bashay jabo.",
+    "expected": "সে রাতে বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she rate barite jabo.",
+    "expected": "সে রাতে বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she rate kaj korbo.",
+    "expected": "সে রাতে কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she rate boi porbo.",
+    "expected": "সে রাতে বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she rate bhat khabo.",
+    "expected": "সে রাতে ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "she rate gan shunbo.",
+    "expected": "সে রাতে গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ajke office e jabo.",
+    "expected": "আমরা আজকে অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ajke bashay jabo.",
+    "expected": "আমরা আজকে বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ajke barite jabo.",
+    "expected": "আমরা আজকে বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ajke kaj korbo.",
+    "expected": "আমরা আজকে কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ajke boi porbo.",
+    "expected": "আমরা আজকে বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ajke bhat khabo.",
+    "expected": "আমরা আজকে ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ajke gan shunbo.",
+    "expected": "আমরা আজকে গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra protidin office e jabo.",
+    "expected": "আমরা প্রতিদিন অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra protidin bashay jabo.",
+    "expected": "আমরা প্রতিদিন বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra protidin barite jabo.",
+    "expected": "আমরা প্রতিদিন বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra protidin kaj korbo.",
+    "expected": "আমরা প্রতিদিন কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra protidin boi porbo.",
+    "expected": "আমরা প্রতিদিন বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra protidin bhat khabo.",
+    "expected": "আমরা প্রতিদিন ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra protidin gan shunbo.",
+    "expected": "আমরা প্রতিদিন গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ekhon office e jabo.",
+    "expected": "আমরা এখন অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ekhon bashay jabo.",
+    "expected": "আমরা এখন বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ekhon barite jabo.",
+    "expected": "আমরা এখন বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ekhon kaj korbo.",
+    "expected": "আমরা এখন কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ekhon boi porbo.",
+    "expected": "আমরা এখন বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ekhon bhat khabo.",
+    "expected": "আমরা এখন ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra ekhon gan shunbo.",
+    "expected": "আমরা এখন গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra shokale office e jabo.",
+    "expected": "আমরা সকালে অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra shokale bashay jabo.",
+    "expected": "আমরা সকালে বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra shokale barite jabo.",
+    "expected": "আমরা সকালে বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra shokale kaj korbo.",
+    "expected": "আমরা সকালে কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra shokale boi porbo.",
+    "expected": "আমরা সকালে বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra shokale bhat khabo.",
+    "expected": "আমরা সকালে ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra shokale gan shunbo.",
+    "expected": "আমরা সকালে গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra bikale office e jabo.",
+    "expected": "আমরা বিকালে অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra bikale bashay jabo.",
+    "expected": "আমরা বিকালে বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra bikale barite jabo.",
+    "expected": "আমরা বিকালে বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra bikale kaj korbo.",
+    "expected": "আমরা বিকালে কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra bikale boi porbo.",
+    "expected": "আমরা বিকালে বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra bikale bhat khabo.",
+    "expected": "আমরা বিকালে ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra bikale gan shunbo.",
+    "expected": "আমরা বিকালে গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra rate office e jabo.",
+    "expected": "আমরা রাতে অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra rate bashay jabo.",
+    "expected": "আমরা রাতে বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra rate barite jabo.",
+    "expected": "আমরা রাতে বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra rate kaj korbo.",
+    "expected": "আমরা রাতে কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra rate boi porbo.",
+    "expected": "আমরা রাতে বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra rate bhat khabo.",
+    "expected": "আমরা রাতে ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "amra rate gan shunbo.",
+    "expected": "আমরা রাতে গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ajke office e jabo.",
+    "expected": "আপনি আজকে অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ajke bashay jabo.",
+    "expected": "আপনি আজকে বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ajke barite jabo.",
+    "expected": "আপনি আজকে বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ajke kaj korbo.",
+    "expected": "আপনি আজকে কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ajke boi porbo.",
+    "expected": "আপনি আজকে বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ajke bhat khabo.",
+    "expected": "আপনি আজকে ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ajke gan shunbo.",
+    "expected": "আপনি আজকে গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni protidin office e jabo.",
+    "expected": "আপনি প্রতিদিন অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni protidin bashay jabo.",
+    "expected": "আপনি প্রতিদিন বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni protidin barite jabo.",
+    "expected": "আপনি প্রতিদিন বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni protidin kaj korbo.",
+    "expected": "আপনি প্রতিদিন কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni protidin boi porbo.",
+    "expected": "আপনি প্রতিদিন বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni protidin bhat khabo.",
+    "expected": "আপনি প্রতিদিন ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni protidin gan shunbo.",
+    "expected": "আপনি প্রতিদিন গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ekhon office e jabo.",
+    "expected": "আপনি এখন অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ekhon bashay jabo.",
+    "expected": "আপনি এখন বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ekhon barite jabo.",
+    "expected": "আপনি এখন বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ekhon kaj korbo.",
+    "expected": "আপনি এখন কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ekhon boi porbo.",
+    "expected": "আপনি এখন বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ekhon bhat khabo.",
+    "expected": "আপনি এখন ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni ekhon gan shunbo.",
+    "expected": "আপনি এখন গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni shokale office e jabo.",
+    "expected": "আপনি সকালে অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni shokale bashay jabo.",
+    "expected": "আপনি সকালে বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni shokale barite jabo.",
+    "expected": "আপনি সকালে বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni shokale kaj korbo.",
+    "expected": "আপনি সকালে কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni shokale boi porbo.",
+    "expected": "আপনি সকালে বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni shokale bhat khabo.",
+    "expected": "আপনি সকালে ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni shokale gan shunbo.",
+    "expected": "আপনি সকালে গান শুনব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni bikale office e jabo.",
+    "expected": "আপনি বিকালে অফিসে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni bikale bashay jabo.",
+    "expected": "আপনি বিকালে বাসায় যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni bikale barite jabo.",
+    "expected": "আপনি বিকালে বাড়িতে যাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni bikale kaj korbo.",
+    "expected": "আপনি বিকালে কাজ করব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni bikale boi porbo.",
+    "expected": "আপনি বিকালে বই পড়ব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni bikale bhat khabo.",
+    "expected": "আপনি বিকালে ভাত খাব।",
+    "domain": "systematic_evaluation"
+  },
+  {
+    "input": "apni bikale gan shunbo.",
+    "expected": "আপনি বিকালে গান শুনব।",
+    "domain": "systematic_evaluation"
+  }
+]

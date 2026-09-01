@@ -1,0 +1,16 @@
+# Build outputs
+build/
+bin/
+obj/
+*.obj
+*.o
+*.exe.manifest
+
+# System & logs
+.gemini/
+*.log
+
+# Windows specific
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/

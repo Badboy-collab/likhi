@@ -1,0 +1,41 @@
+{
+  "corpus_name": "PC Bangla Typing App Initial Test Suite",
+  "version": "1.0.0",
+  "last_updated": "2026-09-01",
+  "provenance_summary": {
+    "total_datasets": 4,
+    "primary_license": "CC0-1.0 (Public Domain Dedication)",
+    "external_corpora_status": "No external datasets imported yet; all initial test cases are original handcrafted examples."
+  },
+  "datasets": [
+    {
+      "file": "basic_words.json",
+      "description": "High-frequency Bengali words and phonetic inputs for baseline transliteration testing.",
+      "provenance": "manually_authored",
+      "license": "CC0-1.0",
+      "item_count": 75
+    },
+    {
+      "file": "sentence_corpus.json",
+      "description": "Full sentence-level Banglish inputs with expected contextual Bengali outputs.",
+      "provenance": "manually_authored",
+      "license": "CC0-1.0",
+      "item_count": 10
+    },
+    {
+      "file": "variations.json",
+      "description": "Phonetic spelling variation clusters mapping to canonical Bengali words.",
+      "provenance": "manually_authored",
+      "license": "CC0-1.0",
+      "item_count": 10
+    },
+    {
+      "file": "unicode_cases.json",
+      "description": "Complex Bengali Unicode conjuncts, ligatures, Kar symbols, and modifier test cases.",
+      "provenance": "manually_authored",
+      "license": "CC0-1.0",
+      "item_count": 10
+    }
+  ],
+  "external_corpora_import_policy": "Any future external corpus (e.g. Ankur, Mozilla Bengali, OpenBengali) will undergo strict evidence-based licensing audits and attribution logging before inclusion."
+}

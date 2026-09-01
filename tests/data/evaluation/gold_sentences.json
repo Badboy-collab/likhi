@@ -1,0 +1,62 @@
+[
+  {
+    "input": "ami ajke office e jabo",
+    "expected": "আমি আজকে অফিসে যাব",
+    "context_category": "commute"
+  },
+  {
+    "input": "tumi kemon acho",
+    "expected": "তুমি কেমন আছ",
+    "context_category": "greeting"
+  },
+  {
+    "input": "apnar shathe kotha bole valo laglo",
+    "expected": "আপনার সাথে কথা বলে ভালো লাগল",
+    "context_category": "courtesy"
+  },
+  {
+    "input": "amra shobai eksathe kaaj korbo",
+    "expected": "আমরা সবাই একসাথে কাজ করব",
+    "context_category": "teamwork"
+  },
+  {
+    "input": "ajke brishti hocche",
+    "expected": "আজকে বৃষ্টি হচ্ছে",
+    "context_category": "weather"
+  },
+  {
+    "input": "ei boi ta onek shundor",
+    "expected": "এই বই টা অনেক সুন্দর",
+    "context_category": "opinion"
+  },
+  {
+    "input": "tumi ki bhat kheyecho",
+    "expected": "তুমি কি ভাত খেয়েছ",
+    "context_category": "question"
+  },
+  {
+    "input": "she ekhon shob bujhte parbe",
+    "expected": "সে এখন সব বুঝতে পারবে",
+    "context_category": "conversation"
+  },
+  {
+    "input": "bangladesh amar jonmobhumi",
+    "expected": "বাংলাদেশ আমার জন্মভূমি",
+    "context_category": "statement"
+  },
+  {
+    "input": "amader shwastho shocheton hote hobe",
+    "expected": "আমাদের স্বাস্থ্য সচেতন হতে হবে",
+    "context_category": "health"
+  },
+  {
+    "input": "biggan o projukti amader desh ke notun rup dicche",
+    "expected": "বিজ্ঞান ও প্রযুক্তি আমাদের দেশ কে নতুন রূপ দিচ্ছে",
+    "context_category": "tech"
+  },
+  {
+    "input": "shob shikkhok o chhatro eksathe porikkha dicche",
+    "expected": "সব শিক্ষক ও ছাত্র একসাথে পরীক্ষা দিচ্ছে",
+    "context_category": "education"
+  }
+]
