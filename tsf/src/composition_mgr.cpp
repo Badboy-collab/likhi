@@ -315,6 +315,49 @@ bool CompositionManager::OnNumberSelection(ITfContext* pContext, int num_1_to_5)
     return CommitCurrentComposition(pContext, idx);
 }
 
+bool CompositionManager::OnDigit(ITfContext* pContext, char ascii_digit) {
+    if (ascii_digit < '0' || ascii_digit > '9') {
+        return false;
+    }
+
+    // Candidate selection: If composing and candidate window has selectable candidates and digit is 1..5
+    if (is_composing_ && (ascii_digit >= '1' && ascii_digit <= '5')) {
+        size_t idx = static_cast<size_t>(ascii_digit - '1');
+        if (idx < current_candidates_w_.size()) {
+            return OnNumberSelection(pContext, ascii_digit - '0');
+        }
+    }
+
+    // If composing (e.g. typing 'ami' and then pressed '0'..'9' without selecting a candidate),
+    // commit current composition first
+    if (is_composing_) {
+        CommitCurrentComposition(pContext, selected_candidate_idx_);
+    }
+
+    // Convert ASCII digit (0-9) to exact Unicode Bengali digit (০-৯, U+09E6 to U+09EF)
+    wchar_t b_digit = static_cast<wchar_t>(0x09E6 + (ascii_digit - '0'));
+    std::wstring digit_str(1, b_digit);
+
+    if (pContext && service_) {
+        ITfEditSession* digitSession = new ActionEditSession(pContext, [this, digit_str, pContext](TfEditCookie ec) -> HRESULT {
+            ITfInsertAtSelection* pInsertAtSelection = nullptr;
+            if (SUCCEEDED(pContext->QueryInterface(IID_ITfInsertAtSelection, (void**)&pInsertAtSelection))) {
+                ITfRange* pRange = nullptr;
+                pInsertAtSelection->InsertTextAtSelection(ec, 0, digit_str.c_str(), (LONG)digit_str.length(), &pRange);
+                if (pRange) pRange->Release();
+                pInsertAtSelection->Release();
+            }
+            return S_OK;
+        });
+
+        HRESULT hr = S_OK;
+        pContext->RequestEditSession(service_->GetClientId(), digitSession, TF_ES_READWRITE | TF_ES_SYNC, &hr);
+        digitSession->Release();
+    }
+
+    return true;
+}
+
 bool CompositionManager::OnPunctuation(ITfContext* pContext, char punct) {
     if (is_composing_) {
         CommitCurrentComposition(pContext, selected_candidate_idx_);

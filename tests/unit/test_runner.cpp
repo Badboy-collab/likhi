@@ -279,7 +279,7 @@ int main() {
         EngineConfig strict_on_cfg;
         BanglaEngine_GetDefaultConfig(&strict_on_cfg);
         strict_on_cfg.auto_correct_enabled = true;
-        strict_on_cfg.auto_correct_threshold = 0.85f;
+        strict_on_cfg.auto_correct_threshold = 0.70f;
         BanglaEngine* engine_on = BanglaEngine_Create(&strict_on_cfg);
 
         BanglaEngine_SetComposition(engine_on, "ami");

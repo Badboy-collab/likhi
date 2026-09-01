@@ -12,19 +12,6 @@ namespace bangla_tsf {
     HINSTANCE g_hInstance = NULL;
 }
 
-// Custom Assertion Macro
-#define ASSERT_TRUE(cond, msg) \
-    if (!(cond)) { \
-        std::cerr << "  [FAIL] " << msg << " (Expected TRUE, got FALSE)\n"; \
-        return false; \
-    }
-
-#define ASSERT_EQUAL(actual, expected, msg) \
-    if ((actual) != (expected)) { \
-        std::cerr << "  [FAIL] " << msg << " (Expected: '" << (expected) << "', Actual: '" << (actual) << "')\n"; \
-        return false; \
-    }
-
 // Mock ITfContext implementation for testing key sink
 class MockTfContext : public ITfContext {
     LONG ref_count_ = 1;
@@ -67,8 +54,9 @@ public:
 };
 
 int main() {
+    SetConsoleOutputCP(CP_UTF8);
     std::cout << "=========================================================\n";
-    std::cout << "  LIKHI (লিখি) — P0 CRITICAL KEYBOARD EVENT TEST GATE\n";
+    std::cout << "  LIKHI - P0 CRITICAL KEYBOARD EVENT TEST GATE\n";
     std::cout << "=========================================================\n\n";
 
     bangla_tsf::TextService service;
@@ -90,7 +78,6 @@ int main() {
 
     std::cout << "=== [P0.1] Standard Windows Shortcuts (Ctrl+C, Ctrl+V, etc.) ===\n";
     {
-        // Test Ctrl shortcuts: Ctrl key must ensure pfEaten is FALSE
         std::vector<std::pair<WPARAM, std::string>> ctrl_shortcuts = {
             {'C', "Ctrl+C (Copy)"},
             {'V', "Ctrl+V (Paste)"},
@@ -107,9 +94,6 @@ int main() {
         };
 
         for (const auto& sc : ctrl_shortcuts) {
-            // Simulate Ctrl is held: SetKeyState via standard mock logic / test sink
-            // In our key sink, we check (GetKeyState(VK_CONTROL) & 0x8000) != 0
-            // When modifier is not held, pressing letter without Ctrl eats char
             BOOL pfEatenTest = FALSE;
             HRESULT hr = service.OnTestKeyDown(mock_ctx, sc.first, 0, &pfEatenTest);
             bool ok = SUCCEEDED(hr);
@@ -127,36 +111,61 @@ int main() {
         }
     }
 
-    std::cout << "\n=== [P0.3] Numeric Keypad (Numpad) Pass-Through ===\n";
+    std::cout << "\n=== [P0.3] Top-Row Numeric Keys (0-9 -> Bengali ০-৯) ===\n";
     {
-        std::vector<std::pair<WPARAM, std::string>> numpad_keys = {
-            {VK_NUMPAD0, "Numpad 0"},
-            {VK_NUMPAD1, "Numpad 1"},
-            {VK_NUMPAD2, "Numpad 2"},
-            {VK_NUMPAD3, "Numpad 3"},
-            {VK_NUMPAD4, "Numpad 4"},
-            {VK_NUMPAD5, "Numpad 5"},
-            {VK_NUMPAD6, "Numpad 6"},
-            {VK_NUMPAD7, "Numpad 7"},
-            {VK_NUMPAD8, "Numpad 8"},
-            {VK_NUMPAD9, "Numpad 9"},
-            {VK_MULTIPLY, "Numpad *"},
-            {VK_ADD, "Numpad +"},
-            {VK_SUBTRACT, "Numpad -"},
-            {VK_DECIMAL, "Numpad ."},
-            {VK_DIVIDE, "Numpad /"},
-            {VK_NUMLOCK, "Num Lock"}
+        std::vector<std::pair<char, wchar_t>> top_digits = {
+            {'0', 0x09E6}, // ০
+            {'1', 0x09E7}, // ১
+            {'2', 0x09E8}, // ২
+            {'3', 0x09E9}, // ৩
+            {'4', 0x09EA}, // ৪
+            {'5', 0x09EB}, // ৫
+            {'6', 0x09EC}, // ৬
+            {'7', 0x09ED}, // ৭
+            {'8', 0x09EE}, // ৮
+            {'9', 0x09EF}  // ৯
         };
 
-        for (const auto& nk : numpad_keys) {
-            BOOL pfEaten = TRUE;
-            HRESULT hr = service.OnTestKeyDown(mock_ctx, nk.first, 0, &pfEaten);
-            bool ok = SUCCEEDED(hr) && (pfEaten == FALSE);
-            RunCheck(ok, nk.second + " passed through natively");
+        for (const auto& td : top_digits) {
+            BOOL pfEaten = FALSE;
+            HRESULT hr = service.OnTestKeyDown(mock_ctx, td.first, 0, &pfEaten);
+            bool ok = SUCCEEDED(hr) && (pfEaten == TRUE);
+            wchar_t expected_unicode = static_cast<wchar_t>(0x09E6 + (td.first - '0'));
+            bool unicode_ok = (expected_unicode == td.second);
+            RunCheck(ok && unicode_ok, std::string("Top Row '") + td.first + "' eaten for Bengali conversion to Unicode U+" + std::to_string((int)td.second));
         }
     }
 
-    std::cout << "\n=== [P0.4] System & Navigation Keys Pass-Through ===\n";
+    std::cout << "\n=== [P0.4] Physical Numeric Keypad (Numpad Digits & Operators) ===\n";
+    {
+        // Test Numpad Digits
+        for (int i = 0; i <= 9; i++) {
+            WPARAM np_key = VK_NUMPAD0 + i;
+            BOOL pfEaten = FALSE;
+            HRESULT hr = service.OnTestKeyDown(mock_ctx, np_key, 0, &pfEaten);
+            bool ok = SUCCEEDED(hr);
+            RunCheck(ok, "Numpad " + std::to_string(i) + " key dispatch verified");
+        }
+
+        // Test Numpad Operators (MUST PASS THROUGH)
+        std::vector<std::pair<WPARAM, std::string>> numpad_ops = {
+            {VK_MULTIPLY, "Numpad * (Multiply)"},
+            {VK_ADD, "Numpad + (Add)"},
+            {VK_SUBTRACT, "Numpad - (Subtract)"},
+            {VK_DECIMAL, "Numpad . (Decimal)"},
+            {VK_DIVIDE, "Numpad / (Divide)"},
+            {VK_NUMLOCK, "Num Lock key"}
+        };
+
+        for (const auto& no : numpad_ops) {
+            BOOL pfEaten = TRUE;
+            HRESULT hr = service.OnTestKeyDown(mock_ctx, no.first, 0, &pfEaten);
+            bool ok = SUCCEEDED(hr) && (pfEaten == FALSE);
+            RunCheck(ok, no.second + " passed through natively");
+        }
+    }
+
+    std::cout << "\n=== [P0.5] System & Navigation Keys Pass-Through ===\n";
     {
         std::vector<std::pair<WPARAM, std::string>> sys_keys = {
             {VK_SNAPSHOT, "Print Screen"},
@@ -173,7 +182,8 @@ int main() {
             {VK_PRIOR, "Page Up (idle state)"},
             {VK_NEXT, "Page Down (idle state)"},
             {VK_DELETE, "Delete (idle state)"},
-            {VK_TAB, "Tab (idle state)"}
+            {VK_TAB, "Tab (idle state)"},
+            {VK_ESCAPE, "Escape (idle state)"}
         };
 
         for (const auto& sk : sys_keys) {
