@@ -43,17 +43,55 @@ int main() {
     ULONG_PTR gdiplusToken;
     GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 
-    Bitmap* src = Bitmap::FromFile(L"assets/icon.png");
+    Bitmap* src = Bitmap::FromFile(L"assets/icon_source.jpg");
     if (!src || src->GetLastStatus() != Ok) {
-        std::cerr << "Failed to load assets/icon.png\n";
+        std::cerr << "Failed to load assets/icon_source.jpg\n";
         return 1;
     }
 
+    CLSID pngClsid, bmpClsid;
+    GetEncoderClsid(L"image/png", &pngClsid);
+    GetEncoderClsid(L"image/bmp", &bmpClsid);
+
+    // Save master icon.png (512x512)
+    {
+        Bitmap masterPng(512, 512, PixelFormat32bppARGB);
+        Graphics g(&masterPng);
+        g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+        g.SetSmoothingMode(SmoothingModeHighQuality);
+        g.SetPixelOffsetMode(PixelOffsetModeHighQuality);
+        g.DrawImage(src, 0, 0, 512, 512);
+        masterPng.Save(L"assets/icon.png", &pngClsid, NULL);
+        std::cout << "Saved assets/icon.png\n";
+    }
+
+    // Save logo_sidebar.bmp (48x48)
+    {
+        Bitmap sbBmp(48, 48, PixelFormat24bppRGB);
+        Graphics g(&sbBmp);
+        g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+        g.SetSmoothingMode(SmoothingModeHighQuality);
+        g.SetPixelOffsetMode(PixelOffsetModeHighQuality);
+        g.DrawImage(src, 0, 0, 48, 48);
+        sbBmp.Save(L"assets/logo_sidebar.bmp", &bmpClsid, NULL);
+        std::cout << "Saved assets/logo_sidebar.bmp\n";
+    }
+
+    // Save logo_about.bmp (96x96)
+    {
+        Bitmap abBmp(96, 96, PixelFormat24bppRGB);
+        Graphics g(&abBmp);
+        g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+        g.SetSmoothingMode(SmoothingModeHighQuality);
+        g.SetPixelOffsetMode(PixelOffsetModeHighQuality);
+        g.DrawImage(src, 0, 0, 96, 96);
+        abBmp.Save(L"assets/logo_about.bmp", &bmpClsid, NULL);
+        std::cout << "Saved assets/logo_about.bmp\n";
+    }
+
+    // Generate multi-resolution icon.ico
     std::vector<int> sizes = {16, 20, 24, 32, 48, 64, 128, 256};
     std::vector<std::vector<BYTE>> image_data;
-
-    CLSID pngClsid;
-    GetEncoderClsid(L"image/png", &pngClsid);
 
     for (int sz : sizes) {
         Bitmap target(sz, sz, PixelFormat32bppARGB);
@@ -79,7 +117,7 @@ int main() {
         pStream->Release();
 
         image_data.push_back(buf);
-        std::cout << "Generated size " << sz << "x" << sz << " (" << bytes << " bytes)\n";
+        std::cout << "Generated icon size " << sz << "x" << sz << " (" << bytes << " bytes)\n";
     }
 
     delete src;
@@ -117,7 +155,7 @@ int main() {
     }
 
     out.close();
-    std::cout << "Successfully saved multi-resolution assets/icon.ico!\n";
+    std::cout << "Successfully saved new multi-resolution assets/icon.ico!\n";
 
     GdiplusShutdown(gdiplusToken);
     return 0;
