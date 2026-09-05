@@ -46,6 +46,7 @@ set(TSF_SOURCES
     tsf/src/class_factory.cpp
     tsf/src/text_service.cpp
     tsf/src/key_event_sink.cpp
+    tsf/src/key_policy.cpp
     tsf/src/composition_mgr.cpp
     tsf/src/edit_session.cpp
     tsf/src/candidate_window.cpp
@@ -105,6 +106,7 @@ target_link_libraries(test_tsf_integration PRIVATE
 add_executable(test_p0_keyboard
     tests/unit/test_p0_keyboard.cpp
     tsf/src/key_event_sink.cpp
+    tsf/src/key_policy.cpp
     tsf/src/composition_mgr.cpp
     tsf/src/candidate_window.cpp
     tsf/src/edit_session.cpp
@@ -120,6 +122,13 @@ target_link_libraries(test_p0_keyboard PRIVATE
     advapi32
     shell32
 )
+
+# Key Policy Regression Test Target (pure, no TSF runtime needed)
+add_executable(test_key_policy
+    tests/unit/test_key_policy.cpp
+    tsf/src/key_policy.cpp
+)
+target_link_libraries(test_key_policy PRIVATE user32)
 
 # Native Settings App Target
 add_executable(bangla_settings WIN32
@@ -173,6 +182,8 @@ if (MSVC)
     target_compile_options(test_runner PRIVATE /W4 /utf-8)
     target_compile_options(unicode_bengali_tests PRIVATE /W4 /utf-8)
     target_compile_options(test_tsf_integration PRIVATE /W4 /utf-8)
+    target_compile_options(test_p0_keyboard PRIVATE /W4 /utf-8)
+    target_compile_options(test_key_policy PRIVATE /W4 /utf-8)
     target_compile_options(bangla_settings PRIVATE /W4 /utf-8)
     target_compile_options(benchmark_perf PRIVATE /W4 /utf-8 /O2)
     target_compile_options(inspect_unicode PRIVATE /W4 /utf-8)
@@ -183,6 +194,8 @@ else()
     target_compile_options(test_runner PRIVATE -Wall -Wextra)
     target_compile_options(unicode_bengali_tests PRIVATE -Wall -Wextra)
     target_compile_options(test_tsf_integration PRIVATE -Wall -Wextra)
+    target_compile_options(test_p0_keyboard PRIVATE -Wall -Wextra)
+    target_compile_options(test_key_policy PRIVATE -Wall -Wextra)
     target_compile_options(bangla_settings PRIVATE -Wall -Wextra)
     target_compile_options(benchmark_perf PRIVATE -Wall -Wextra -O3)
     target_compile_options(inspect_unicode PRIVATE -Wall -Wextra)
@@ -194,6 +207,8 @@ else()
     target_link_options(test_runner PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(unicode_bengali_tests PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_tsf_integration PRIVATE -static -static-libgcc -static-libstdc++)
+    target_link_options(test_p0_keyboard PRIVATE -static -static-libgcc -static-libstdc++)
+    target_link_options(test_key_policy PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(benchmark_perf PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(inspect_unicode PRIVATE -static -static-libgcc -static-libstdc++)
 endif()

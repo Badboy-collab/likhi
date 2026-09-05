@@ -13,19 +13,21 @@ HRESULT RegisterCOMServer(HINSTANCE hInst) {
         return HRESULT_FROM_WIN32(GetLastError());
     }
 
-    std::wstring key_path = L"CLSID\\" + std::wstring(CLSID_STRING);
+    // Use HKCU\Software\Classes instead of HKCR — no admin rights required.
+    // Windows automatically merges HKCU\Software\Classes into HKCR for the current user.
+    std::wstring base = L"Software\\Classes\\CLSID\\" + std::wstring(CLSID_STRING);
     HKEY hKey = NULL;
 
-    // 1. Create HKCR\CLSID\{...}
-    if (RegCreateKeyExW(HKEY_CLASSES_ROOT, key_path.c_str(), 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) != ERROR_SUCCESS) {
+    // 1. Create HKCU\Software\Classes\CLSID\{...}
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, base.c_str(), 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) != ERROR_SUCCESS) {
         return E_FAIL;
     }
     RegSetValueExW(hKey, NULL, 0, REG_SZ, (const BYTE*)BANGLA_IME_NAME_W, (DWORD)((wcslen(BANGLA_IME_NAME_W) + 1) * sizeof(wchar_t)));
     RegCloseKey(hKey);
 
-    // 2. Create HKCR\CLSID\{...}\InprocServer32
-    std::wstring inproc_path = key_path + L"\\InprocServer32";
-    if (RegCreateKeyExW(HKEY_CLASSES_ROOT, inproc_path.c_str(), 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) != ERROR_SUCCESS) {
+    // 2. Create HKCU\Software\Classes\CLSID\{...}\InprocServer32
+    std::wstring inproc_path = base + L"\\InprocServer32";
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, inproc_path.c_str(), 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) != ERROR_SUCCESS) {
         return E_FAIL;
     }
     RegSetValueExW(hKey, NULL, 0, REG_SZ, (const BYTE*)dll_path, (DWORD)((wcslen(dll_path) + 1) * sizeof(wchar_t)));
@@ -37,9 +39,9 @@ HRESULT RegisterCOMServer(HINSTANCE hInst) {
 }
 
 HRESULT UnregisterCOMServer() {
-    std::wstring key_path = L"CLSID\\" + std::wstring(CLSID_STRING);
-    RegDeleteKeyW(HKEY_CLASSES_ROOT, (key_path + L"\\InprocServer32").c_str());
-    RegDeleteKeyW(HKEY_CLASSES_ROOT, key_path.c_str());
+    std::wstring base = L"Software\\Classes\\CLSID\\" + std::wstring(CLSID_STRING);
+    RegDeleteKeyW(HKEY_CURRENT_USER, (base + L"\\InprocServer32").c_str());
+    RegDeleteKeyW(HKEY_CURRENT_USER, base.c_str());
     return S_OK;
 }
 
@@ -53,7 +55,9 @@ HRESULT RegisterTSFProfiles(HINSTANCE hInst) {
 
     hr = pProfiles->Register(CLSID_BanglaTextService);
     if (SUCCEEDED(hr)) {
-        // Register exclusively under Bengali (Bangladesh) - 0x0845 (Primary & Clean)
+        // Register under Bengali (Bangladesh) - 0x0445 so the IME is listed
+        // under the user's "বাংলা (বাংলাদেশ)" input language in Win+Space.
+        // (BANGLA_LANGID_BD is a fixed literal — see bangla_tsf_clsid.h.)
         pProfiles->AddLanguageProfile(
             CLSID_BanglaTextService,
             BANGLA_LANGID_BD,

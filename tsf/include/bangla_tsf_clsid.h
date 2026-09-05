@@ -16,10 +16,15 @@ DEFINE_GUID(GUID_BanglaProfile,
 DEFINE_GUID(GUID_BanglaDisplayAttribute,
     0x4c1b14e1, 0x2678, 0x4f15, 0xb6, 0xd1, 0xfe, 0x3c, 0x8b, 0x72, 0xaa, 0x41);
 
-// Language ID: 0x0445 (Bengali - Bangladesh), 0x0845 (Bengali - India)
-#define BANGLA_LANGID_BD   MAKELANGID(LANG_BENGALI, SUBLANG_BENGALI_BANGLADESH)
-#define BANGLA_LANGID_IN   MAKELANGID(LANG_BENGALI, SUBLANG_BENGALI_INDIA)
-#define BANGLA_LANGID_US   MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US)
+// Language IDs as CANONICAL numeric literals.
+// IMPORTANT: do NOT derive these from SUBLANG_BENGALI_BANGLADESH/INDIA:
+// several MinGW-w64 header versions SWAP those two constants (BD=0x02, IN=0x01),
+// which silently registers the TSF profile under the wrong Bengali locale.
+// Canonical values (winnt.h): SUBLANG_BENGALI_BANGLADESH = 0x01 -> 0x0445,
+//                             SUBLANG_BENGALI_INDIA      = 0x02 -> 0x0845.
+#define BANGLA_LANGID_BD   0x0445   // Bengali (Bangladesh)
+#define BANGLA_LANGID_IN   0x0845   // Bengali (India)
+#define BANGLA_LANGID_US   0x0409   // English (United States)
 
 #define BANGLA_IME_NAME_W      L"Likhi (লিখি)"
 #define BANGLA_IME_DESC_W      L"Likhi (লিখি) — বাংলা লিখুন, সহজেই।"

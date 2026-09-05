@@ -76,28 +76,31 @@ int main() {
         }
     };
 
-    std::cout << "=== [P0.1] Standard Windows Shortcuts (Ctrl+C, Ctrl+V, etc.) ===\n";
+    std::cout << "=== [P0.1] Modifier Keys Themselves Always Pass Through ===\n";
     {
-        std::vector<std::pair<WPARAM, std::string>> ctrl_shortcuts = {
-            {'C', "Ctrl+C (Copy)"},
-            {'V', "Ctrl+V (Paste)"},
-            {'X', "Ctrl+X (Cut)"},
-            {'A', "Ctrl+A (Select All)"},
-            {'Z', "Ctrl+Z (Undo)"},
-            {'Y', "Ctrl+Y (Redo)"},
-            {'S', "Ctrl+S (Save)"},
-            {'F', "Ctrl+F (Find)"},
-            {'O', "Ctrl+O (Open)"},
-            {'P', "Ctrl+P (Print)"},
-            {'N', "Ctrl+N (New)"},
-            {'W', "Ctrl+W (Close Tab)"}
+        // Ctrl/Alt/Shift/Win/Apps key-downs themselves must never be eaten.
+        // (The full Ctrl+C/V/X/Z/A chord contract lives in test_key_policy,
+        //  because GetKeyState/GetAsyncKeyState cannot be injected here.)
+        std::vector<std::pair<WPARAM, std::string>> modifier_keys = {
+            {VK_CONTROL, "Ctrl"},
+            {VK_LCONTROL, "Left Ctrl"},
+            {VK_RCONTROL, "Right Ctrl"},
+            {VK_MENU, "Alt"},
+            {VK_LMENU, "Left Alt"},
+            {VK_RMENU, "Right Alt"},
+            {VK_SHIFT, "Shift"},
+            {VK_LSHIFT, "Left Shift"},
+            {VK_RSHIFT, "Right Shift"},
+            {VK_LWIN, "Left Win"},
+            {VK_RWIN, "Right Win"},
+            {VK_APPS, "Apps/Menu"}
         };
 
-        for (const auto& sc : ctrl_shortcuts) {
-            BOOL pfEatenTest = FALSE;
-            HRESULT hr = service.OnTestKeyDown(mock_ctx, sc.first, 0, &pfEatenTest);
-            bool ok = SUCCEEDED(hr);
-            RunCheck(ok, "Test Key Down dispatch for " + sc.second);
+        for (const auto& mk : modifier_keys) {
+            BOOL pfEaten = TRUE;
+            HRESULT hr = service.OnTestKeyDown(mock_ctx, mk.first, 0, &pfEaten);
+            bool ok = SUCCEEDED(hr) && (pfEaten == FALSE);
+            RunCheck(ok, mk.second + " key itself passes through (never eaten)");
         }
     }
 
@@ -111,40 +114,29 @@ int main() {
         }
     }
 
-    std::cout << "\n=== [P0.3] Top-Row Numeric Keys (0-9 -> Bengali ০-৯) ===\n";
+    std::cout << "\n=== [P0.3] Top-Row Numeric Keys (0-9) Pass Through Natively ===\n";
     {
-        std::vector<std::pair<char, wchar_t>> top_digits = {
-            {'0', 0x09E6}, // ০
-            {'1', 0x09E7}, // ১
-            {'2', 0x09E8}, // ২
-            {'3', 0x09E9}, // ৩
-            {'4', 0x09EA}, // ৪
-            {'5', 0x09EB}, // ৫
-            {'6', 0x09EC}, // ৬
-            {'7', 0x09ED}, // ৭
-            {'8', 0x09EE}, // ৮
-            {'9', 0x09EF}  // ৯
-        };
-
-        for (const auto& td : top_digits) {
-            BOOL pfEaten = FALSE;
-            HRESULT hr = service.OnTestKeyDown(mock_ctx, td.first, 0, &pfEaten);
-            bool ok = SUCCEEDED(hr) && (pfEaten == TRUE);
-            wchar_t expected_unicode = static_cast<wchar_t>(0x09E6 + (td.first - '0'));
-            bool unicode_ok = (expected_unicode == td.second);
-            RunCheck(ok && unicode_ok, std::string("Top Row '") + td.first + "' eaten for Bengali conversion to Unicode U+" + std::to_string((int)td.second));
+        // Master-prompt contract: with NO active candidate selection, digits
+        // are native numbers — Likhi must NOT swallow them.
+        for (char c = '0'; c <= '9'; c++) {
+            BOOL pfEaten = TRUE;
+            HRESULT hr = service.OnTestKeyDown(mock_ctx, static_cast<WPARAM>(c), 0, &pfEaten);
+            bool ok = SUCCEEDED(hr) && (pfEaten == FALSE);
+            RunCheck(ok, std::string("Top Row '") + c + "' passes through natively (not eaten)");
         }
     }
 
     std::cout << "\n=== [P0.4] Physical Numeric Keypad (Numpad Digits & Operators) ===\n";
     {
-        // Test Numpad Digits
+        // Test Numpad Digits — with no active candidate selection they are
+        // native digits/navigation and must NEVER be eaten (regardless of
+        // the NumLock toggle state).
         for (int i = 0; i <= 9; i++) {
             WPARAM np_key = VK_NUMPAD0 + i;
-            BOOL pfEaten = FALSE;
+            BOOL pfEaten = TRUE;
             HRESULT hr = service.OnTestKeyDown(mock_ctx, np_key, 0, &pfEaten);
-            bool ok = SUCCEEDED(hr);
-            RunCheck(ok, "Numpad " + std::to_string(i) + " key dispatch verified");
+            bool ok = SUCCEEDED(hr) && (pfEaten == FALSE);
+            RunCheck(ok, "Numpad " + std::to_string(i) + " not eaten when idle");
         }
 
         // Test Numpad Operators (MUST PASS THROUGH)
@@ -183,7 +175,8 @@ int main() {
             {VK_NEXT, "Page Down (idle state)"},
             {VK_DELETE, "Delete (idle state)"},
             {VK_TAB, "Tab (idle state)"},
-            {VK_ESCAPE, "Escape (idle state)"}
+            {VK_ESCAPE, "Escape (idle state)"},
+            {VK_SPACE, "Space (idle state)"}
         };
 
         for (const auto& sk : sys_keys) {

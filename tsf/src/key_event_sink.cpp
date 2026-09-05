@@ -1,7 +1,33 @@
 #include "../include/text_service.h"
+#include "../include/key_policy.h"
 #include <iostream>
 
 namespace bangla_tsf {
+
+// ============================================================
+// TSF KEY EVENT SINK — DEFINITIVE IMPLEMENTATION
+//
+// TSF CONTRACT (per MSDN ITfKeyEventSink):
+//   1. OnTestKeyDown is called FIRST.
+//      - pfEaten=TRUE  → TSF calls OnKeyDown; host does NOT see the key.
+//      - pfEaten=FALSE → Host processes the key; TSF still calls OnKeyDown after.
+//
+//   2. When OnTestKeyDown=FALSE the HOST processes the key BEFORE OnKeyDown.
+//      Therefore any commit that must precede a pass-through key (numbers,
+//      Shift+letter, Tab, F1-F12, navigation keys, ...) is performed in
+//      OnTestKeyDown via the policy's commit_first flag. OnKeyDown then only
+//      acts on keys the policy marked "eat".
+//
+// GOLDEN RULE (non-negotiable):
+//   Likhi NEVER consumes, swallows, blocks, modifies, or reinterprets a key
+//   unless that key is explicitly required for an ACTIVE Likhi composition/
+//   candidate operation.
+//
+// All per-key decisions live in the pure, unit-tested module key_policy.{h,cpp}.
+// The two functions below only translate physical keyboard state into a
+// KeyState, execute the decision, and (for eat keys) call the composition
+// manager. Regression tests live in tests/unit/test_key_policy.cpp.
+// ============================================================
 
 STDMETHODIMP TextService::OnSetFocus(BOOL fForeground) {
     if (!fForeground) {
@@ -10,320 +36,138 @@ STDMETHODIMP TextService::OnSetFocus(BOOL fForeground) {
     return S_OK;
 }
 
+// Read the CURRENT physical modifier state.
+// GetKeyState() alone is unreliable for fast chord presses (its value comes
+// from the thread message queue and can lag one message behind), so every
+// modifier check ORs in GetAsyncKeyState() — the live physical keyboard state.
+static KeyState ReadKeyState(WPARAM vk) {
+    KeyState s;
+    s.vk = vk;
+    s.ctrl   = ((GetKeyState(VK_CONTROL) & 0x8000) != 0) ||
+               ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0);
+    s.alt    = ((GetKeyState(VK_MENU)    & 0x8000) != 0) ||
+               ((GetAsyncKeyState(VK_MENU)    & 0x8000) != 0);
+    s.win    = ((GetKeyState(VK_LWIN)    & 0x8000) != 0) || ((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0) ||
+               ((GetKeyState(VK_RWIN)    & 0x8000) != 0) || ((GetAsyncKeyState(VK_RWIN) & 0x8000) != 0);
+    s.shift  = ((GetKeyState(VK_SHIFT)   & 0x8000) != 0) ||
+               ((GetAsyncKeyState(VK_SHIFT)   & 0x8000) != 0);
+    s.numlock = (GetKeyState(VK_NUMLOCK) & 0x0001) != 0;
+    return s;
+}
+
+// For digit keys only: is this digit a valid candidate selection right now?
+static bool ComputeDigitSelectable(WPARAM vk, bool numlock, CompositionManager& mgr) {
+    if (IsDigitKey(vk)) {
+        return mgr.CanSelectCandidate(static_cast<char>(vk));
+    }
+    if (IsNumpadDigitKey(vk) && numlock) {
+        return mgr.CanSelectCandidate('0' + static_cast<char>(vk - VK_NUMPAD0));
+    }
+    return false;
+}
+
 // ============================================================
-// OnTestKeyDown — TSF calls this FIRST to ask "will you eat this key?"
-// RULE: Return pfEaten=TRUE ONLY for keys we will definitively handle in OnKeyDown.
-//       Anything else MUST return FALSE so the host app processes it natively.
+// OnTestKeyDown — Declare intent: will we eat this key?
+// Side effect: when the policy says commit_first and a composition
+// is active, commit the Bengali word HERE — this is the ONLY hook
+// that runs BEFORE the host application receives the key.
 // ============================================================
 STDMETHODIMP TextService::OnTestKeyDown(ITfContext* pic, WPARAM wParam, LPARAM lParam, BOOL* pfEaten) {
-    (void)pic; (void)lParam;
+    (void)lParam;
     if (!pfEaten) return E_INVALIDARG;
     *pfEaten = FALSE;
 
-    // --- RULE 0: Modifier keys themselves are never eaten ---
-    if (wParam == VK_CONTROL || wParam == VK_LCONTROL || wParam == VK_RCONTROL ||
-        wParam == VK_MENU   || wParam == VK_LMENU   || wParam == VK_RMENU   ||
-        wParam == VK_SHIFT  || wParam == VK_LSHIFT  || wParam == VK_RSHIFT  ||
-        wParam == VK_LWIN   || wParam == VK_RWIN    || wParam == VK_APPS) {
-        *pfEaten = FALSE;
-        return S_OK;
+    KeyState st = ReadKeyState(wParam);
+    st.composing          = composition_mgr_.IsComposing();
+    st.candidates_visible = composition_mgr_.HasVisibleCandidates();
+    st.digit_selectable   = ComputeDigitSelectable(wParam, st.numlock, composition_mgr_);
+
+    KeyDecision d = DecideKey(st);
+
+    // Pass-through keys that break composition: commit BEFORE the host sees
+    // the key so the number/Shift+letter/Tab/F-key/navigation lands AFTER the
+    // committed Bengali word (e.g. "am"+"0" → "আম0", never "0আম").
+    if (d.commit_first && st.composing) {
+        composition_mgr_.OnEnter(pic);
     }
 
-    // --- RULE 1: Ctrl / Alt / Win combinations → always pass through ---
-    bool is_ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-    bool is_alt  = (GetKeyState(VK_MENU)    & 0x8000) != 0;
-    bool is_win  = (GetKeyState(VK_LWIN)    & 0x8000) != 0 ||
-                   (GetKeyState(VK_RWIN)    & 0x8000) != 0;
-    if (is_ctrl || is_alt || is_win) {
-        *pfEaten = FALSE;
-        return S_OK;
-    }
-
-    // --- RULE 2: Shift combinations → always pass through ---
-    bool is_shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-    if (is_shift) {
-        *pfEaten = FALSE;
-        return S_OK;
-    }
-
-    // --- RULE 3: Function keys, system keys, Tab, Caps Lock → never eat ---
-    if ((wParam >= VK_F1 && wParam <= VK_F24) ||
-        wParam == VK_TAB || wParam == VK_CAPITAL ||
-        wParam == VK_NUMLOCK || wParam == VK_SCROLL ||
-        wParam == VK_SNAPSHOT || wParam == VK_PAUSE ||
-        wParam == VK_INSERT) {
-        *pfEaten = FALSE;
-        return S_OK;
-    }
-
-    // --- RULE 4: NumPad operators → never eat ---
-    if (wParam == VK_ADD || wParam == VK_SUBTRACT || wParam == VK_MULTIPLY ||
-        wParam == VK_DIVIDE || wParam == VK_DECIMAL || wParam == VK_SEPARATOR) {
-        *pfEaten = FALSE;
-        return S_OK;
-    }
-
-    // --- RULE 5: Space → NEVER eat in TestKeyDown ---
-    // We commit in OnKeyDown and then return pfEaten=FALSE so the host inserts the real space.
-    if (wParam == VK_SPACE) {
-        *pfEaten = FALSE;
-        return S_OK;
-    }
-
-    // --- RULE 6: Escape → eat only if composing (we will cancel composition) ---
-    if (wParam == VK_ESCAPE) {
-        *pfEaten = composition_mgr_.IsComposing() ? TRUE : FALSE;
-        return S_OK;
-    }
-
-    // --- RULE 7: Number keys (top-row and numpad) ---
-    if (wParam >= '0' && wParam <= '9') {
-        // Only eat if candidate popup is active and this digit selects a real candidate
-        if (composition_mgr_.CanSelectCandidate(static_cast<char>(wParam))) {
-            *pfEaten = TRUE;
-        } else {
-            *pfEaten = FALSE; // No composition or no matching candidate → native number
-        }
-        return S_OK;
-    }
-    if (wParam >= VK_NUMPAD0 && wParam <= VK_NUMPAD9) {
-        bool numlock = (GetKeyState(VK_NUMLOCK) & 0x0001) != 0;
-        if (numlock) {
-            char digit = '0' + static_cast<char>(wParam - VK_NUMPAD0);
-            if (composition_mgr_.CanSelectCandidate(digit)) {
-                *pfEaten = TRUE;
-            } else {
-                *pfEaten = FALSE;
-            }
-        } else {
-            *pfEaten = FALSE; // NumLock OFF → navigation keys, never eat
-        }
-        return S_OK;
-    }
-
-    // --- RULE 8: Alpha letters → eat (we process them as Roman input) ---
-    if ((wParam >= 'A' && wParam <= 'Z') || (wParam >= 'a' && wParam <= 'z')) {
-        *pfEaten = TRUE;
-        return S_OK;
-    }
-
-    // --- RULE 9: Composition-only control keys ---
-    if (composition_mgr_.IsComposing()) {
-        if (wParam == VK_BACK || wParam == VK_RETURN ||
-            wParam == VK_UP   || wParam == VK_DOWN   ||
-            wParam == VK_OEM_PERIOD) {
-            *pfEaten = TRUE;
-            return S_OK;
-        }
-    }
-
-    // Default: pass through
-    *pfEaten = FALSE;
+    *pfEaten = d.eat ? TRUE : FALSE;
     return S_OK;
 }
 
 // ============================================================
-// OnKeyDown — The actual key handler. TSF calls this only after
-//             OnTestKeyDown returns TRUE. However, for keys where
-//             we said FALSE in OnTestKeyDown but still want to react
-//             (like Space to commit), we handle the commit here and
-//             return pfEaten=FALSE so the host still gets the key.
+// OnKeyDown — Perform the action ONLY for keys the policy marked "eat".
+// For pass-through keys, nothing happens here: the commit already
+// happened in OnTestKeyDown (if needed) and the host processes the key.
 // ============================================================
 STDMETHODIMP TextService::OnKeyDown(ITfContext* pic, WPARAM wParam, LPARAM lParam, BOOL* pfEaten) {
     (void)lParam;
     if (!pfEaten) return E_INVALIDARG;
     *pfEaten = FALSE;
 
-    // --- RULE 0: Modifier keys themselves ---
-    if (wParam == VK_CONTROL || wParam == VK_LCONTROL || wParam == VK_RCONTROL ||
-        wParam == VK_MENU   || wParam == VK_LMENU   || wParam == VK_RMENU   ||
-        wParam == VK_SHIFT  || wParam == VK_LSHIFT  || wParam == VK_RSHIFT  ||
-        wParam == VK_LWIN   || wParam == VK_RWIN    || wParam == VK_APPS) {
+    KeyState st = ReadKeyState(wParam);
+    st.composing          = composition_mgr_.IsComposing();
+    st.candidates_visible = composition_mgr_.HasVisibleCandidates();
+    st.digit_selectable   = ComputeDigitSelectable(wParam, st.numlock, composition_mgr_);
+
+    KeyDecision d = DecideKey(st);
+    if (!d.eat) {
+        // Host processes the key natively; we never touched it in OnKeyDown.
         *pfEaten = FALSE;
         return S_OK;
     }
 
-    // --- RULE 1: Ctrl / Alt / Win combinations ---
-    bool is_ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-    bool is_alt  = (GetKeyState(VK_MENU)    & 0x8000) != 0;
-    bool is_win  = (GetKeyState(VK_LWIN)    & 0x8000) != 0 ||
-                   (GetKeyState(VK_RWIN)    & 0x8000) != 0;
-    if (is_ctrl || is_alt || is_win) {
-        // Abort any active composition (e.g., user pressed Ctrl+Z while typing)
-        if (composition_mgr_.IsComposing()) {
-            composition_mgr_.OnEscape(pic);
-        }
-        *pfEaten = FALSE;
-        return S_OK;
-    }
-
-    bool is_shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-
-    // --- RULE 2: Shift combinations ---
-    if (is_shift) {
-        // Commit composition first, then let the Shift+key pass natively
-        if (composition_mgr_.IsComposing()) {
-            composition_mgr_.OnEnter(pic);
-        }
-        *pfEaten = FALSE;
-        return S_OK;
-    }
-
-    // --- RULE 3: Function keys, system keys ---
-    if ((wParam >= VK_F1 && wParam <= VK_F24) ||
-        wParam == VK_TAB || wParam == VK_CAPITAL ||
-        wParam == VK_NUMLOCK || wParam == VK_SCROLL ||
-        wParam == VK_SNAPSHOT || wParam == VK_PAUSE ||
-        wParam == VK_INSERT) {
-        if (composition_mgr_.IsComposing()) {
-            composition_mgr_.OnEnter(pic);
-        }
-        *pfEaten = FALSE;
-        return S_OK;
-    }
-
-    // --- RULE 4: NumPad operators ---
-    if (wParam == VK_ADD || wParam == VK_SUBTRACT || wParam == VK_MULTIPLY ||
-        wParam == VK_DIVIDE || wParam == VK_DECIMAL || wParam == VK_SEPARATOR) {
-        if (composition_mgr_.IsComposing()) {
-            composition_mgr_.OnEnter(pic);
-        }
-        *pfEaten = FALSE;
-        return S_OK;
-    }
-
-    // --- RULE 5: Space — the most critical key ---
-    // BEHAVIOR: Commit Bengali word WITHOUT eating the Space.
-    //           The host app receives the Space natively and inserts exactly 1 space.
-    // This is the ONLY reliable way to guarantee exactly one space in all host apps.
-    if (wParam == VK_SPACE) {
-        if (composition_mgr_.IsComposing()) {
-            composition_mgr_.OnEnter(pic); // Commit the word cleanly (no space)
-        }
-        *pfEaten = FALSE; // Pass Space to host — host inserts the real space
-        return S_OK;
-    }
-
-    // --- RULE 6: Escape ---
-    if (wParam == VK_ESCAPE) {
-        if (composition_mgr_.IsComposing()) {
-            composition_mgr_.OnEscape(pic);
-            *pfEaten = TRUE;
-        } else {
-            *pfEaten = FALSE;
-        }
-        return S_OK;
-    }
-
-    // --- RULE 7: Top-row number keys ---
-    if (wParam >= '0' && wParam <= '9') {
-        char digit = static_cast<char>(wParam);
-        if (composition_mgr_.CanSelectCandidate(digit)) {
-            // Candidate popup active + valid digit → select candidate
-            *pfEaten = composition_mgr_.OnDigit(pic, digit);
-        } else {
-            // No composition or no matching candidate → commit any composition, pass number
-            if (composition_mgr_.IsComposing()) {
-                composition_mgr_.OnEnter(pic);
-            }
-            *pfEaten = FALSE;
-        }
-        return S_OK;
-    }
-
-    // --- RULE 8: NumPad digit keys ---
-    if (wParam >= VK_NUMPAD0 && wParam <= VK_NUMPAD9) {
-        bool numlock = (GetKeyState(VK_NUMLOCK) & 0x0001) != 0;
-        if (numlock) {
-            char digit = '0' + static_cast<char>(wParam - VK_NUMPAD0);
-            if (composition_mgr_.CanSelectCandidate(digit)) {
-                *pfEaten = composition_mgr_.OnDigit(pic, digit);
+    switch (d.action) {
+        case KeyAction::kProcessCharacter: {
+            char ch = static_cast<char>(wParam);
+            bool caps_lock = (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
+            // Shift is never eaten (always passes through), so only CapsLock
+            // can alter the case of a letter we actually process here.
+            if (caps_lock) {
+                if (ch >= 'a' && ch <= 'z') ch = ch - 'a' + 'A';
             } else {
-                if (composition_mgr_.IsComposing()) {
-                    composition_mgr_.OnEnter(pic);
-                }
-                *pfEaten = FALSE;
+                if (ch >= 'A' && ch <= 'Z') ch = ch - 'A' + 'a';
             }
-        } else {
-            // NumLock OFF → navigation keys (Home, End, Arrow, etc.) — always pass through
-            if (composition_mgr_.IsComposing()) {
-                composition_mgr_.OnEnter(pic);
-            }
+            *pfEaten = composition_mgr_.OnCharacter(pic, ch) ? TRUE : FALSE;
+            return S_OK;
+        }
+
+        case KeyAction::kProcessSpace:
+            // OnTestKeyDown said TRUE, so the host has NOT inserted a space.
+            // OnSpace commits the word AND inserts exactly one U+0020 via TSF.
+            *pfEaten = composition_mgr_.OnSpace(pic) ? TRUE : FALSE;
+            return S_OK;
+
+        case KeyAction::kProcessEscape:
+            *pfEaten = composition_mgr_.OnEscape(pic) ? TRUE : FALSE;
+            return S_OK;
+
+        case KeyAction::kProcessBackspace:
+            *pfEaten = composition_mgr_.OnBackspace(pic) ? TRUE : FALSE;
+            return S_OK;
+
+        case KeyAction::kProcessEnter:
+            *pfEaten = composition_mgr_.OnEnter(pic) ? TRUE : FALSE;
+            return S_OK;
+
+        case KeyAction::kProcessDigit: {
+            char digit = DigitFromKey(wParam);
+            *pfEaten = (digit && composition_mgr_.OnDigit(pic, digit)) ? TRUE : FALSE;
+            return S_OK;
+        }
+
+        case KeyAction::kProcessArrow:
+            *pfEaten = composition_mgr_.OnArrow(pic, wParam == VK_DOWN) ? TRUE : FALSE;
+            return S_OK;
+
+        case KeyAction::kProcessPeriod:
+            *pfEaten = composition_mgr_.OnPunctuation(pic, '.') ? TRUE : FALSE;
+            return S_OK;
+
+        default:
             *pfEaten = FALSE;
-        }
-        return S_OK;
+            return S_OK;
     }
-
-    bool is_composing = composition_mgr_.IsComposing();
-
-    // --- RULE 9: Cursor / navigation keys while composing ---
-    if (wParam == VK_LEFT || wParam == VK_RIGHT ||
-        wParam == VK_HOME || wParam == VK_END   ||
-        wParam == VK_DELETE || wParam == VK_PRIOR || wParam == VK_NEXT) {
-        if (is_composing) {
-            composition_mgr_.OnEnter(pic);
-        }
-        *pfEaten = FALSE;
-        return S_OK;
-    }
-
-    // --- RULE 10: Alpha letters → Roman phonetic input ---
-    if ((wParam >= 'A' && wParam <= 'Z') || (wParam >= 'a' && wParam <= 'z')) {
-        char ch = static_cast<char>(wParam);
-        bool is_caps = (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
-        // is_shift is already false here (handled above), only caps matters
-        if (is_caps) {
-            if (ch >= 'a' && ch <= 'z') ch = ch - 'a' + 'A';
-        } else {
-            if (ch >= 'A' && ch <= 'Z') ch = ch - 'A' + 'a';
-        }
-        *pfEaten = composition_mgr_.OnCharacter(pic, ch);
-        return S_OK;
-    }
-
-    // --- RULE 11: Backspace ---
-    if (wParam == VK_BACK) {
-        if (is_composing) {
-            *pfEaten = composition_mgr_.OnBackspace(pic);
-        } else {
-            *pfEaten = FALSE;
-        }
-        return S_OK;
-    }
-
-    // --- RULE 12: Enter ---
-    if (wParam == VK_RETURN) {
-        if (is_composing) {
-            *pfEaten = composition_mgr_.OnEnter(pic);
-        } else {
-            *pfEaten = FALSE;
-        }
-        return S_OK;
-    }
-
-    // --- RULE 13: Arrow up/down for candidate navigation ---
-    if (wParam == VK_UP || wParam == VK_DOWN) {
-        if (is_composing) {
-            *pfEaten = composition_mgr_.OnArrow(pic, wParam == VK_DOWN);
-        } else {
-            *pfEaten = FALSE;
-        }
-        return S_OK;
-    }
-
-    // --- RULE 14: Period / Daari ---
-    if (wParam == VK_OEM_PERIOD) {
-        if (is_composing) {
-            *pfEaten = composition_mgr_.OnPunctuation(pic, '.');
-        } else {
-            *pfEaten = FALSE;
-        }
-        return S_OK;
-    }
-
-    // Default: pass everything else through
-    *pfEaten = FALSE;
-    return S_OK;
 }
 
 STDMETHODIMP TextService::OnTestKeyUp(ITfContext* pic, WPARAM wParam, LPARAM lParam, BOOL* pfEaten) {

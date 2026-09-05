@@ -31,7 +31,8 @@ public:
     bool OnEscape(ITfContext* pContext);
     bool OnArrow(ITfContext* pContext, bool down_next);
     bool OnNumberSelection(ITfContext* pContext, int num_1_to_5);
-    bool OnDigit(ITfContext* pContext, char ascii_digit, bool allow_candidate_selection = true);
+    bool OnDigit(ITfContext* pContext, char ascii_digit);
+    bool CanSelectCandidate(char digit);
     bool OnPunctuation(ITfContext* pContext, char punct);
     bool HasVisibleCandidates() const { return is_composing_ && !current_candidates_w_.empty(); }
 
@@ -73,3 +74,5 @@ private:
 } // namespace bangla_tsf
 
 #endif // BANGLA_COMPOSITION_MGR_H
+
+

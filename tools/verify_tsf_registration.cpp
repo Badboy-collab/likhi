@@ -75,7 +75,7 @@ int main() {
     if (SUCCEEDED(hrProfiles) && pProfiles) {
         std::cout << "\n=== Querying Registered TSF Language Profiles ===\n";
 
-        // Check BD LANGID (0x0845)
+        // Check BD LANGID (0x0445) — canonical Bengali (Bangladesh)
         IEnumTfLanguageProfiles* pEnum = nullptr;
         if (SUCCEEDED(pProfiles->EnumLanguageProfiles(BANGLA_LANGID_BD, &pEnum)) && pEnum) {
             TF_LANGUAGEPROFILE profile;
@@ -84,18 +84,18 @@ int main() {
             while (pEnum->Next(1, &profile, &fetched) == S_OK && fetched == 1) {
                 if (IsEqualCLSID(profile.clsid, CLSID_BanglaTextService)) {
                     found_bd = true;
-                    std::cout << "  [FOUND] Profile for Bengali (Bangladesh) - LANGID 0x0845\n";
+                    std::cout << "  [FOUND] Profile for Bengali (Bangladesh) - LANGID 0x0445\n";
                     std::cout << "          CLSID: {B4F1470A-7C69-4C62-972F-6379532856E1}\n";
                     std::cout << "          Active: " << (profile.fActive ? "TRUE" : "FALSE") << "\n";
                 }
             }
             pEnum->Release();
             if (!found_bd) {
-                std::cout << "  [INFO] Bengali (Bangladesh) 0x0845 profile not in current user's active table (may need admin registration).\n";
+                std::cout << "  [INFO] Bengali (Bangladesh) 0x0445 profile not in current user's active table (may need admin registration).\n";
             }
         }
 
-        // Check IN LANGID (0x0445)
+        // Check IN LANGID (0x0845) — canonical Bengali (India)
         if (SUCCEEDED(pProfiles->EnumLanguageProfiles(BANGLA_LANGID_IN, &pEnum)) && pEnum) {
             TF_LANGUAGEPROFILE profile;
             ULONG fetched = 0;
@@ -103,12 +103,12 @@ int main() {
             while (pEnum->Next(1, &profile, &fetched) == S_OK && fetched == 1) {
                 if (IsEqualCLSID(profile.clsid, CLSID_BanglaTextService)) {
                     found_in = true;
-                    std::cout << "  [FOUND] Profile for Bengali (India) - LANGID 0x0445\n";
+                    std::cout << "  [FOUND] Profile for Bengali (India) - LANGID 0x0845\n";
                 }
             }
             pEnum->Release();
             if (!found_in) {
-                std::cout << "  [INFO] Bengali (India) 0x0445 profile not in active table.\n";
+                std::cout << "  [INFO] Bengali (India) 0x0845 profile not in active table.\n";
             }
         }
 

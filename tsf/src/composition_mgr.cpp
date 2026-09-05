@@ -276,7 +276,9 @@ bool CompositionManager::OnSpace(ITfContext* pContext) {
     if (!is_composing_) {
         return false;
     }
-    // Single space commits the Bengali word AND inserts exactly one space
+    // OnTestKeyDown returned TRUE for Space when composing,
+    // so the host will NOT insert a space. We must do it ourselves via TSF.
+    // Strategy: commit the Bengali word, then insert exactly one U+0020 space.
     return CommitCurrentComposition(pContext, selected_candidate_idx_, /*append_space=*/true);
 }
 
@@ -374,7 +376,6 @@ bool CompositionManager::OnPunctuation(ITfContext* pContext, char punct) {
 }
 
 bool CompositionManager::CommitCurrentComposition(ITfContext* pContext, size_t candidate_idx, bool append_space) {
-    (void)append_space; // Space is always committed by the host, never by us
     if (!is_composing_) {
         return false;
     }
@@ -391,10 +392,14 @@ bool CompositionManager::CommitCurrentComposition(ITfContext* pContext, size_t c
     std::string chosen_u8 = Utf16ToUtf8(chosen_w);
 
     if (pContext && service_) {
-        // Commit the Bengali text cleanly — NO trailing space, NO extra characters.
-        // The caller (OnKeyDown for Space) returns pfEaten=FALSE so the host
-        // inserts exactly one real space natively. This is the only reliable approach.
-        ITfEditSession* commitSession = new ActionEditSession(pContext, [this, chosen_w](TfEditCookie ec) -> HRESULT {
+        // Commit the Bengali word. If append_space=true, also insert exactly one
+        // U+0020 space character after the word via TSF InsertTextAtSelection.
+        // This is required because OnTestKeyDown=TRUE for Space means the host
+        // never sees the Space keystroke — we must produce the space ourselves.
+        ITfEditSession* commitSession = new ActionEditSession(pContext,
+            [this, chosen_w, append_space, pContext](TfEditCookie ec) -> HRESULT {
+
+            // 1. Set the composition range text to the Bengali word and end composition
             if (this->active_composition_) {
                 ITfRange* pRange = nullptr;
                 if (SUCCEEDED(this->active_composition_->GetRange(&pRange)) && pRange) {
@@ -406,14 +411,32 @@ bool CompositionManager::CommitCurrentComposition(ITfContext* pContext, size_t c
                 this->active_composition_->Release();
                 this->active_composition_ = nullptr;
             }
+
+            // 2. If triggered by Space: insert exactly one U+0020 space after the word.
+            //    We use InsertTextAtSelection at the current cursor position.
+            if (append_space) {
+                ITfInsertAtSelection* pIAS = nullptr;
+                if (SUCCEEDED(pContext->QueryInterface(IID_ITfInsertAtSelection, (void**)&pIAS))) {
+                    ITfRange* pSpaceRange = nullptr;
+                    const wchar_t space = L' ';
+                    pIAS->InsertTextAtSelection(ec, 0, &space, 1, &pSpaceRange);
+                    if (pSpaceRange) {
+                        pSpaceRange->Collapse(ec, TF_ANCHOR_END);
+                        pSpaceRange->Release();
+                    }
+                    pIAS->Release();
+                }
+            }
             return S_OK;
         });
 
         HRESULT hr = S_OK;
         HRESULT hrSession = S_OK;
-        hr = pContext->RequestEditSession(service_->GetClientId(), commitSession, TF_ES_READWRITE | TF_ES_SYNC, &hrSession);
+        hr = pContext->RequestEditSession(service_->GetClientId(), commitSession,
+                                          TF_ES_READWRITE | TF_ES_SYNC, &hrSession);
         if (hr == TF_E_SYNCHRONOUS) {
-            pContext->RequestEditSession(service_->GetClientId(), commitSession, TF_ES_READWRITE, &hrSession);
+            pContext->RequestEditSession(service_->GetClientId(), commitSession,
+                                          TF_ES_READWRITE, &hrSession);
         }
         commitSession->Release();
     }
