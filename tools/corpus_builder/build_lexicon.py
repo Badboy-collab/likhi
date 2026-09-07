@@ -444,9 +444,10 @@ def export_flat_binary_lexicon(lexicon, output_path):
     string_pool = bytearray()
     compact_records = []
     
-    for idx, (b_word, r_key, freq, _) in enumerate(lexicon):
+    for idx, (b_word, r_key, freq, cat) in enumerate(lexicon):
         b_bytes = b_word.encode('utf-8')
         r_bytes = r_key.encode('utf-8')
+        entry_flags = 0x0001 if cat == "override" else 0x0000
         
         b_offset = len(string_pool)
         string_pool.extend(b_bytes)
@@ -463,6 +464,7 @@ def export_flat_binary_lexicon(lexicon, output_path):
             "r_offset": r_offset,
             "r_len": len(r_bytes),
             "freq": freq,
+            "flags": entry_flags,
             "b_word": b_word,
             "r_key": r_key
         })
@@ -491,7 +493,7 @@ def export_flat_binary_lexicon(lexicon, output_path):
         # Compact Entry Records (20 bytes per record)
         for r in compact_records:
             # struct CompactEntry: uint32 b_off, uint16 b_len, uint32 r_off, uint16 r_len, uint32 freq, uint16 flags, uint16 pad
-            f.write(struct.pack('<IH IHI HH', r["b_offset"], r["b_len"], r["r_offset"], r["r_len"], r["freq"], 0, 0))
+            f.write(struct.pack('<IH IHI HH', r["b_offset"], r["b_len"], r["r_offset"], r["r_len"], r["freq"], r["flags"], 0))
             
         # Pre-sorted Bengali Index Array
         for b_idx in bengali_indices:
@@ -607,9 +609,63 @@ def generate_500_sentence_gold_benchmark(base_dir):
     total_words = sum(len(s["expected"].split()) for s in all_sentences)
     print(f"[Benchmark Builder] Generated {len(all_sentences)} gold sentences ({total_words} words) in {gold_path}")
 
+def load_roman_overrides(path):
+    """Loads human-editable roman->bengali overrides.
+
+    File format: one pair per line:  roman<TAB>bengali   (single whitespace also accepted)
+    Lines starting with '#' and empty lines are ignored. roman is lowercased.
+    Later lines win over earlier lines for the same (roman, bengali) pair.
+    Returns an ordered list of (roman, bengali) tuples.
+    """
+    overrides = []
+    if not os.path.exists(path):
+        print(f"[Overrides] {path} not found - skipping")
+        return overrides
+    seen = set()
+    with open(path, 'r', encoding='utf-8-sig') as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line.startswith('#'):
+                continue
+            parts = line.split(None, 1)
+            if len(parts) != 2:
+                continue
+            roman, bengali = parts[0].strip().lower(), parts[1].strip()
+            if not roman or not bengali or ' ' in roman:
+                continue  # roman keys must be single tokens (space commits words)
+            if '\u09cd\u09cd' in bengali or bengali.endswith('\u09cd'):
+                continue
+            pair = (roman, bengali)
+            if pair in seen:
+                continue
+            seen.add(pair)
+            overrides.append(pair)
+    print(f"[Overrides] Loaded {len(overrides)} roman->bengali override entries from {path}")
+    return overrides
+
 def main():
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     lexicon = build_large_lexicon()
+
+    # Merge human-editable roman overrides on top of the generated vocabulary.
+    # Existing (bengali, roman) pairs are replaced; new pairs are appended.
+    override_path = os.path.join(base_dir, "engine", "data", "roman_overrides.txt")
+    overrides = load_roman_overrides(override_path)
+    if overrides:
+        # Drop any generated pair whose exact (bengali, roman) is overridden, dedupe, then add overrides
+        ov_set = set(overrides)
+        kept = {}
+        for (b, r, fr, cat) in lexicon:
+            if (b, r) in ov_set:
+                continue
+            key = (b, r)
+            if key not in kept or fr > kept[key][0]:
+                kept[key] = (fr, cat)
+        for (r, b) in overrides:
+            kept[(b, r)] = (9000000 - len(kept) * 10, "override")
+        lexicon = [(b, r, fr, cat) for (b, r), (fr, cat) in kept.items()]
+        lexicon.sort(key=lambda x: x[2], reverse=True)
+        print(f"[Overrides] Merged; total entries now: {len(lexicon)}")
 
     bin_path = os.path.join(base_dir, "engine", "data", "lexicon.bin")
     export_flat_binary_lexicon(lexicon, bin_path)

@@ -8,8 +8,18 @@
 #include <string>
 #include <vector>
 #include <cstring>
+#include <cctype>
+#include <algorithm>
 #include <sstream>
 #include <iostream>
+
+namespace {
+// Lexicon entries compiled from engine/data/roman_overrides.txt carry this flag
+// (set by build_lexicon.py). Exact roman-key matches for such entries are pinned
+// to the top of the candidate list so the curated dictionary behaves like
+// Google Input Tools: type the word once -> the intended spelling surfaces first.
+constexpr uint16_t kLexiconOverrideFlag = 0x0001;
+}
 
 struct BanglaEngine {
     EngineConfig config;
@@ -148,14 +158,48 @@ void BanglaEngine_GetCandidates(BanglaEngine* engine, CandidateList* out_list) {
         engine->config.max_candidates
     );
 
-    // 5. Populate output list
-    out_list->count = static_cast<uint32_t>(ranked.size());
-    for (uint32_t i = 0; i < out_list->count; i++) {
-        strncpy(out_list->candidates[i].bengali_text, ranked[i].bengali_text.c_str(), sizeof(out_list->candidates[i].bengali_text) - 1);
-        strncpy(out_list->candidates[i].roman_origin, ranked[i].roman_origin.c_str(), sizeof(out_list->candidates[i].roman_origin) - 1);
-        out_list->candidates[i].score = ranked[i].final_score;
-        out_list->candidates[i].category_flags = ranked[i].category_flags;
-        out_list->candidates[i].auto_correct_recommended = ranked[i].auto_correct_recommended;
+    // 5. Curated override dictionary wins: any lexicon entry flagged as an
+    //    override that exactly matches the typed roman key is emitted first,
+    //    in lexicon frequency order (i.e. file order in roman_overrides.txt).
+    std::string lower_composition = engine->composition;
+    std::transform(lower_composition.begin(), lower_composition.end(), lower_composition.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::vector<std::string> override_texts;
+    if (!lower_composition.empty()) {
+        auto exact = engine->lexicon.SearchRoman(lower_composition, 8);
+        for (const auto& rm : exact) {
+            if ((rm.flags & kLexiconOverrideFlag) == 0) continue;
+            if (std::find(override_texts.begin(), override_texts.end(), rm.bengali_word) == override_texts.end()) {
+                override_texts.push_back(rm.bengali_word);
+            }
+        }
+    }
+
+    // 6. Populate output list: overrides first, then remaining ranked candidates.
+    out_list->count = 0;
+    float override_score = 1.0f;
+    const uint32_t max_out = static_cast<uint32_t>(engine->config.max_candidates);
+    for (const auto& ov_text : override_texts) {
+        if (out_list->count >= max_out) break;
+        strncpy(out_list->candidates[out_list->count].bengali_text, ov_text.c_str(), sizeof(out_list->candidates[out_list->count].bengali_text) - 1);
+        strncpy(out_list->candidates[out_list->count].roman_origin, engine->composition.c_str(), sizeof(out_list->candidates[out_list->count].roman_origin) - 1);
+        out_list->candidates[out_list->count].score = override_score;
+        out_list->candidates[out_list->count].category_flags = CANDIDATE_FLAG_PRIMARY | CANDIDATE_FLAG_EXACT_MATCH;
+        out_list->candidates[out_list->count].auto_correct_recommended =
+            (engine->config.auto_correct_enabled && override_score >= engine->config.auto_correct_threshold - 1e-4f);
+        out_list->count++;
+        override_score -= 0.001f;
+    }
+    for (uint32_t i = 0; i < static_cast<uint32_t>(ranked.size()) && out_list->count < max_out; i++) {
+        if (std::find(override_texts.begin(), override_texts.end(), ranked[i].bengali_text) != override_texts.end()) {
+            continue; // already emitted as an override
+        }
+        strncpy(out_list->candidates[out_list->count].bengali_text, ranked[i].bengali_text.c_str(), sizeof(out_list->candidates[out_list->count].bengali_text) - 1);
+        strncpy(out_list->candidates[out_list->count].roman_origin, ranked[i].roman_origin.c_str(), sizeof(out_list->candidates[out_list->count].roman_origin) - 1);
+        out_list->candidates[out_list->count].score = ranked[i].final_score;
+        out_list->candidates[out_list->count].category_flags = ranked[i].category_flags;
+        out_list->candidates[out_list->count].auto_correct_recommended = ranked[i].auto_correct_recommended;
+        out_list->count++;
     }
 }
 
