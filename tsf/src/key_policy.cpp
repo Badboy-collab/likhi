@@ -47,6 +47,14 @@ char DigitFromKey(WPARAM vk) {
     return '\0';
 }
 
+// User-mandated (2026-09-05): numpad digits (NumLock ON) type the Bengali
+// numerals ০-৯ instead of the ASCII digits 0-9. Top-row digits stay English.
+wchar_t BengaliDigitFromKey(WPARAM vk) {
+    if (!IsNumpadDigitKey(vk)) return L'\0';
+    static const wchar_t bengali_digits[] = L"০১২৩৪৫৬৭৮৯";
+    return bengali_digits[vk - VK_NUMPAD0];
+}
+
 KeyDecision DecideKey(const KeyState& s) {
     KeyDecision d;
 
@@ -105,16 +113,35 @@ KeyDecision DecideKey(const KeyState& s) {
         return d;
     }
 
-    // 8. Digits (top row '0'-'9', and numpad digits while NumLock is ON):
-    //    eaten ONLY when they select a real candidate. Otherwise the number
-    //    must reach the application natively — commit first if composing so
-    //    the digit lands AFTER the committed word ("am"+"0" → "আম0").
-    if (IsDigitKey(s.vk) || (IsNumpadDigitKey(s.vk) && s.numlock)) {
+    // 8a. TOP ROW '1'-'9': English digits that reach the application natively.
+    //     Eaten ONLY to pick the candidate shown under that number (the window
+    //     labels items 1..N, N up to 9 — including the exact-English 6th cloud
+    //     fallback). Otherwise commit first if composing so the digit lands
+    //     AFTER the word ("am"+"0" → "আম0").
+    if (IsDigitKey(s.vk)) {
         if (s.composing && s.digit_selectable) {
             d.eat = true;
             d.action = KeyAction::kProcessDigit;
         } else {
             d.commit_first = s.composing;
+        }
+        return d;
+    }
+
+    // 8b. NumPad digits with NumLock ON: user-mandated mapping — they type the
+    //     Bengali numerals ০-৯ (see BengaliDigitFromKey), EXCEPT 1-9 which pick
+    //     a real candidate when one is showing under that number. Eaten either
+    //     way so the native ASCII digit never reaches the host; when composing
+    //     we commit the word first (OnTestKeyDown), then insert the Bengali
+    //     numeral in OnKeyDown.
+    if (IsNumpadDigitKey(s.vk) && s.numlock) {
+        if (s.composing && s.digit_selectable) {
+            d.eat = true;
+            d.action = KeyAction::kProcessDigit;
+        } else {
+            d.commit_first = s.composing;
+            d.eat = true;
+            d.action = KeyAction::kProcessBengaliDigit;
         }
         return d;
     }
@@ -181,7 +208,12 @@ KeyDecision DecideKey(const KeyState& s) {
         return d;
     }
 
-    // 16. Everything else: pass through untouched.
+    // 16. Everything else (symbols: = + - _ / \ [ ] ; ' , ` and any other
+    //     unrecognized key): never eaten — the host produces its native
+    //     character/action untouched. While composing we commit the word
+    //     FIRST so the symbol lands AFTER the committed Bengali text and the
+    //     composition is never corrupted ("ami"+"=" → "আমি=").
+    d.commit_first = s.composing;
     return d;
 }
 

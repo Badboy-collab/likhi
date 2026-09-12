@@ -128,15 +128,22 @@ int main() {
 
     std::cout << "\n=== [P0.4] Physical Numeric Keypad (Numpad Digits & Operators) ===\n";
     {
-        // Test Numpad Digits — with no active candidate selection they are
-        // native digits/navigation and must NEVER be eaten (regardless of
-        // the NumLock toggle state).
+        // Test Numpad Digits (idle). User-mandated mapping (2026-09-05):
+        //   NumLock ON  -> the digit is EATEN and replaced by the Bengali
+        //                  numeral ০-৯ (kProcessBengaliDigit);
+        //   NumLock OFF -> native keypad navigation, NOT eaten.
+        // The live NumLock toggle decides the expected outcome here (the sink
+        // reads the real keyboard state); the pure per-state decisions are
+        // covered exhaustively in test_key_policy.cpp.
+        bool numlock_on = (GetKeyState(VK_NUMLOCK) & 0x0001) != 0;
         for (int i = 0; i <= 9; i++) {
             WPARAM np_key = VK_NUMPAD0 + i;
             BOOL pfEaten = TRUE;
             HRESULT hr = service.OnTestKeyDown(mock_ctx, np_key, 0, &pfEaten);
-            bool ok = SUCCEEDED(hr) && (pfEaten == FALSE);
-            RunCheck(ok, "Numpad " + std::to_string(i) + " not eaten when idle");
+            bool ok = SUCCEEDED(hr) && (pfEaten == (numlock_on ? TRUE : FALSE));
+            RunCheck(ok, "Numpad " + std::to_string(i) + (numlock_on
+                        ? " eaten (NumLock ON -> Bengali numeral ০-৯)"
+                        : " not eaten (NumLock OFF -> native navigation)"));
         }
 
         // Test Numpad Operators (MUST PASS THROUGH)

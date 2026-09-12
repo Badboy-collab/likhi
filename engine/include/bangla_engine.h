@@ -74,6 +74,36 @@ bool BanglaEngine_TransliterateSentence(BanglaEngine* engine, const char* roman_
 bool BanglaEngine_AddUserWord(BanglaEngine* engine, const char* roman_key, const char* bengali_word);
 bool BanglaEngine_RemoveUserWord(BanglaEngine* engine, const char* roman_key, const char* bengali_word);
 
+// A roman word mapped to one user-chosen Bengali spelling plus how many times
+// the user actually committed it (usage count drives learned ranking).
+typedef struct {
+    char bengali_text[MAX_WORD_BYTES];
+    uint32_t frequency;
+} UserWordRef;
+
+// Personal learning policy — separate controls, LOCAL first.
+// Learning is OFF only when the user pauses it; explicit user additions
+// (BanglaEngine_AddUserWord) are never affected by the learning flag.
+void BanglaEngine_SetLearningEnabled(BanglaEngine* engine, bool enabled);
+bool BanglaEngine_IsLearningEnabled(const BanglaEngine* engine);
+
+// Clear controls: learned-from-typing data only / explicit user-added words
+// only / everything. Return the number of entries removed.
+size_t BanglaEngine_ClearLearnedData(BanglaEngine* engine);
+size_t BanglaEngine_ClearUserWords(BanglaEngine* engine);
+void BanglaEngine_ClearAllPersonalData(BanglaEngine* engine);
+
+// Personal learning (used by the live TSF commit path): records that the user
+// chose `bengali_word` for `roman_key`, increments its usage count, stores the
+// (previous word -> word) context bigram, and feeds the N-gram history.
+// No-op while learning is paused. Persisted when the engine is destroyed.
+bool BanglaEngine_LearnWord(BanglaEngine* engine, const char* roman_key, const char* bengali_word);
+
+// Returns the user's own spellings for `roman_key`, most-used first. Returns
+// the number of entries copied (0 if none). `out` may hold up to `max_out`.
+int BanglaEngine_GetUserWords(BanglaEngine* engine, const char* roman_key,
+                              UserWordRef* out, int max_out);
+
 #ifdef __cplusplus
 }
 #endif

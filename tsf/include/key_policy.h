@@ -17,6 +17,10 @@ namespace bangla_tsf {
 //   Likhi NEVER consumes, swallows, blocks, modifies, or
 //   reinterprets a key unless that key is explicitly required
 //   for an ACTIVE Likhi composition/candidate operation.
+//   EXCEPTION (user-mandated 2026-09-05): with NumLock ON the numpad
+//   digits 0-9 are CONVERTED to the Bengali numerals ০-৯ — this is a
+//   deliberate IME product feature (like native-digit mode), not a key
+//   swallow. Top-row '0'-'9' always stay English.
 //
 // TSF ORDERING FACT (why commit_first exists):
 //   OnTestKeyDown runs BEFORE the host application receives the
@@ -36,6 +40,7 @@ enum class KeyAction {
     kProcessBackspace,   // eat: remove last roman char of the composition
     kProcessEnter,       // eat: commit word (no trailing space)
     kProcessDigit,       // eat: select the candidate for this digit
+    kProcessBengaliDigit,// eat: numpad digit -> insert Bengali numeral (০-৯)
     kProcessArrow,       // eat: navigate candidates (Up/Down)
     kProcessPeriod,      // eat: commit word + insert Bengali Dāri (।)
 };
@@ -77,6 +82,7 @@ bool IsDigitKey(WPARAM vk);             // '0' - '9' (top row)
 bool IsNumpadDigitKey(WPARAM vk);       // VK_NUMPAD0 - VK_NUMPAD9
 bool IsAlphaKey(WPARAM vk);             // 'A'-'Z' / 'a'-'z'
 char DigitFromKey(WPARAM vk);           // '0'-'9' for top-row and numpad digits
+wchar_t BengaliDigitFromKey(WPARAM vk); // '০'-'৯' for numpad digits (NumLock ON), else L'\0'
 
 } // namespace bangla_tsf
 

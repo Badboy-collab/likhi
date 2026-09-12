@@ -10,8 +10,12 @@
 #include <cstring>
 #include <cctype>
 #include <algorithm>
+#include <cmath>
 #include <sstream>
 #include <iostream>
+#include <unordered_map>
+#include <fstream>
+#include <chrono>
 
 namespace {
 // Lexicon entries compiled from engine/data/roman_overrides.txt carry this flag
@@ -19,6 +23,33 @@ namespace {
 // to the top of the candidate list so the curated dictionary behaves like
 // Google Input Tools: type the word once -> the intended spelling surfaces first.
 constexpr uint16_t kLexiconOverrideFlag = 0x0001;
+}
+
+// --- File-static helpers (no BanglaEngine dependency) ----------------------
+
+// Personal context bigrams live beside the user dictionary so they persist
+// across sessions entirely OFFLINE. Derived name: user_bigrams.tsv in the
+// same directory as the user TSV.
+static std::string BigramsFilePathFor(const std::string& user_dict_path) {
+    if (user_dict_path.empty()) return "";
+    size_t pos = user_dict_path.find_last_of("\\/");
+    std::string dir = (pos == std::string::npos) ? "" : user_dict_path.substr(0, pos + 1);
+    return dir + "user_bigrams.tsv";
+}
+
+static uint64_t NowSeconds() {
+    using namespace std::chrono;
+    return static_cast<uint64_t>(duration_cast<seconds>(system_clock::now().time_since_epoch()).count());
+}
+
+// Gradual decay for unused preferences: 1.0 now, ~0.5 after 45 idle days,
+// -> 0.3 after 90 days. Used only to order otherwise-equal habits (ties), so
+// it can never erase a strongly held preference — it only lets a stale,
+// equally-used habit fall behind a fresh one.
+static float RecencyFactor(uint64_t last_used, uint64_t now) {
+    if (last_used == 0 || now <= last_used) return 1.0f;
+    double days = static_cast<double>(now - last_used) / 86400.0;
+    return static_cast<float>(1.0 / (1.0 + days / 45.0));
 }
 
 struct BanglaEngine {
@@ -31,6 +62,19 @@ struct BanglaEngine {
     bangla::ContextRanker context_ranker;
     bangla::PersonalDictionary personal_dict;
 
+    // EngineConfig only stores raw const char* pointers; whoever passed the
+    // paths may free them right after Create() returns (the CompositionManager
+    // hands out local std::string storage). So the ENGINE OWNS copies of both
+    // paths — reading or saving them later (e.g. the personal-dictionary save
+    // in the destructor) must go through these members, never through config.
+    std::string lexicon_path_;
+    std::string user_dict_path_;
+
+    // Personal learning state (LOCAL, offline-first).
+    bool learning_enabled = true;         // "Pause learning" control
+    std::string bigram_path_;             // user_bigrams.tsv beside user_dict
+    std::unordered_map<std::string, std::unordered_map<std::string, uint32_t>> user_bigrams_;
+
     BanglaEngine(const EngineConfig* cfg) {
         if (cfg) {
             config = *cfg;
@@ -38,19 +82,58 @@ struct BanglaEngine {
             BanglaEngine_GetDefaultConfig(&config);
         }
 
-        lexicon.LoadDefaultVocabulary();
-
+        // Copy paths into engine-owned storage, then neutralize the raw
+        // pointers inside config so nothing later dereferences a dangling one.
         if (config.lexicon_binary_path && strlen(config.lexicon_binary_path) > 0) {
-            lexicon.LoadFromFile(config.lexicon_binary_path);
+            lexicon_path_ = config.lexicon_binary_path;
         }
         if (config.user_dict_path && strlen(config.user_dict_path) > 0) {
-            personal_dict.LoadFromFile(config.user_dict_path);
+            user_dict_path_ = config.user_dict_path;
+        }
+        config.lexicon_binary_path = nullptr;
+        config.user_dict_path = nullptr;
+
+        lexicon.LoadDefaultVocabulary();
+
+        if (!lexicon_path_.empty()) {
+            lexicon.LoadFromFile(lexicon_path_);
+        }
+        if (!user_dict_path_.empty()) {
+            personal_dict.LoadFromFile(user_dict_path_);
+            bigram_path_ = BigramsFilePathFor(user_dict_path_);
+
+            // Load the learned word-context bigrams (offline personal context).
+            std::ifstream bin(bigram_path_);
+            if (bin.is_open()) {
+                std::string line;
+                while (std::getline(bin, line)) {
+                    if (line.empty()) continue;
+                    std::stringstream ss(line);
+                    std::string prev, cur;
+                    uint32_t count = 0;
+                    if (std::getline(ss, prev, '\t') && std::getline(ss, cur, '\t') && (ss >> count)) {
+                        if (!prev.empty() && !cur.empty() && count > 0) {
+                            user_bigrams_[prev][cur] += count;
+                        }
+                    }
+                }
+            }
         }
     }
 
     ~BanglaEngine() {
-        if (config.user_dict_path && strlen(config.user_dict_path) > 0) {
-            personal_dict.SaveToFile(config.user_dict_path);
+        if (!bigram_path_.empty()) {
+            std::ofstream bout(bigram_path_);
+            if (bout.is_open()) {
+                for (const auto& outer : user_bigrams_) {
+                    for (const auto& inner : outer.second) {
+                        bout << outer.first << "\t" << inner.first << "\t" << inner.second << "\n";
+                    }
+                }
+            }
+        }
+        if (!user_dict_path_.empty()) {
+            personal_dict.SaveToFile(user_dict_path_);
         }
     }
 };
@@ -134,16 +217,36 @@ void BanglaEngine_GetCandidates(BanglaEngine* engine, CandidateList* out_list) {
     // 2. Identify preceding committed word for context
     std::string prev_word = engine->sentence_history.empty() ? "" : engine->sentence_history.back();
 
-    // 3. Retrieve personal user dictionary words mapped to this roman key
+    // 3. Retrieve personal user dictionary words mapped to this roman key.
+    //    Boost grows with usage count (same log curve the ranker uses for
+    //    unigrams), so the spelling the user actually commits MOST often ranks
+    //    first — the core "intelligent" behaviour: the app learns your habit
+    //    and defaults to it (Google-Input-Tools style).
     auto user_entries = engine->personal_dict.GetWordsByRomanKey(engine->composition);
     std::unordered_map<std::string, float> user_boosts;
     for (const auto& ue : user_entries) {
-        user_boosts[ue.bengali_word] = 1.0f;
+        float b = std::min(1.0f, 0.2f + std::log10(static_cast<float>(ue.frequency) + 1.0f) / 3.0f);
+        user_boosts[ue.bengali_word] = b;
         bangla::PhoneticCandidate pc;
         pc.text = ue.bengali_word;
         pc.score = 1.0f;
         pc.rule_path = "personal_dict";
         phonetic_cands.push_back(pc);
+    }
+
+    // 3b. Learned word-context (bigram) boost: if the user has committed
+    //     `candidate` right after the previous word before, raise that
+    //     candidate's personal signal. Stored offline; purely a soft signal
+    //     on top of the base ranking (never a hard reorder).
+    if (!prev_word.empty() && !engine->user_bigrams_.empty()) {
+        auto bit = engine->user_bigrams_.find(prev_word);
+        if (bit != engine->user_bigrams_.end()) {
+            for (const auto& ctx : bit->second) {
+                float b = std::min(1.0f, 0.35f + std::log10(static_cast<float>(ctx.second) + 1.0f) / 4.0f);
+                auto it = user_boosts.find(ctx.first);
+                if (it == user_boosts.end() || b > it->second) user_boosts[ctx.first] = b;
+            }
+        }
     }
 
     // 4. Rank candidates
@@ -157,6 +260,46 @@ void BanglaEngine_GetCandidates(BanglaEngine* engine, CandidateList* out_list) {
         engine->config.auto_correct_threshold,
         engine->config.max_candidates
     );
+
+    // 4b. Learned-habit lift with controlled evidence:
+    //     only a spelling the user has committed at least kMinEvidence (2) times
+    //     is lifted, most-used first. This guarantees that ONE accidental
+    //     selection never reorders anything, while repeated choices take over.
+    //     Equal-frequency habits are ordered by recency (unused old habits
+    //     gradually decay). Curated overrides still outrank everything.
+    constexpr uint32_t kMinEvidence = 2;
+    if (!user_entries.empty() && !ranked.empty()) {
+        uint64_t now = NowSeconds();
+        std::vector<bangla::UserWordEntry> lifted;
+        for (const auto& ue : user_entries) {
+            if (ue.frequency >= kMinEvidence) lifted.push_back(ue);
+        }
+        if (!lifted.empty()) {
+            std::stable_sort(lifted.begin(), lifted.end(),
+                             [now](const bangla::UserWordEntry& a, const bangla::UserWordEntry& b) {
+                                 if (a.frequency != b.frequency) return a.frequency > b.frequency;
+                                 return RecencyFactor(a.last_used_timestamp, now) >
+                                        RecencyFactor(b.last_used_timestamp, now);
+                             });
+            std::vector<std::string> pref_texts;
+            for (const auto& ue : lifted) {
+                if (std::find(pref_texts.begin(), pref_texts.end(), ue.bengali_word) == pref_texts.end()) {
+                    pref_texts.push_back(ue.bengali_word);
+                }
+            }
+            if (!pref_texts.empty()) {
+                std::vector<bangla::ScoredCandidate> front, rest;
+                front.reserve(ranked.size());
+                rest.reserve(ranked.size());
+                for (const auto& sc : ranked) {
+                    bool is_pref = std::find(pref_texts.begin(), pref_texts.end(), sc.bengali_text) != pref_texts.end();
+                    (is_pref ? front : rest).push_back(sc);
+                }
+                front.insert(front.end(), rest.begin(), rest.end());
+                ranked.swap(front);
+            }
+        }
+    }
 
     // 5. Curated override dictionary wins: any lexicon entry flagged as an
     //    override that exactly matches the typed roman key is emitted first,
@@ -299,10 +442,75 @@ bool BanglaEngine_TransliterateSentence(BanglaEngine* engine, const char* roman_
 
 bool BanglaEngine_AddUserWord(BanglaEngine* engine, const char* roman_key, const char* bengali_word) {
     if (!engine || !roman_key || !bengali_word) return false;
-    return engine->personal_dict.AddWord(roman_key, bengali_word);
+    return engine->personal_dict.AddWord(roman_key, bengali_word, /*auto_learned=*/false);
 }
 
 bool BanglaEngine_RemoveUserWord(BanglaEngine* engine, const char* roman_key, const char* bengali_word) {
     if (!engine || !roman_key || !bengali_word) return false;
     return engine->personal_dict.RemoveWord(roman_key, bengali_word);
+}
+
+void BanglaEngine_SetLearningEnabled(BanglaEngine* engine, bool enabled) {
+    if (engine) engine->learning_enabled = enabled;
+}
+
+bool BanglaEngine_IsLearningEnabled(const BanglaEngine* engine) {
+    return engine ? engine->learning_enabled : false;
+}
+
+size_t BanglaEngine_ClearLearnedData(BanglaEngine* engine) {
+    if (!engine) return 0;
+    size_t removed = engine->personal_dict.ClearAutoLearned();
+    engine->user_bigrams_.clear(); // context always comes from learning
+    return removed;
+}
+
+size_t BanglaEngine_ClearUserWords(BanglaEngine* engine) {
+    if (!engine) return 0;
+    return engine->personal_dict.ClearExplicitUserWords();
+}
+
+void BanglaEngine_ClearAllPersonalData(BanglaEngine* engine) {
+    if (!engine) return;
+    engine->personal_dict.ClearAll();
+    engine->user_bigrams_.clear();
+}
+
+bool BanglaEngine_LearnWord(BanglaEngine* engine, const char* roman_key, const char* bengali_word) {
+    if (!engine || !roman_key || !bengali_word) return false;
+    if (!engine->learning_enabled) return false; // "Pause learning" — no recording
+
+    // Previous committed word = personal context for the (prev -> current) bigram.
+    std::string prev;
+    if (!engine->sentence_history.empty()) prev = engine->sentence_history.back();
+
+    bool ok = engine->personal_dict.AddWord(roman_key, bengali_word, /*auto_learned=*/true);
+
+    if (!prev.empty()) {
+        engine->user_bigrams_[prev][bengali_word]++;
+    }
+
+    // N-gram context history (same as CommitWord) so next-word prediction and
+    // the bigram boosts still see the sentence flow.
+    engine->sentence_history.push_back(bengali_word);
+    engine->composition.clear();
+    return ok;
+}
+
+int BanglaEngine_GetUserWords(BanglaEngine* engine, const char* roman_key,
+                              UserWordRef* out, int max_out) {
+    if (!engine || !roman_key || !out || max_out <= 0) return 0;
+    std::vector<bangla::UserWordEntry> list = engine->personal_dict.GetWordsByRomanKey(roman_key);
+    // Most-used first — deterministic ordering for the caller.
+    std::stable_sort(list.begin(), list.end(), [](const bangla::UserWordEntry& a,
+                                                  const bangla::UserWordEntry& b) {
+        return a.frequency > b.frequency;
+    });
+    int n = (int)std::min<size_t>(list.size(), static_cast<size_t>(max_out));
+    for (int i = 0; i < n; i++) {
+        strncpy(out[i].bengali_text, list[i].bengali_word.c_str(), sizeof(out[i].bengali_text) - 1);
+        out[i].bengali_text[sizeof(out[i].bengali_text) - 1] = '\0';
+        out[i].frequency = list[i].frequency;
+    }
+    return n;
 }

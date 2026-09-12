@@ -5,6 +5,20 @@ namespace bangla_tsf {
 
 static const wchar_t* WINDOW_CLASS_NAME = L"PC_Bangla_Candidate_Window_Class";
 
+namespace {
+
+// Private message that carries a cloud result from the worker thread onto the
+// UI thread (the candidate window is owned by the UI thread).
+const UINT kCloudResultMsg = WM_APP + 0x6A;
+
+struct CloudResultPayload {
+    std::wstring word;
+    size_t generation;
+    std::vector<std::wstring> candidates;
+};
+
+} // namespace
+
 CandidateWindow::CandidateWindow()
     : hwnd_(nullptr),
       hinst_(nullptr),
@@ -135,19 +149,23 @@ void CandidateWindow::ShowCandidates(const std::vector<std::wstring>& candidates
     int pos_x = caret_rect.left;
     int pos_y = caret_rect.bottom + 4;
 
-    // Keep on screen bounds
-    int screen_w = GetSystemMetrics(SM_CXSCREEN);
-    int screen_h = GetSystemMetrics(SM_CYSCREEN);
-
-    if (pos_x + width_ > screen_w) {
-        pos_x = screen_w - width_ - 10;
+    // Keep on screen bounds — per-monitor aware. Clamping against the primary
+    // monitor only (SM_CXSCREEN/SM_CYSCREEN) parks the popup off-screen on
+    // multi-monitor / per-monitor DPI setups.
+    HMONITOR hMonitor = MonitorFromPoint(POINT{pos_x, pos_y}, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = {};
+    mi.cbSize = sizeof(mi);
+    RECT work = {0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)};
+    if (GetMonitorInfoW(hMonitor, &mi)) {
+        work = mi.rcWork;
     }
-    if (pos_x < 10) pos_x = 10;
 
-    if (pos_y + height_ > screen_h) {
-        pos_y = caret_rect.top - height_ - 4;
+    if (pos_y + height_ > work.bottom) {
+        pos_y = caret_rect.top - height_ - 4;  // flip above the text line
     }
-    if (pos_y < 10) pos_y = 10;
+    if (pos_x + width_ > work.right) pos_x = work.right - width_ - 8;
+    if (pos_x < work.left)           pos_x = work.left + 8;
+    if (pos_y < work.top)            pos_y = work.top + 8;
 
     SetWindowPos(
         hwnd_, HWND_TOPMOST,
@@ -165,6 +183,15 @@ void CandidateWindow::Hide() {
         is_visible_ = false;
         candidates_.clear();
         candidate_item_rects_.clear();
+    }
+}
+
+void CandidateWindow::PostCloudResult(const std::wstring& word, size_t generation,
+                                      const std::vector<std::wstring>& candidates) {
+    if (!hwnd_) return;
+    CloudResultPayload* p = new CloudResultPayload{word, generation, candidates};
+    if (!PostMessageW(hwnd_, kCloudResultMsg, 0, reinterpret_cast<LPARAM>(p))) {
+        delete p; // window gone — nothing to deliver
     }
 }
 
@@ -308,6 +335,16 @@ LRESULT CALLBACK CandidateWindow::WndProc(HWND hWnd, UINT message, WPARAM wParam
                 return 0;
             case WM_MOUSEACTIVATE:
                 return MA_NOACTIVATE;
+            case kCloudResultMsg: {
+                CloudResultPayload* p = reinterpret_cast<CloudResultPayload*>(lParam);
+                if (p) {
+                    if (pThis && pThis->cloud_cb_) {
+                        pThis->cloud_cb_(p->word, p->generation, p->candidates);
+                    }
+                    delete p;
+                }
+                return 0;
+            }
         }
     }
 

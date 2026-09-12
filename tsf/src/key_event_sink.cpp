@@ -156,6 +156,16 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* pic, WPARAM wParam, LPARAM lPara
             return S_OK;
         }
 
+        case KeyAction::kProcessBengaliDigit: {
+            // Numpad digit (NumLock ON): replace the native ASCII digit with the
+            // Bengali numeral ০-৯. Any active composition was already committed in
+            // OnTestKeyDown (commit_first), so OnBengaliDigit inserts at a plain
+            // caret — the host never produces the ASCII digit (key was eaten).
+            wchar_t bd = BengaliDigitFromKey(wParam);
+            *pfEaten = (bd != L'\0' && composition_mgr_.OnBengaliDigit(pic, bd)) ? TRUE : FALSE;
+            return S_OK;
+        }
+
         case KeyAction::kProcessArrow:
             *pfEaten = composition_mgr_.OnArrow(pic, wParam == VK_DOWN) ? TRUE : FALSE;
             return S_OK;

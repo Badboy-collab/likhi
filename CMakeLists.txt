@@ -50,6 +50,7 @@ set(TSF_SOURCES
     tsf/src/composition_mgr.cpp
     tsf/src/edit_session.cpp
     tsf/src/candidate_window.cpp
+    tsf/src/cloud_translit.cpp
     tsf/src/register.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/tsf_rc.obj
     tsf/src/bangla_tsf.def
@@ -70,6 +71,7 @@ target_link_libraries(bangla_tsf PRIVATE
     comctl32
     advapi32
     shell32
+    winhttp
 )
 
 # Interactive CLI Tool Target
@@ -84,12 +86,17 @@ target_link_libraries(test_runner PRIVATE bangla_engine_static)
 add_executable(unicode_bengali_tests tests/unit/unicode_bengali_tests.cpp)
 target_link_libraries(unicode_bengali_tests PRIVATE bangla_engine_static)
 
+# Personal Learning Engine Test Target (usage ranking + file persistence)
+add_executable(test_learning tests/unit/test_learning.cpp)
+target_link_libraries(test_learning PRIVATE bangla_engine_static)
+
 # TSF Integration Test Target
 add_executable(test_tsf_integration
     tests/tsf_integration/test_tsf_integration.cpp
     tsf/src/composition_mgr.cpp
     tsf/src/candidate_window.cpp
     tsf/src/edit_session.cpp
+    tsf/src/cloud_translit.cpp
 )
 target_link_libraries(test_tsf_integration PRIVATE
     bangla_engine_static
@@ -100,6 +107,7 @@ target_link_libraries(test_tsf_integration PRIVATE
     comctl32
     advapi32
     shell32
+    winhttp
 )
 
 # P0 Critical Keyboard Event Test Target
@@ -110,6 +118,7 @@ add_executable(test_p0_keyboard
     tsf/src/composition_mgr.cpp
     tsf/src/candidate_window.cpp
     tsf/src/edit_session.cpp
+    tsf/src/cloud_translit.cpp
     tsf/src/text_service.cpp
 )
 target_link_libraries(test_p0_keyboard PRIVATE
@@ -121,6 +130,7 @@ target_link_libraries(test_p0_keyboard PRIVATE
     comctl32
     advapi32
     shell32
+    winhttp
 )
 
 # Key Policy Regression Test Target (pure, no TSF runtime needed)
@@ -155,12 +165,20 @@ add_executable(inspect_unicode tools/inspect_unicode.cpp)
 add_executable(verify_tsf_registration tools/verify_tsf_registration.cpp)
 target_link_libraries(verify_tsf_registration PRIVATE ole32 oleaut32 advapi32)
 
+# Cloud Response Parser Regression Test Target (pure, no network)
+add_executable(test_cloud_parser
+    tests/unit/test_cloud_parser.cpp
+    tsf/src/cloud_translit.cpp
+)
+target_link_libraries(test_cloud_parser PRIVATE winhttp)
+
 # Real-World QA Runner Target
 add_executable(real_world_qa_runner
     tools/real_world_qa_runner.cpp
     tsf/src/composition_mgr.cpp
     tsf/src/candidate_window.cpp
     tsf/src/edit_session.cpp
+    tsf/src/cloud_translit.cpp
 )
 target_link_libraries(real_world_qa_runner PRIVATE
     bangla_engine_static
@@ -172,6 +190,7 @@ target_link_libraries(real_world_qa_runner PRIVATE
     advapi32
     shell32
     psapi
+    winhttp
 )
 
 # Compiler warnings, optimization, and static runtime linking flags
@@ -206,6 +225,7 @@ else()
     target_link_options(cli_engine PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_runner PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(unicode_bengali_tests PRIVATE -static -static-libgcc -static-libstdc++)
+    target_link_options(test_learning PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_tsf_integration PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_p0_keyboard PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_key_policy PRIVATE -static -static-libgcc -static-libstdc++)

@@ -18,7 +18,11 @@
 //   * Esc: cancels ONLY when composing; otherwise pass-through.
 //   * Arrows: navigate candidates ONLY while candidates are visible;
 //     otherwise pass-through.
-//   * Numbers/Numpad: pass through unless selecting a candidate.
+//   * Numbers/Numpad: top-row '0'-'9' stay ENGLISH digits (eaten only to pick a
+//     candidate 1-5); numpad digits (NumLock ON) type the BENGALI numerals
+//     ০-৯ (user-mandated), unless 1-5 selects a real candidate.
+//   * Symbols/other keys while composing: commit first, then the host's native
+//     character/action applies ("ami"+"=" -> "আমি=").
 //   * Space: one keypress = one word commit + exactly one U+0020.
 //
 // Each test asserts the DECISION (eat / commit_first / action) for a
@@ -31,6 +35,7 @@ using bangla_tsf::KeyAction;
 using bangla_tsf::KeyState;
 using bangla_tsf::KeyDecision;
 using bangla_tsf::DecideKey;
+using bangla_tsf::BengaliDigitFromKey;
 
 namespace {
 
@@ -235,8 +240,10 @@ int main() {
 
     // ------------------------------------------------------------
     // 7. Numpad digits & operators.
+    //    USER-MANDATED (2026-09-05): numpad digits with NumLock ON type the
+    //    Bengali numerals ০-৯. Top-row digits stay English (section 8).
     // ------------------------------------------------------------
-    Section("Numpad digits & operators");
+    Section("Numpad digits -> Bengali numerals (NumLock ON) & operators pass");
     {
         // Operators always pass through
         const std::pair<WPARAM, std::string> ops[] = {
@@ -251,11 +258,23 @@ int main() {
             Check(!dc.eat && dc.commit_first, op.second + " never eaten; commits first when composing");
         }
 
-        // Numpad digit, NumLock ON, no composition -> native number, NOT eaten
+        // Bengali digit mapping helper: numpad key -> correct Bengali numeral.
+        const wchar_t* bn = L"০১২৩৪৫৬৭৮৯";
+        for (int i = 0; i <= 9; i++) {
+            Check(BengaliDigitFromKey(VK_NUMPAD0 + i) == bn[i],
+                  "BengaliDigitFromKey(NUMPAD" + std::to_string(i) +
+                  ") == Bengali digit index " + std::to_string(i));
+            Check(BengaliDigitFromKey(static_cast<WPARAM>('0' + i)) == L'\0',
+                  "BengaliDigitFromKey(top-row) returns L'\\0'");
+        }
+
+        // Numpad digit, NumLock ON, no composition -> EATEN and replaced by the
+        // Bengali numeral (user-mandated native-digit mode).
         KeyState np_idle = St(VK_NUMPAD1);
         np_idle.numlock = true;
         KeyDecision dnpi = DecideKey(np_idle);
-        Check(!dnpi.eat && !dnpi.commit_first, "Numpad 1 (NumLock on, idle): native digit, not eaten");
+        Check(dnpi.eat && dnpi.action == KeyAction::kProcessBengaliDigit && !dnpi.commit_first,
+              "Numpad 1 (NumLock on, idle): eaten, action=kProcessBengaliDigit (inserts '১')");
 
         // Numpad digit, NumLock ON, composing + selectable -> candidate selection
         KeyState np_sel = St(VK_NUMPAD1);
@@ -266,14 +285,15 @@ int main() {
         Check(dnps.eat && dnps.action == KeyAction::kProcessDigit,
               "Numpad 1 (composing, selectable): eaten, selects candidate");
 
-        // Numpad digit, NumLock ON, composing but NOT selectable -> commit first, pass through
+        // Numpad digit, NumLock ON, composing but NOT selectable -> commit FIRST
+        // then insert the Bengali numeral ("ami" + numpad0 -> "আমি০").
         KeyState np_nosel = St(VK_NUMPAD0);
         np_nosel.numlock = true;
         np_nosel.composing = true;
         np_nosel.digit_selectable = false;
         KeyDecision dnpn = DecideKey(np_nosel);
-        Check(!dnpn.eat && dnpn.commit_first,
-              "Numpad 0 (composing, not selectable): commits first, number passes through");
+        Check(dnpn.eat && dnpn.commit_first && dnpn.action == KeyAction::kProcessBengaliDigit,
+              "Numpad 0 (composing, not selectable): commits first, eaten -> Bengali '০'");
 
         // Numpad digit, NumLock OFF -> native navigation, never eaten
         KeyState np_off = St(VK_NUMPAD1);
@@ -409,9 +429,41 @@ int main() {
     }
 
     // ------------------------------------------------------------
-    // 13. The Golden Rule sweep: NO key outside the active-composition
+    // 13. Symbols / OEM keys (while composing): commit FIRST, native char
+    //     follows. The user's symbol keys (+ = _ - / \ [ ] ; ' ,) must keep
+    //     their own function and never corrupt the composition.
+    // ------------------------------------------------------------
+    Section("Symbols & OEM keys: commit first while composing, never eaten");
+    {
+        const std::pair<WPARAM, std::string> syms[] = {
+            {VK_OEM_PLUS, "'=' / '+'"},   {VK_OEM_MINUS, "'-' / '_'"},
+            {VK_OEM_2, "'/' / '?'"},      {VK_OEM_5, "'\\' / '|'"},
+            {VK_OEM_4, "'[' / '{'"},      {VK_OEM_6, "']' / '}'"},
+            {VK_OEM_1, "';' / ':'"},      {VK_OEM_7, "''' / '\"'" },
+            {VK_OEM_COMMA, "',' / '<'"},  {VK_OEM_3, "'`' / '~'"}
+        };
+        for (const auto& s : syms) {
+            // idle: pure native, no commit
+            KeyDecision idle = DecideKey(St(s.first));
+            Check(!idle.eat && !idle.commit_first,
+                  s.second + " idle: native pass-through");
+
+            // composing: still never eaten, but commits BEFORE the host key so
+            // the symbol lands after the word ("ami"+"=" -> "আমি=")
+            KeyState comp = St(s.first);
+            comp.composing = true;
+            KeyDecision dc = DecideKey(comp);
+            Check(!dc.eat && dc.commit_first,
+                  s.second + " composing: not eaten, commits first (native char follows)");
+        }
+    }
+
+    // ------------------------------------------------------------
+    // 14. The Golden Rule sweep: NO key outside the active-composition
     //     contract is ever "eaten" unless it starts/extends a composition
-    //     (letters) or selects/cancels/navigates it.
+    //     (letters), selects/cancels/navigates it, or converts a numpad
+    //     digit to a Bengali numeral (the sole user-mandated exception,
+    //     which requires NumLock ON — default KeyState below is OFF).
     // ------------------------------------------------------------
     Section("Golden rule sweep (nothing else is ever consumed)");
     {

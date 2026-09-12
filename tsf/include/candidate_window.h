@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <utility>
 
 namespace bangla_tsf {
 
@@ -27,6 +28,16 @@ public:
     void SelectNext();
     void SelectPrev();
 
+    // Cloud suggestions are produced on a worker thread; PostCloudResult
+    // marshals them onto this window's (UI) thread through a private window
+    // message so the caller can update the dropdown without owning the thread.
+    using CloudResultCallback = std::function<void(const std::wstring& word,
+                                                   size_t generation,
+                                                   const std::vector<std::wstring>& candidates)>;
+    void SetCloudResultCallback(CloudResultCallback cb) { cloud_cb_ = std::move(cb); }
+    void PostCloudResult(const std::wstring& word, size_t generation,
+                         const std::vector<std::wstring>& candidates);
+
 private:
     static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
     void OnPaint(HWND hWnd);
@@ -42,6 +53,7 @@ private:
     size_t selected_index_;
     RECT caret_rect_;
     SelectionCallback selection_callback_;
+    CloudResultCallback cloud_cb_;
 
     HFONT hfont_bengali_;
     HFONT hfont_number_;

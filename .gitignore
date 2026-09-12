@@ -14,3 +14,24 @@ obj/
 Thumbs.db
 Desktop.ini
 $RECYCLE.BIN/
+
+# Locally staged/test packages and old binaries
+dist/
+*.old
+*.old2
+*.old3
+
+# Agent/session scratch space
+.ohmyagent/
+
+# Reference material that must not be redistributed (extracted third-party code)
+bangla_extracted_engine/
+website/
+
+# Stale local diagnostics / experiments (not part of the product)
+fix_lexicon.py
+engine/data/lexicon.txt
+tsf/src/key_event_sink_tmp.cpp
+tsf/src/key_diag.h
+tools/probe_words.cpp
+tools/probe_langid.cpp

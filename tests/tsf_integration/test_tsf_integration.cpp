@@ -134,6 +134,19 @@ int main() {
         comp_mgr.OnArrow(nullptr, true); // down
         comp_mgr.OnArrow(nullptr, false); // up
 
+        // Every VISIBLE candidate is number-selectable (1..N up to 9), and a
+        // digit with no matching candidate is NOT selectable — it must fall
+        // through to the host as a plain number. (Cloud merges can show up to
+        // 6: 5 Google + exact English.)
+        const size_t n_cands = comp_mgr.GetCurrentCandidates().size();
+        ASSERT_TSF_TRUE(comp_mgr.CanSelectCandidate('1'), "Candidate #1 selectable");
+        ASSERT_TSF_TRUE(n_cands < 9 && !comp_mgr.CanSelectCandidate('9'),
+                        "Digit with no matching candidate is not selectable");
+        if (n_cands == 5) {
+            ASSERT_TSF_TRUE(comp_mgr.CanSelectCandidate('5'), "Candidate #5 selectable when 5 shown");
+            ASSERT_TSF_TRUE(!comp_mgr.CanSelectCandidate('6'), "No candidate #6 with only 5 shown");
+        }
+
         // Select candidate #1 via number key
         bool eaten = comp_mgr.OnNumberSelection(nullptr, 1);
         ASSERT_TSF_TRUE(eaten, "Number key 1 selected candidate");
