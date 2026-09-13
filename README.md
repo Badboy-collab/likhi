@@ -22,6 +22,21 @@ A modern, fast, intelligent, and lightweight Bengali phonetic typing application
 
 ---
 
+## Install (one-click)
+
+Download **`LikhiSetup.exe`** and double-click it, then accept the UAC prompt —
+that is the whole installation. It installs into `%ProgramFiles%\Likhi`,
+registers the Text Service, and cleans the input-method list so `Win + Space`
+shows only your normal keyboard plus **“Likhi (লিখি)”** (competing Bengali
+keyboards such as Microsoft Bangla Phonetic are removed; nothing else is
+touched). Afterwards sign out → sign in once.
+
+`LikhiSetup.exe /silent` (no dialogs), `/dryrun` (report only) and
+`/uninstall` (remove) are also supported. Log: `%ProgramData%\Likhi\setup.log`.
+Details: [release_package/INSTALL.md](release_package/INSTALL.md).
+
+---
+
 ## Quick Start & Build
 
 ```powershell

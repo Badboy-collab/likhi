@@ -2,7 +2,41 @@
 
 > **“বাংলা লিখুন, সহজেই।”**
 
-## 1. Quick Installation (Administrator Required)
+## 1. One-Click Installation (Recommended)
+
+**Just double-click `LikhiSetup.exe`** and accept the Windows UAC prompt
+("Do you want to allow this app to make changes?") — that is the whole install.
+
+The installer is a single self-contained file (the IME DLL, the 52,000+ word
+lexicon and the Settings app travel inside it) and it:
+
+- installs everything into `%ProgramFiles%\Likhi`,
+- registers the Text Service (COM in-proc server + TSF keyboard profile),
+- **cleans the input-method list**: every other Bengali keyboard that was
+  installed on the PC (for example *Microsoft Bangla Phonetic* or an older
+  Likhi build) is removed, so `Win + Space` shows exactly two things —
+  your normal PC keyboard and **“Likhi (লিখি)”**. Nothing else is touched:
+  your default language and all non-Bengali keyboards stay as they were,
+- makes Likhi the default keyboard for Bengali (Bangladesh),
+- adds a **Likhi Settings** Start-Menu shortcut and an Apps-list
+  (Add/Remove programs) entry so it can be uninstalled normally.
+
+Then **sign out → sign in once** (or reboot) so Windows loads the new IME, and
+type anywhere (Notepad, Word, Chrome, VS Code).
+
+| Command | What it does |
+| :--- | :--- |
+| `LikhiSetup.exe` | install / update (shows a summary dialog) |
+| `LikhiSetup.exe /silent` | install with no dialogs (exit code only) |
+| `LikhiSetup.exe /dryrun` | report what *would* change, touch nothing |
+| `LikhiSetup.exe /uninstall` | remove Likhi (files, registry, TSF profile) |
+
+A detailed log of every install is written to
+`%ProgramData%\Likhi\setup.log`.
+
+---
+
+## 1b. Manual Installation (Administrator Required, legacy)
 
 1. Navigate to the `release_package` folder.
 2. **Right-Click** on `install.bat` and select **"Run as administrator"**.
@@ -13,6 +47,9 @@
    ```text
    [SUCCESS] Likhi (লিখি) registered successfully!
    ```
+
+Note: this path does **not** clean up competing Bengali keyboards — use
+`LikhiSetup.exe` if you want a clean `Win + Space` list.
 
 ---
 
