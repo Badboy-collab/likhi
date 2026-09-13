@@ -154,6 +154,36 @@ target_link_libraries(bangla_settings PRIVATE
     dwmapi
 )
 
+# One-click installer: a SINGLE self-contained EXE (UAC admin manifest) with the
+# IME DLL, the compiled lexicon and the Settings app embedded as resources.
+set(SETUP_PAYLOAD_DLL      "${CMAKE_SOURCE_DIR}/release_package/bangla_tsf.dll")
+set(SETUP_PAYLOAD_LEX      "${CMAKE_SOURCE_DIR}/release_package/data/lexicon.bin")
+set(SETUP_PAYLOAD_SETTINGS "${CMAKE_SOURCE_DIR}/release_package/bangla_settings.exe")
+set(SETUP_RC               "${CMAKE_CURRENT_BINARY_DIR}/setup_rc.rc")
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/tools/setup/setup.rc.in" "${SETUP_RC}" @ONLY)
+
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/setup_rc.obj
+    COMMAND windres -i "${SETUP_RC}" -o "${CMAKE_CURRENT_BINARY_DIR}/setup_rc.obj"
+    DEPENDS "${SETUP_RC}" "${SETUP_PAYLOAD_DLL}" "${SETUP_PAYLOAD_LEX}" "${SETUP_PAYLOAD_SETTINGS}" "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon.ico"
+    COMMENT "Compiling Installer Resources (embedded payload)"
+)
+
+add_executable(likhi_setup WIN32
+    tools/setup/setup_main.cpp
+    ${CMAKE_CURRENT_BINARY_DIR}/setup_rc.obj
+)
+target_include_directories(likhi_setup PRIVATE tsf/include)
+target_link_libraries(likhi_setup PRIVATE
+    ole32
+    oleaut32
+    user32
+    advapi32
+    shell32
+    comctl32
+    uuid      # MinGW ships the TSF CLSIDs (CLSID_TF_*) inside libuuid
+)
+
 # Performance Benchmark Target
 add_executable(benchmark_perf tools/benchmark_perf.cpp)
 target_link_libraries(benchmark_perf PRIVATE bangla_engine_static psapi)
@@ -222,6 +252,7 @@ else()
     # Static linking for standalone DLL and EXEs without MinGW DLL runtime requirements
     target_link_options(bangla_tsf PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(bangla_settings PRIVATE -static -static-libgcc -static-libstdc++)
+    target_link_options(likhi_setup PRIVATE -static -static-libgcc -static-libstdc++ -municode)
     target_link_options(cli_engine PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_runner PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(unicode_bengali_tests PRIVATE -static -static-libgcc -static-libstdc++)
