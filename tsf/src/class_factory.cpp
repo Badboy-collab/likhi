@@ -1,5 +1,6 @@
 #include "../include/text_service.h"
 #include "../include/bangla_tsf_clsid.h"
+#include "../include/tsf_log.h"
 #include <unknwn.h>
 
 namespace bangla_tsf {
@@ -48,6 +49,7 @@ public:
 
         HRESULT hr = pService->QueryInterface(riid, ppvObj);
         pService->Release();
+        TsfLog("ClassFactory::CreateInstance hr=0x%08X", hr);
         return hr;
     }
 

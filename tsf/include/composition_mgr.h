@@ -30,7 +30,7 @@ public:
     bool OnEnter(ITfContext* pContext);
     bool OnEscape(ITfContext* pContext);
     bool OnArrow(ITfContext* pContext, bool down_next);
-    bool OnNumberSelection(ITfContext* pContext, int num_1_to_5);
+    bool OnNumberSelection(ITfContext* pContext, int num_1_to_9);
     bool OnDigit(ITfContext* pContext, char ascii_digit);
     bool CanSelectCandidate(char digit);
     bool OnPunctuation(ITfContext* pContext, char punct);
@@ -40,7 +40,7 @@ public:
     void OnFocusLost(ITfContext* pContext);
 
     // Commit methods
-    bool CommitCurrentComposition(ITfContext* pContext, size_t candidate_idx = 0, bool append_space = false);
+    bool CommitCurrentComposition(ITfContext* pContext, size_t candidate_idx = 0, bool append_space = false, const std::wstring& append_punct = L"");
     bool CancelComposition(ITfContext* pContext);
 
     // Direct Candidate Window selection callback
@@ -52,16 +52,25 @@ public:
 
     // Query candidates
     const std::vector<std::wstring>& GetCurrentCandidates() const { return current_candidates_w_; }
+    void SetCandidatesForTesting(const std::vector<std::wstring>& cands) { is_composing_ = true; current_candidates_w_ = cands; }
 
 private:
     void UpdateCompositionAndUI(ITfContext* pContext);
     RECT GetCaretRect(ITfContext* pContext);
+    void CheckAndReloadUserDict();
 
     TextService* service_;
     BanglaEngine* engine_;
     CandidateWindow candidate_window_;
 
+    std::string lexicon_path_;
+    std::string user_dict_path_;
+    FILETIME last_dict_file_time_;
+    std::wstring settings_file_path_;
+    FILETIME last_settings_file_time_;
+
     bool is_composing_;
+    bool is_top_exact_match_;
     std::string roman_buffer_;
     std::wstring current_bengali_top_;
     std::vector<std::wstring> current_candidates_w_;
@@ -69,6 +78,8 @@ private:
 
     ITfComposition* active_composition_;
     ITfContext* current_context_;
+    RECT cached_caret_rect_;
+    bool has_cached_caret_rect_;
 };
 
 } // namespace bangla_tsf

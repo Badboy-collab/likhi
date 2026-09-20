@@ -1,4 +1,5 @@
 #include "../../engine/include/bangla_engine.h"
+#include "../../engine/src/layout/inscript_layout.h"
 #include <iostream>
 #include <vector>
 #include <string>
@@ -305,8 +306,23 @@ int main() {
         ASSERT_EQUAL(std::string(list_user.candidates[0].bengali_text), "পারভেজ", "Custom word ranked top");
 
         BanglaEngine_RemoveUserWord(engine, "pervez", "পারভেজ");
+
+        // Adaptive User Pattern Learning Verification
+        BanglaEngine_CommitWordWithOrigin(engine, "amarshohor", "আমারশহর");
+        BanglaEngine_SetComposition(engine, "amarshohor");
+        CandidateList list_learned;
+        BanglaEngine_GetCandidates(engine, &list_learned);
+        ASSERT_TRUE(list_learned.count > 0, "Learned user candidate returned");
+        ASSERT_EQUAL(std::string(list_learned.candidates[0].bengali_text), "আমারশহর", "Adaptive learning ranks chosen word top");
+
+        // Emoji Shortcut Verification
+        BanglaEngine_SetComposition(engine, ":smile:");
+        CandidateList list_emoji;
+        BanglaEngine_GetCandidates(engine, &list_emoji);
+        ASSERT_TRUE(list_emoji.count > 0, "Emoji candidate returned");
+        ASSERT_EQUAL(std::string(list_emoji.candidates[0].bengali_text), "😊", "Emoji tag :smile: produces 😊");
     }
-    std::cout << "  [PASS] Personal User Dictionary verified.\n";
+    std::cout << "  [PASS] Personal User Dictionary & Adaptive Learning verified.\n";
 
     // =========================================================================
     // TEST SUITE 7: Difficult Linguistic & Real-World Stress Cases (Task 6)
@@ -346,6 +362,128 @@ int main() {
         ASSERT_EQUAL(top_text, sc.expected, sc.description);
     }
     std::cout << "  [PASS] All difficult linguistic stress test cases verified.\n";
+
+    // =========================================================================
+    // TEST SUITE 8: National INSCRIPT Layout Verification
+    // =========================================================================
+    std::cout << "\n=== [TEST SUITE 8] National INSCRIPT Layout ===\n";
+    {
+        bangla::InscriptLayout inscript;
+        ASSERT_TRUE(inscript.HasMapping('k', false), "Inscript has normal 'k' mapping");
+        ASSERT_EQUAL(inscript.GetChar('k', false), "ক", "Normal 'k' -> 'ক'");
+        ASSERT_EQUAL(inscript.GetChar('K', true), "খ", "Shift 'K' -> 'খ'");
+        ASSERT_EQUAL(inscript.GetChar('l', false), "ত", "Normal 'l' -> 'ত'");
+        ASSERT_EQUAL(inscript.GetChar('L', true), "থ", "Shift 'L' -> 'থ'");
+        ASSERT_EQUAL(inscript.GetChar('h', false), "প", "Normal 'h' -> 'প'");
+        ASSERT_EQUAL(inscript.GetChar('H', true), "ফ", "Shift 'H' -> 'ফ'");
+        ASSERT_EQUAL(inscript.GetChar('j', false), "র", "Normal 'j' -> 'র'");
+        ASSERT_EQUAL(inscript.GetChar('y', false), "ব", "Normal 'y' -> 'ব'");
+        ASSERT_EQUAL(inscript.GetChar('Y', true), "ভ", "Shift 'Y' -> 'ভ'");
+        ASSERT_EQUAL(inscript.GetChar('c', false), "ম", "Normal 'c' -> 'ম'");
+        ASSERT_EQUAL(inscript.GetChar('d', false), "্", "Normal 'd' -> Hasanta '্'");
+        ASSERT_EQUAL(inscript.GetChar('>', true), "।", "Shift '>' -> Bengali Dari '।'");
+    }
+    std::cout << "  [PASS] National INSCRIPT key mapping verified.\n";
+
+    // =========================================================================
+    // TEST SUITE 9: Likhi Master Fix Verification (P0-1 to P0-6)
+    // =========================================================================
+    std::cout << "\n=== [TEST SUITE 9] Likhi Master Fix Verification ===\n";
+    {
+        BanglaEngine_ResetContext(engine);
+
+        // 1. Critical Banglish Accuracy (P0-2)
+        char s_buf[512] = {0};
+        BanglaEngine_TransliterateSentence(engine, "poriborton", s_buf, sizeof(s_buf));
+        ASSERT_EQUAL(std::string(s_buf), "পরিবর্তন", "poriborton -> পরিবর্তন");
+
+        BanglaEngine_TransliterateSentence(engine, "somossha", s_buf, sizeof(s_buf));
+        ASSERT_EQUAL(std::string(s_buf), "সমস্যা", "somossha -> সমস্যা");
+
+        BanglaEngine_TransliterateSentence(engine, "somossa", s_buf, sizeof(s_buf));
+        ASSERT_EQUAL(std::string(s_buf), "সমস্যা", "somossa -> সমস্যা");
+
+        BanglaEngine_TransliterateSentence(engine, "poriborton korbo", s_buf, sizeof(s_buf));
+        ASSERT_EQUAL(std::string(s_buf), "পরিবর্তন করবো", "poriborton korbo -> পরিবর্তন করবো");
+
+        BanglaEngine_TransliterateSentence(engine, "ami ekta poriborton korbo", s_buf, sizeof(s_buf));
+        ASSERT_EQUAL(std::string(s_buf), "আমি একটা পরিবর্তন করবো", "ami ekta poriborton korbo -> আমি একটা পরিবর্তন করবো");
+
+        BanglaEngine_TransliterateSentence(engine, "amar ekta somossa hoyeche", s_buf, sizeof(s_buf));
+        ASSERT_TRUE(std::string(s_buf).find("আমার একটা সমস্যা") == 0, "amar ekta somossa hoyeche sentence");
+
+        // 2. English Loanwords (P0-5)
+        BanglaEngine_TransliterateSentence(engine, "battery", s_buf, sizeof(s_buf));
+        ASSERT_EQUAL(std::string(s_buf), "ব্যাটারি", "battery -> ব্যাটারি");
+
+        BanglaEngine_TransliterateSentence(engine, "office", s_buf, sizeof(s_buf));
+        ASSERT_EQUAL(std::string(s_buf), "অফিস", "office -> অফিস");
+
+        BanglaEngine_TransliterateSentence(engine, "control", s_buf, sizeof(s_buf));
+        ASSERT_EQUAL(std::string(s_buf), "কন্ট্রোল", "control -> কন্ট্রোল");
+
+        BanglaEngine_TransliterateSentence(engine, "computer", s_buf, sizeof(s_buf));
+        ASSERT_EQUAL(std::string(s_buf), "কম্পিউটার", "computer -> কম্পিউটার");
+
+        BanglaEngine_TransliterateSentence(engine, "mouse", s_buf, sizeof(s_buf));
+        ASSERT_EQUAL(std::string(s_buf), "মাউস", "mouse -> মাউস");
+
+        BanglaEngine_TransliterateSentence(engine, "chair", s_buf, sizeof(s_buf));
+        ASSERT_EQUAL(std::string(s_buf), "চেয়ার", "chair -> চেয়ার");
+
+        BanglaEngine_TransliterateSentence(engine, "table", s_buf, sizeof(s_buf));
+        ASSERT_EQUAL(std::string(s_buf), "টেবিল", "table -> টেবিল");
+
+        BanglaEngine_TransliterateSentence(engine, "fan", s_buf, sizeof(s_buf));
+        ASSERT_EQUAL(std::string(s_buf), "ফ্যান", "fan -> ফ্যান");
+
+        BanglaEngine_TransliterateSentence(engine, "anwar", s_buf, sizeof(s_buf));
+        ASSERT_EQUAL(std::string(s_buf), "আনোয়ার", "anwar -> আনোয়ার");
+
+        // 3. Controlled Fuzzy Banglish Tolerance (P0-3)
+        auto check_has_candidate = [&](const std::string& input, const std::string& expected_cand, const std::string& desc) {
+            BanglaEngine_SetComposition(engine, input.c_str());
+            CandidateList clist;
+            BanglaEngine_GetCandidates(engine, &clist);
+            bool found = false;
+            for (uint32_t i = 0; i < clist.count; i++) {
+                if (std::string(clist.candidates[i].bengali_text) == expected_cand) {
+                    found = true;
+                    break;
+                }
+            }
+            ASSERT_TRUE(found, desc + " (" + input + " -> " + expected_cand + ")");
+        };
+
+        check_has_candidate("battary", "ব্যাটারি", "Fuzzy: battary suggests ব্যাটারি");
+        check_has_candidate("batery", "ব্যাটারি", "Fuzzy: batery suggests ব্যাটারি");
+        check_has_candidate("batteri", "ব্যাটারি", "Fuzzy: batteri suggests ব্যাটারি");
+
+        // 4. Ambiguous Banglish Suggestions (P0-4)
+        check_has_candidate("t", "ত", "Ambiguous: t has ত");
+        check_has_candidate("t", "ট", "Ambiguous: t has ট");
+        check_has_candidate("ta", "তা", "Ambiguous: ta has তা");
+        check_has_candidate("ta", "টা", "Ambiguous: ta has টা");
+        check_has_candidate("taka", "টাকা", "Ambiguous: taka has টাকা");
+        check_has_candidate("taka", "তাকা", "Ambiguous: taka has তাকা");
+        check_has_candidate("d", "দ", "Ambiguous: d has দ");
+        check_has_candidate("d", "ড", "Ambiguous: d has ড");
+        check_has_candidate("s", "স", "Ambiguous: s has স");
+        check_has_candidate("s", "শ", "Ambiguous: s has শ");
+        check_has_candidate("n", "ন", "Ambiguous: n has ন");
+        check_has_candidate("n", "ণ", "Ambiguous: n has ণ");
+        check_has_candidate("r", "র", "Ambiguous: r has র");
+        check_has_candidate("r", "ড়", "Ambiguous: r has ড়");
+        check_has_candidate("c", "চ", "Ambiguous: c has চ");
+        check_has_candidate("c", "ছ", "Ambiguous: c has ছ");
+        check_has_candidate("k", "ক", "Ambiguous: k has ক");
+        check_has_candidate("k", "খ", "Ambiguous: k has খ");
+
+        // 5. Preserved Original English Candidate (P0-6)
+        check_has_candidate("office", "office", "P0-6: office preserves raw office candidate");
+        check_has_candidate("computer", "computer", "P0-6: computer preserves raw computer candidate");
+    }
+    std::cout << "  [PASS] All Likhi Master Fix verification cases passed.\n";
 
     BanglaEngine_Destroy(engine);
 

@@ -25,7 +25,7 @@ extern "C" {
 typedef struct {
     bool auto_correct_enabled;        // Default: false (strictly off by default)
     float auto_correct_threshold;     // Confidence threshold for auto-correct (default: 0.85)
-    uint32_t max_candidates;          // Maximum candidate suggestions to return (default: 5)
+    uint32_t max_candidates;          // Maximum candidate suggestions to return (default: 6)
     const char* lexicon_binary_path;  // Optional custom path to compiled lexicon binary
     const char* user_dict_path;       // Optional custom path to SQLite/binary user dictionary
 } EngineConfig;
@@ -65,6 +65,7 @@ const char* BanglaEngine_GetComposition(const BanglaEngine* engine);
 void BanglaEngine_GetCandidates(BanglaEngine* engine, CandidateList* out_list);
 void BanglaEngine_GetNextWordPredictions(BanglaEngine* engine, CandidateList* out_list);
 void BanglaEngine_CommitWord(BanglaEngine* engine, const char* bengali_word);
+void BanglaEngine_CommitWordWithOrigin(BanglaEngine* engine, const char* roman_origin, const char* bengali_word);
 void BanglaEngine_ResetContext(BanglaEngine* engine);
 
 // Full Sentence Transliteration
@@ -73,6 +74,8 @@ bool BanglaEngine_TransliterateSentence(BanglaEngine* engine, const char* roman_
 // Personal User Dictionary Operations
 bool BanglaEngine_AddUserWord(BanglaEngine* engine, const char* roman_key, const char* bengali_word);
 bool BanglaEngine_RemoveUserWord(BanglaEngine* engine, const char* roman_key, const char* bengali_word);
+bool BanglaEngine_ReloadUserDict(BanglaEngine* engine);
+void BanglaEngine_SetAutoCorrectEnabled(BanglaEngine* engine, bool enabled);
 
 #ifdef __cplusplus
 }

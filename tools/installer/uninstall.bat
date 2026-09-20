@@ -19,11 +19,22 @@ set DLL_PATH=%SCRIPT_DIR%bangla_tsf.dll
 if not exist "%DLL_PATH%" set DLL_PATH=%SCRIPT_DIR%..\..\build\bangla_tsf.dll
 if not exist "%DLL_PATH%" set DLL_PATH=%SCRIPT_DIR%build\bangla_tsf.dll
 
+set DLL32_PATH=%SCRIPT_DIR%bangla_tsf32.dll
+if not exist "%DLL32_PATH%" set DLL32_PATH=%SCRIPT_DIR%..\..\build\bangla_tsf32.dll
+if not exist "%DLL32_PATH%" set DLL32_PATH=%SCRIPT_DIR%build\bangla_tsf32.dll
+
 echo [1/3] Unregistering Likhi from Windows TSF and COM...
 if exist "%DLL_PATH%" (
     regsvr32.exe /u /s "%DLL_PATH%"
 ) else (
     regsvr32.exe /u /s bangla_tsf.dll
+)
+if exist "%WINDIR%\SysWOW64\regsvr32.exe" (
+    if exist "%DLL32_PATH%" (
+        %WINDIR%\SysWOW64\regsvr32.exe /u /s "%DLL32_PATH%"
+    ) else (
+        %WINDIR%\SysWOW64\regsvr32.exe /u /s bangla_tsf32.dll
+    )
 )
 
 echo [2/3] Removing Start Menu shortcuts...

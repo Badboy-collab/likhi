@@ -9,12 +9,30 @@
 #define TF_CLIENTID_NULL ((TfClientId)0)
 #endif
 
+#ifndef __ITfDisplayAttributeProvider_INTERFACE_DEFINED__
+#define __ITfDisplayAttributeProvider_INTERFACE_DEFINED__
+static const IID IID_ITfDisplayAttributeProvider = 
+    { 0xfee45690, 0x2659, 0x4148, { 0x8f, 0x81, 0x46, 0x72, 0xef, 0x8d, 0xa8, 0x71 } };
+
+MIDL_INTERFACE("fee45690-2659-4148-8f81-4672ef8da871")
+ITfDisplayAttributeProvider : public IUnknown
+{
+    virtual HRESULT STDMETHODCALLTYPE EnumDisplayAttributeInfo(
+        IEnumTfDisplayAttributeInfo **ppEnum) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE GetDisplayAttributeInfo(
+        REFGUID guid,
+        ITfDisplayAttributeInfo **ppInfo) = 0;
+};
+#endif
+
 namespace bangla_tsf {
 
 class TextService : public ITfTextInputProcessor,
                     public ITfThreadMgrEventSink,
                     public ITfKeyEventSink,
-                    public ITfCompositionSink {
+                    public ITfCompositionSink,
+                    public ITfDisplayAttributeProvider {
 public:
     TextService();
     virtual ~TextService();
@@ -45,6 +63,10 @@ public:
 
     // ITfCompositionSink
     STDMETHODIMP OnCompositionTerminated(TfEditCookie ecWrite, ITfComposition* pComposition) override;
+
+    // ITfDisplayAttributeProvider
+    STDMETHODIMP EnumDisplayAttributeInfo(IEnumTfDisplayAttributeInfo** ppEnum) override;
+    STDMETHODIMP GetDisplayAttributeInfo(REFGUID guid, ITfDisplayAttributeInfo** ppInfo) override;
 
     // Getters for TSF resources
     ITfThreadMgr* GetThreadMgr() const { return thread_mgr_; }

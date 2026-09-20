@@ -28,9 +28,15 @@ $lexSrc = Join-Path $root 'data\lexicon.bin'
 if (-not (Test-Path $lexSrc)) { $lexSrc = Join-Path $root '..\..\engine\data\lexicon.bin' }
 if (Test-Path $lexSrc) { Copy-Item -Path $lexSrc -Destination (Join-Path $appDataDir 'lexicon.bin') -Force }
 
+$dll32 = Join-Path $root 'bangla_tsf32.dll'
+
 if ($Unregister) {
     Write-Host "[1/1] Unregistering $dll ..." -ForegroundColor Yellow
     & $harness $dll unreg
+    if ((Test-Path "$env:WINDIR\SysWOW64\regsvr32.exe") -and (Test-Path $dll32)) {
+        Write-Host "Unregistering 32-bit $dll32 ..." -ForegroundColor Yellow
+        & "$env:WINDIR\SysWOW64\regsvr32.exe" /u /s "$dll32"
+    }
     Write-Host "Done. Full cleanup: HKLM/HKCU CLSID + CTF\TIP keys still containing Likhi should be removed;"
     Write-Host "run the elevated cleanup in the project's build\do_register.ps1 or regedit if stale keys remain."
     exit 0
@@ -38,9 +44,16 @@ if ($Unregister) {
 
 Write-Host "[1/2] Unregistering any previous Likhi registration ..." -ForegroundColor Yellow
 & $harness $dll unreg
+if ((Test-Path "$env:WINDIR\SysWOW64\regsvr32.exe") -and (Test-Path $dll32)) {
+    & "$env:WINDIR\SysWOW64\regsvr32.exe" /u /s "$dll32"
+}
 
-Write-Host "[2/2] Registering $dll ..." -ForegroundColor Cyan
+Write-Host "[2/2] Registering 64-bit $dll ..." -ForegroundColor Cyan
 & $harness $dll
+if ((Test-Path "$env:WINDIR\SysWOW64\regsvr32.exe") -and (Test-Path $dll32)) {
+    Write-Host "Registering 32-bit $dll32 (for 32-bit MS Office)..." -ForegroundColor Cyan
+    & "$env:WINDIR\SysWOW64\regsvr32.exe" /s "$dll32"
+}
 
 Write-Host ""
 Write-Host "=========================================================" -ForegroundColor Green

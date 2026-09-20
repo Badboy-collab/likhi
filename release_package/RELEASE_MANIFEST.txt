@@ -1,0 +1,40 @@
+﻿================================================================================
+  LIKHI (লিখি) v1.0.0 - OFFICIAL RELEASE PACKAGE & INTEGRITY MANIFEST
+  Generated: 2026-09-09 16:29:38 +06:00
+================================================================================
+
+File:        Likhi_Setup_v1.0.0.exe
+Path:        release_package\Likhi_Setup_v1.0.0.exe
+Size:        3641497 bytes (3.47 MB)
+SHA256:      1BB877F875C5F068A67337060C8D9A7CE2666EE21DA0AD350F99A95059644786
+--------------------------------------------------------------------------------
+File:        bangla_tsf.dll
+Path:        build\bangla_tsf.dll
+Size:        3687028 bytes (3.52 MB)
+SHA256:      3461CD9E42562C79E9877672E66ED7920B9D85084C014E15F75C8A48929B3941
+--------------------------------------------------------------------------------
+File:        bangla_settings.exe
+Path:        build\bangla_settings.exe
+Size:        3124675 bytes (2.98 MB)
+SHA256:      BABF4F060A2337E51CFC5CD820E19FA1AFE0842B72764F2F06311AA2E4407EF9
+--------------------------------------------------------------------------------
+File:        lexicon.bin
+Path:        engine\data\lexicon.bin
+Size:        4360689 bytes (4.16 MB)
+SHA256:      BEB7E76ED246934C88CDFD8A2486971F2DA1794E67E2B391E0A3483ED7BA8220
+--------------------------------------------------------------------------------
+File:        enable_tip.ps1
+Path:        tools\installer\enable_tip.ps1
+Size:        1160 bytes (0 MB)
+SHA256:      241AABB8D5085074C2CF5834827C388C829FD2C174571CC38E7F1C5CC7754C35
+--------------------------------------------------------------------------------
+File:        disable_tip.ps1
+Path:        tools\installer\disable_tip.ps1
+Size:        1019 bytes (0 MB)
+SHA256:      766899D1B829736A014F67739C4A0CC287B9B9A42DEA3BEE04A44C10B25E479C
+--------------------------------------------------------------------------------
+File:        README.txt
+Path:        tools\installer\README.txt
+Size:        1353 bytes (0 MB)
+SHA256:      7300066CB06A25B17EDB96C1AFA8A6904E8623A62062D61AB68833661C9659C0
+--------------------------------------------------------------------------------

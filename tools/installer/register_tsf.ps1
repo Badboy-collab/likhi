@@ -18,12 +18,30 @@ foreach ($c in $candidates) {
     }
 }
 
+$candidates32 = @(
+    Join-Path $PSScriptRoot "bangla_tsf32.dll",
+    Join-Path $PSScriptRoot "..\..\build\bangla_tsf32.dll",
+    Join-Path $PSScriptRoot "build\bangla_tsf32.dll"
+)
+
+$resolvedDll32 = $null
+foreach ($c in $candidates32) {
+    if (Test-Path $c) {
+        $resolvedDll32 = [System.IO.Path]::GetFullPath($c)
+        break
+    }
+}
+
 if ($Unregister) {
     if ($resolvedDll) {
-        Write-Host "Unregistering $resolvedDll..." -ForegroundColor Yellow
+        Write-Host "Unregistering 64-bit $resolvedDll..." -ForegroundColor Yellow
         regsvr32.exe /u /s "$resolvedDll"
     } else {
         regsvr32.exe /u /s "bangla_tsf.dll"
+    }
+    if ((Test-Path "$env:WINDIR\SysWOW64\regsvr32.exe") -and $resolvedDll32) {
+        Write-Host "Unregistering 32-bit $resolvedDll32..." -ForegroundColor Yellow
+        & "$env:WINDIR\SysWOW64\regsvr32.exe" /u /s "$resolvedDll32"
     }
     Write-Host "[SUCCESS] Unregistered Likhi (লিখি)." -ForegroundColor Green
 } else {
@@ -50,11 +68,20 @@ if ($Unregister) {
         }
     }
 
-    Write-Host "Registering $resolvedDll with Windows COM and TSF..." -ForegroundColor Cyan
+    Write-Host "Registering 64-bit $resolvedDll with Windows COM and TSF..." -ForegroundColor Cyan
     regsvr32.exe /s "$resolvedDll"
-    if ($LASTEXITCODE -eq 0) {
+    $success64 = ($LASTEXITCODE -eq 0)
+
+    $success32 = $true
+    if ((Test-Path "$env:WINDIR\SysWOW64\regsvr32.exe") -and $resolvedDll32) {
+        Write-Host "Registering 32-bit $resolvedDll32 (for 32-bit MS Office)..." -ForegroundColor Cyan
+        & "$env:WINDIR\SysWOW64\regsvr32.exe" /s "$resolvedDll32"
+        $success32 = ($LASTEXITCODE -eq 0)
+    }
+
+    if ($success64 -and $success32) {
         Write-Host "=========================================================" -ForegroundColor Green
-        Write-Host " [SUCCESS] Likhi (লিখি) registered successfully!" -ForegroundColor Green
+        Write-Host " [SUCCESS] Likhi (লিখি) dual-arch registered successfully!" -ForegroundColor Green
         Write-Host " 'বাংলা লিখুন, সহজেই।'" -ForegroundColor Yellow
         Write-Host "=========================================================" -ForegroundColor Green
         Write-Host "1. Press Win + Space to select 'Likhi (লিখি)'." -ForegroundColor White

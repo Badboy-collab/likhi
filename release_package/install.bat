@@ -37,6 +37,10 @@ if not exist "%DLL_PATH%" (
 set APP_DATA_DIR=%APPDATA%\PC-Bangla-Typing-App
 if not exist "%APP_DATA_DIR%" mkdir "%APP_DATA_DIR%"
 
+set DLL32_PATH=%SCRIPT_DIR%bangla_tsf32.dll
+if not exist "%DLL32_PATH%" set DLL32_PATH=%SCRIPT_DIR%..\..\build\bangla_tsf32.dll
+if not exist "%DLL32_PATH%" set DLL32_PATH=%SCRIPT_DIR%build\bangla_tsf32.dll
+
 if exist "%LEX_SRC%" (
     echo [1/4] Deploying dictionary data to %APP_DATA_DIR%\lexicon.bin...
     copy /Y "%LEX_SRC%" "%APP_DATA_DIR%\lexicon.bin" >nul
@@ -50,6 +54,12 @@ if %ERRORLEVEL% neq 0 (
     echo [ERROR] TSF COM Registration failed with error %ERRORLEVEL%.
     pause
     exit /b 1
+)
+
+if exist "%WINDIR%\SysWOW64\regsvr32.exe" if exist "%DLL32_PATH%" (
+    echo Registering 32-bit Likhi TSF components for 32-bit apps (MS Office)...
+    %WINDIR%\SysWOW64\regsvr32.exe /u /s "%DLL32_PATH%"
+    %WINDIR%\SysWOW64\regsvr32.exe /s "%DLL32_PATH%"
 )
 
 echo [3/4] Creating Start Menu shortcuts...

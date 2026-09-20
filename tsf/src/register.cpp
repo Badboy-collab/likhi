@@ -13,35 +13,43 @@ HRESULT RegisterCOMServer(HINSTANCE hInst) {
         return HRESULT_FROM_WIN32(GetLastError());
     }
 
-    // Use HKCU\Software\Classes instead of HKCR — no admin rights required.
-    // Windows automatically merges HKCU\Software\Classes into HKCR for the current user.
-    std::wstring base = L"Software\\Classes\\CLSID\\" + std::wstring(CLSID_STRING);
-    HKEY hKey = NULL;
+    // Try system-wide HKCR first (writes to HKLM\SOFTWARE\Classes\CLSID if elevated)
+    HKEY rootKeys[] = { HKEY_CLASSES_ROOT, HKEY_CURRENT_USER };
+    std::wstring subBases[] = {
+        L"CLSID\\" + std::wstring(CLSID_STRING),
+        L"Software\\Classes\\CLSID\\" + std::wstring(CLSID_STRING)
+    };
 
-    // 1. Create HKCU\Software\Classes\CLSID\{...}
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, base.c_str(), 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) != ERROR_SUCCESS) {
-        return E_FAIL;
+    bool registered = false;
+    for (int i = 0; i < 2; i++) {
+        HKEY hKey = NULL;
+        if (RegCreateKeyExW(rootKeys[i], subBases[i].c_str(), 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
+            RegSetValueExW(hKey, NULL, 0, REG_SZ, (const BYTE*)BANGLA_IME_NAME_W, (DWORD)((wcslen(BANGLA_IME_NAME_W) + 1) * sizeof(wchar_t)));
+            RegCloseKey(hKey);
+
+            std::wstring inproc_path = subBases[i] + L"\\InprocServer32";
+            if (RegCreateKeyExW(rootKeys[i], inproc_path.c_str(), 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
+                RegSetValueExW(hKey, NULL, 0, REG_SZ, (const BYTE*)dll_path, (DWORD)((wcslen(dll_path) + 1) * sizeof(wchar_t)));
+                const wchar_t* threading_model = L"Apartment";
+                RegSetValueExW(hKey, L"ThreadingModel", 0, REG_SZ, (const BYTE*)threading_model, (DWORD)((wcslen(threading_model) + 1) * sizeof(wchar_t)));
+                RegCloseKey(hKey);
+                registered = true;
+            }
+        }
     }
-    RegSetValueExW(hKey, NULL, 0, REG_SZ, (const BYTE*)BANGLA_IME_NAME_W, (DWORD)((wcslen(BANGLA_IME_NAME_W) + 1) * sizeof(wchar_t)));
-    RegCloseKey(hKey);
 
-    // 2. Create HKCU\Software\Classes\CLSID\{...}\InprocServer32
-    std::wstring inproc_path = base + L"\\InprocServer32";
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, inproc_path.c_str(), 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) != ERROR_SUCCESS) {
-        return E_FAIL;
-    }
-    RegSetValueExW(hKey, NULL, 0, REG_SZ, (const BYTE*)dll_path, (DWORD)((wcslen(dll_path) + 1) * sizeof(wchar_t)));
-    const wchar_t* threading_model = L"Apartment";
-    RegSetValueExW(hKey, L"ThreadingModel", 0, REG_SZ, (const BYTE*)threading_model, (DWORD)((wcslen(threading_model) + 1) * sizeof(wchar_t)));
-    RegCloseKey(hKey);
-
-    return S_OK;
+    return registered ? S_OK : E_FAIL;
 }
 
 HRESULT UnregisterCOMServer() {
-    std::wstring base = L"Software\\Classes\\CLSID\\" + std::wstring(CLSID_STRING);
-    RegDeleteKeyW(HKEY_CURRENT_USER, (base + L"\\InprocServer32").c_str());
-    RegDeleteKeyW(HKEY_CURRENT_USER, base.c_str());
+    std::wstring clsid_str(CLSID_STRING);
+    // Remove from HKCR
+    RegDeleteKeyW(HKEY_CLASSES_ROOT, (L"CLSID\\" + clsid_str + L"\\InprocServer32").c_str());
+    RegDeleteKeyW(HKEY_CLASSES_ROOT, (L"CLSID\\" + clsid_str).c_str());
+
+    // Remove from HKCU
+    RegDeleteKeyW(HKEY_CURRENT_USER, (L"Software\\Classes\\CLSID\\" + clsid_str + L"\\InprocServer32").c_str());
+    RegDeleteKeyW(HKEY_CURRENT_USER, (L"Software\\Classes\\CLSID\\" + clsid_str).c_str());
     return S_OK;
 }
 
@@ -55,28 +63,30 @@ HRESULT RegisterTSFProfiles(HINSTANCE hInst) {
 
     hr = pProfiles->Register(CLSID_BanglaTextService);
     if (SUCCEEDED(hr)) {
-        // Register under Bengali (Bangladesh) - 0x0445 so the IME is listed
-        // under the user's "বাংলা (বাংলাদেশ)" input language in Win+Space.
-        // (BANGLA_LANGID_BD is a fixed literal — see bangla_tsf_clsid.h.)
-        pProfiles->AddLanguageProfile(
-            CLSID_BanglaTextService,
-            BANGLA_LANGID_BD,
-            GUID_BanglaProfile,
-            BANGLA_IME_NAME_W,
-            (ULONG)wcslen(BANGLA_IME_NAME_W),
-            dll_path,
-            (ULONG)wcslen(dll_path),
-            0
-        );
+        LANGID langids[] = { BANGLA_LANGID_BD, BANGLA_LANGID_IN, BANGLA_LANGID_US };
+        for (LANGID lid : langids) {
+            pProfiles->AddLanguageProfile(
+                CLSID_BanglaTextService,
+                lid,
+                GUID_BanglaProfile,
+                BANGLA_IME_NAME_W,
+                (ULONG)wcslen(BANGLA_IME_NAME_W),
+                dll_path,
+                (ULONG)wcslen(dll_path),
+                0
+            );
+            pProfiles->EnableLanguageProfile(CLSID_BanglaTextService, lid, GUID_BanglaProfile, TRUE);
+        }
     }
     pProfiles->Release();
 
-    // Register Categories
+    // Register Categories: Text Service is a standard keyboard TIP
     ITfCategoryMgr* pCategoryMgr = nullptr;
     hr = CoCreateInstance(CLSID_TF_CategoryMgr, NULL, CLSCTX_INPROC_SERVER, IID_ITfCategoryMgr, (void**)&pCategoryMgr);
     if (SUCCEEDED(hr) && pCategoryMgr) {
         pCategoryMgr->RegisterCategory(CLSID_BanglaTextService, GUID_TFCAT_TIP_KEYBOARD, CLSID_BanglaTextService);
-        pCategoryMgr->RegisterCategory(CLSID_BanglaTextService, GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER, CLSID_BanglaTextService);
+        // Cleanly remove any stale GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER from older builds
+        pCategoryMgr->UnregisterCategory(CLSID_BanglaTextService, GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER, CLSID_BanglaTextService);
         pCategoryMgr->Release();
     }
 

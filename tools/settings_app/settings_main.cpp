@@ -2,15 +2,19 @@
 #include <commctrl.h>
 #include <uxtheme.h>
 #include <dwmapi.h>
+#include <commdlg.h>
 #include <string>
 #include <fstream>
 #include <sstream>
 #include <vector>
+#include <algorithm>
+#include <chrono>
 #include <shlobj.h>
 
 #pragma comment(lib, "uxtheme.lib")
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "comctl32.lib")
+#pragma comment(lib, "comdlg32.lib")
 
 enum SectionID {
     SEC_GENERAL = 0,
@@ -54,6 +58,8 @@ enum SectionID {
 #define IDC_BTN_SAVE          2026
 #define IDC_BTN_CLOSE         2027
 #define IDC_LBL_STATUS        2028
+#define IDC_BTN_CLEAR_FIELDS  2029
+#define IDC_EDIT_SEARCH_DICT  2030
 
 struct AppSettings {
     bool enable_likhi = true;
@@ -70,13 +76,23 @@ struct AppSettings {
     int theme = 0;
 };
 
+struct DictEntry {
+    std::wstring id;
+    std::wstring roman_key;
+    std::wstring bengali_word;
+    uint32_t frequency = 1;
+    uint64_t created_at = 0;
+    uint64_t updated_at = 0;
+};
+
 static AppSettings g_settings;
 static std::wstring g_config_path;
 static SectionID g_active_section = SEC_GENERAL;
+static std::vector<DictEntry> g_dict_entries;
 
 static HWND g_hNavButtons[SEC_COUNT];
 static std::vector<HWND> g_section_controls[SEC_COUNT];
-static HWND hListDict, hEditRoman, hEditBangla, hLblStatus;
+static HWND hListDict, hEditRoman, hEditBangla, hLblStatus, hEditSearchDict;
 static HFONT hFontTitle = NULL;
 static HFONT hFontHeader = NULL;
 static HFONT hFontBody = NULL;
@@ -159,19 +175,128 @@ void SaveSettings() {
     out << "}\n";
 }
 
-void RefreshDictionaryList() {
+static std::wstring Utf8ToWide(const std::string& str) {
+    if (str.empty()) return L"";
+    int size = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), NULL, 0);
+    std::wstring res(size, 0);
+    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), &res[0], size);
+    return res;
+}
+
+static std::string WideToUtf8(const std::wstring& wstr) {
+    if (wstr.empty()) return "";
+    int size = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), NULL, 0, NULL, NULL);
+    std::string res(size, 0);
+    WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), &res[0], size, NULL, NULL);
+    return res;
+}
+
+static std::wstring ToLowerW(const std::wstring& s) {
+    std::wstring res = s;
+    for (auto& c : res) {
+        if (c >= L'A' && c <= L'Z') c = c - L'A' + L'a';
+    }
+    return res;
+}
+
+static std::wstring TrimW(const std::wstring& s) {
+    size_t start = 0;
+    while (start < s.size() && (s[start] == L' ' || s[start] == L'\t' || s[start] == L'\r' || s[start] == L'\n')) {
+        start++;
+    }
+    size_t end = s.size();
+    while (end > start && (s[end - 1] == L' ' || s[end - 1] == L'\t' || s[end - 1] == L'\r' || s[end - 1] == L'\n')) {
+        end--;
+    }
+    return s.substr(start, end - start);
+}
+
+static uint64_t GetCurrentUnixTimestamp() {
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count());
+}
+
+void LoadDictionaryEntries() {
+    g_dict_entries.clear();
+    std::wstring dict_file = GetConfigDirectory() + L"\\personal_dict.txt";
+    std::ifstream in(WideToUtf8(dict_file).c_str());
+    if (!in.is_open()) {
+        std::wstring old_file = GetConfigDirectory() + L"\\user_dict.txt";
+        in.open(WideToUtf8(old_file).c_str());
+    }
+    if (!in.is_open()) return;
+
+    std::string line;
+    uint64_t next_id = 1;
+    while (std::getline(in, line)) {
+        if (line.empty()) continue;
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.empty()) continue;
+
+        std::stringstream ss(line);
+        std::string token;
+        std::vector<std::string> tokens;
+        while (std::getline(ss, token, '\t')) {
+            tokens.push_back(token);
+        }
+        if (tokens.size() < 2) continue;
+
+        DictEntry entry;
+        entry.roman_key = ToLowerW(TrimW(Utf8ToWide(tokens[0])));
+        entry.bengali_word = TrimW(Utf8ToWide(tokens[1]));
+        if (entry.roman_key.empty() || entry.bengali_word.empty()) continue;
+
+        entry.frequency = (tokens.size() >= 3) ? (uint32_t)std::strtoul(tokens[2].c_str(), nullptr, 10) : 1;
+        if (entry.frequency == 0) entry.frequency = 1;
+        entry.created_at = (tokens.size() >= 4) ? std::strtoull(tokens[3].c_str(), nullptr, 10) : 0;
+        entry.updated_at = (tokens.size() >= 5) ? std::strtoull(tokens[4].c_str(), nullptr, 10) : entry.created_at;
+        entry.id = (tokens.size() >= 6) ? Utf8ToWide(tokens[5]) : std::to_wstring(next_id++);
+
+        g_dict_entries.push_back(entry);
+    }
+}
+
+bool SaveDictionaryEntries() {
+    std::wstring dict_file = GetConfigDirectory() + L"\\personal_dict.txt";
+    std::string temp_file = WideToUtf8(dict_file) + ".tmp";
+    {
+        std::ofstream out(temp_file.c_str(), std::ios::trunc);
+        if (!out.is_open()) return false;
+        for (const auto& e : g_dict_entries) {
+            out << WideToUtf8(e.roman_key) << "\t"
+                << WideToUtf8(e.bengali_word) << "\t"
+                << e.frequency << "\t"
+                << e.created_at << "\t"
+                << e.updated_at << "\t"
+                << WideToUtf8(e.id) << "\n";
+        }
+        out.flush();
+    }
+    std::wstring wtemp = dict_file + L".tmp";
+    if (!MoveFileExW(wtemp.c_str(), dict_file.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        DeleteFileW(dict_file.c_str());
+        MoveFileW(wtemp.c_str(), dict_file.c_str());
+    }
+    return true;
+}
+
+void RefreshDictionaryList(const std::wstring& filter = L"") {
     if (!hListDict) return;
     SendMessage(hListDict, LB_RESETCONTENT, 0, 0);
 
-    std::wstring dict_file = GetConfigDirectory() + L"\\personal_dict.txt";
-    std::wifstream in(dict_file.c_str());
-    if (!in.is_open()) return;
+    std::wstring lower_filter = ToLowerW(TrimW(filter));
 
-    std::wstring line;
-    while (std::getline(in, line)) {
-        if (!line.empty()) {
-            SendMessageW(hListDict, LB_ADDSTRING, 0, (LPARAM)line.c_str());
+    for (size_t i = 0; i < g_dict_entries.size(); i++) {
+        const auto& e = g_dict_entries[i];
+        if (!lower_filter.empty()) {
+            if (e.roman_key.find(lower_filter) == std::wstring::npos &&
+                e.bengali_word.find(lower_filter) == std::wstring::npos) {
+                continue;
+            }
         }
+        std::wstring display = e.roman_key + L"    →    " + e.bengali_word;
+        int idx = (int)SendMessageW(hListDict, LB_ADDSTRING, 0, (LPARAM)display.c_str());
+        SendMessage(hListDict, LB_SETITEMDATA, idx, (LPARAM)i);
     }
 }
 
@@ -185,6 +310,10 @@ void SwitchSection(HWND hWnd, SectionID sec) {
         InvalidateRect(g_hNavButtons[i], NULL, TRUE);
     }
     if (sec == SEC_DICTIONARY) {
+        LoadDictionaryEntries();
+        if (hEditSearchDict) {
+            SetWindowTextW(hEditSearchDict, L"");
+        }
         RefreshDictionaryList();
     }
     InvalidateRect(hWnd, NULL, TRUE);
@@ -354,46 +483,72 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // ==============================================================
             // SECTION 4: DICTIONARY
             // ==============================================================
-            HWND hD_Title = CreateWindowW(L"STATIC", L"ব্যক্তিগত শব্দভাণ্ডার (Personal Dictionary)", WS_CHILD | SS_LEFT, 250, 30, 520, 28, hWnd, NULL, NULL, NULL);
+            HWND hD_Title = CreateWindowW(L"STATIC", L"ব্যক্তিগত শব্দভাণ্ডার (Personal Dictionary)", WS_CHILD | SS_LEFT, 250, 25, 520, 26, hWnd, NULL, NULL, NULL);
             SendMessage(hD_Title, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
-            hListDict = CreateWindowExW(WS_EX_CLIENTEDGE, L"LISTBOX", L"", WS_CHILD | WS_VSCROLL | LBS_NOTIFY, 250, 75, 240, 220, hWnd, (HMENU)IDC_LIST_DICT, NULL, NULL);
+            HWND hD_Sub = CreateWindowW(L"STATIC", L"আপনার নিজস্ব কাস্টম শব্দের ফোনেটিক বানান যুক্ত ও পরিচালনা করুন", WS_CHILD | SS_LEFT, 250, 52, 520, 18, hWnd, NULL, NULL, NULL);
+            SendMessage(hD_Sub, WM_SETFONT, (WPARAM)hFontSub, TRUE);
+
+            HWND hD_SearchLbl = CreateWindowW(L"STATIC", L"অনুসন্ধান:", WS_CHILD | SS_LEFT, 250, 74, 55, 22, hWnd, NULL, NULL, NULL);
+            SendMessage(hD_SearchLbl, WM_SETFONT, (WPARAM)hFontBody, TRUE);
+
+            hEditSearchDict = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 310, 72, 180, 24, hWnd, (HMENU)IDC_EDIT_SEARCH_DICT, NULL, NULL);
+            SendMessage(hEditSearchDict, WM_SETFONT, (WPARAM)hFontBody, TRUE);
+
+            hListDict = CreateWindowExW(WS_EX_CLIENTEDGE, L"LISTBOX", L"", WS_CHILD | WS_VSCROLL | LBS_NOTIFY, 250, 102, 240, 340, hWnd, (HMENU)IDC_LIST_DICT, NULL, NULL);
             SendMessage(hListDict, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hD_L1 = CreateWindowW(L"STATIC", L"English Key:", WS_CHILD | SS_LEFT, 510, 75, 85, 22, hWnd, NULL, NULL, NULL);
+            HWND hD_L1 = CreateWindowW(L"STATIC", L"ইংরেজি / ফোনেটিক ইনপুট (English Key):", WS_CHILD | SS_LEFT, 510, 74, 265, 20, hWnd, NULL, NULL, NULL);
             SendMessage(hD_L1, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            hEditRoman = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 600, 73, 170, 26, hWnd, (HMENU)IDC_EDIT_ROMAN, NULL, NULL);
+            hEditRoman = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 510, 96, 265, 26, hWnd, (HMENU)IDC_EDIT_ROMAN, NULL, NULL);
             SendMessage(hEditRoman, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hD_L2 = CreateWindowW(L"STATIC", L"বাংলা শব্দ:", WS_CHILD | SS_LEFT, 510, 115, 85, 22, hWnd, NULL, NULL, NULL);
+            HWND hD_L2 = CreateWindowW(L"STATIC", L"বাংলা শব্দ (Bangla Word):", WS_CHILD | SS_LEFT, 510, 128, 265, 20, hWnd, NULL, NULL, NULL);
             SendMessage(hD_L2, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            hEditBangla = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 600, 113, 170, 26, hWnd, (HMENU)IDC_EDIT_BANGLA, NULL, NULL);
+            hEditBangla = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 510, 150, 265, 26, hWnd, (HMENU)IDC_EDIT_BANGLA, NULL, NULL);
             SendMessage(hEditBangla, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hBtnA = CreateWindowW(L"BUTTON", L"যুক্ত করুন (+)", WS_CHILD | BS_PUSHBUTTON, 510, 155, 125, 32, hWnd, (HMENU)IDC_BTN_ADD_WORD, NULL, NULL);
+            HWND hBtnA = CreateWindowW(L"BUTTON", L"সংরক্ষণ (Save)", WS_CHILD | BS_PUSHBUTTON, 510, 186, 128, 32, hWnd, (HMENU)IDC_BTN_ADD_WORD, NULL, NULL);
             SendMessage(hBtnA, WM_SETFONT, (WPARAM)hFontBold, TRUE);
 
-            HWND hBtnD = CreateWindowW(L"BUTTON", L"মুছে ফেলুন (x)", WS_CHILD | BS_PUSHBUTTON, 645, 155, 125, 32, hWnd, (HMENU)IDC_BTN_DEL_WORD, NULL, NULL);
+            HWND hBtnC = CreateWindowW(L"BUTTON", L"নতুন (+ New)", WS_CHILD | BS_PUSHBUTTON, 647, 186, 128, 32, hWnd, (HMENU)IDC_BTN_CLEAR_FIELDS, NULL, NULL);
+            SendMessage(hBtnC, WM_SETFONT, (WPARAM)hFontBody, TRUE);
+
+            HWND hBtnD = CreateWindowW(L"BUTTON", L"মুছে ফেলুন (Delete)", WS_CHILD | BS_PUSHBUTTON, 510, 226, 265, 30, hWnd, (HMENU)IDC_BTN_DEL_WORD, NULL, NULL);
             SendMessage(hBtnD, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hBtnI = CreateWindowW(L"BUTTON", L"ইমপোর্ট (.txt)", WS_CHILD | BS_PUSHBUTTON, 510, 200, 125, 32, hWnd, (HMENU)IDC_BTN_IMPORT, NULL, NULL);
+            HWND hBtnI = CreateWindowW(L"BUTTON", L"ইমপোর্ট (.txt)", WS_CHILD | BS_PUSHBUTTON, 510, 264, 128, 30, hWnd, (HMENU)IDC_BTN_IMPORT, NULL, NULL);
             SendMessage(hBtnI, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hBtnE = CreateWindowW(L"BUTTON", L"এক্সপোর্ট (.txt)", WS_CHILD | BS_PUSHBUTTON, 645, 200, 125, 32, hWnd, (HMENU)IDC_BTN_EXPORT, NULL, NULL);
+            HWND hBtnE = CreateWindowW(L"BUTTON", L"এক্সপোর্ট (.txt)", WS_CHILD | BS_PUSHBUTTON, 647, 264, 128, 30, hWnd, (HMENU)IDC_BTN_EXPORT, NULL, NULL);
             SendMessage(hBtnE, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
+            HWND hD_Tips = CreateWindowW(L"STATIC",
+                L"💡 ব্যবহারবিধি:\n"
+                L"• যেমন: English [ sakkho ] -> Bangla [ সাক্ষ্য ]\n"
+                L"• সংরক্ষণ করলে টাইপিং সাজেশনে এটি ১ম স্থানে আসবে।\n"
+                L"• Auto Correct চালু থাকলে স্পেস চাপলে স্বয়ংক্রিয়ভাবে কাঙ্ক্ষিত শব্দ বসে যাবে।\n"
+                L"• তালিকা থেকে শব্দে ক্লিক করে সরাসরি এডিট বা ডিলিট করতে পারেন।",
+                WS_CHILD | SS_LEFT, 510, 304, 265, 138, hWnd, NULL, NULL, NULL);
+            SendMessage(hD_Tips, WM_SETFONT, (WPARAM)hFontSub, TRUE);
+
             g_section_controls[SEC_DICTIONARY].push_back(hD_Title);
+            g_section_controls[SEC_DICTIONARY].push_back(hD_Sub);
+            g_section_controls[SEC_DICTIONARY].push_back(hD_SearchLbl);
+            g_section_controls[SEC_DICTIONARY].push_back(hEditSearchDict);
             g_section_controls[SEC_DICTIONARY].push_back(hListDict);
             g_section_controls[SEC_DICTIONARY].push_back(hD_L1);
             g_section_controls[SEC_DICTIONARY].push_back(hEditRoman);
             g_section_controls[SEC_DICTIONARY].push_back(hD_L2);
             g_section_controls[SEC_DICTIONARY].push_back(hEditBangla);
             g_section_controls[SEC_DICTIONARY].push_back(hBtnA);
+            g_section_controls[SEC_DICTIONARY].push_back(hBtnC);
             g_section_controls[SEC_DICTIONARY].push_back(hBtnD);
             g_section_controls[SEC_DICTIONARY].push_back(hBtnI);
             g_section_controls[SEC_DICTIONARY].push_back(hBtnE);
+            g_section_controls[SEC_DICTIONARY].push_back(hD_Tips);
 
             // ==============================================================
             // SECTION 5: KEYBOARD
@@ -606,44 +761,213 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 SetWindowTextW(hLblStatus, L"✅ সেটিংস সফলভাবে সংরক্ষিত হয়েছে!");
             } else if (wmId == IDC_BTN_CLOSE) {
                 PostQuitMessage(0);
+            } else if (LOWORD(wParam) == IDC_LIST_DICT && HIWORD(wParam) == LBN_SELCHANGE) {
+                int sel = (int)SendMessage(hListDict, LB_GETCURSEL, 0, 0);
+                if (sel != LB_ERR) {
+                    int entry_idx = (int)SendMessage(hListDict, LB_GETITEMDATA, sel, 0);
+                    if (entry_idx >= 0 && entry_idx < (int)g_dict_entries.size()) {
+                        SetWindowTextW(hEditRoman, g_dict_entries[entry_idx].roman_key.c_str());
+                        SetWindowTextW(hEditBangla, g_dict_entries[entry_idx].bengali_word.c_str());
+                    }
+                }
+            } else if (LOWORD(wParam) == IDC_EDIT_SEARCH_DICT && HIWORD(wParam) == EN_CHANGE) {
+                wchar_t filter[128] = {0};
+                GetWindowTextW(hEditSearchDict, filter, 128);
+                RefreshDictionaryList(filter);
+            } else if (wmId == IDC_BTN_CLEAR_FIELDS) {
+                SetWindowTextW(hEditRoman, L"");
+                SetWindowTextW(hEditBangla, L"");
+                SendMessage(hListDict, LB_SETCURSEL, (WPARAM)-1, 0);
+                SetFocus(hEditRoman);
+                SetWindowTextW(hLblStatus, L"নতুন শব্দ যোগ করার জন্য প্রস্তুত।");
             } else if (wmId == IDC_BTN_ADD_WORD) {
                 wchar_t r_buf[128] = {0}, b_buf[128] = {0};
                 GetWindowTextW(hEditRoman, r_buf, 128);
                 GetWindowTextW(hEditBangla, b_buf, 128);
-                if (wcslen(r_buf) > 0 && wcslen(b_buf) > 0) {
-                    std::wstring dict_file = GetConfigDirectory() + L"\\personal_dict.txt";
-                    std::wofstream dict_out(dict_file.c_str(), std::ios::app);
-                    if (dict_out.is_open()) {
-                        dict_out << r_buf << L"\t" << b_buf << L"\n";
-                        SetWindowTextW(hLblStatus, L"✅ অভিধানে শব্দটি যুক্ত করা হয়েছে!");
-                        SetWindowTextW(hEditRoman, L"");
-                        SetWindowTextW(hEditBangla, L"");
-                        RefreshDictionaryList();
+                std::wstring r_str = ToLowerW(TrimW(r_buf));
+                std::wstring b_str = TrimW(b_buf);
+
+                if (r_str.empty() || b_str.empty()) {
+                    SetWindowTextW(hLblStatus, L"⚠️ অনুগ্রহ করে ইংরেজি কী এবং বাংলা শব্দ দুটিই পূরণ করুন।");
+                    break;
+                }
+
+                // Check if user has an entry selected in list
+                int sel = (int)SendMessage(hListDict, LB_GETCURSEL, 0, 0);
+                int selected_idx = -1;
+                if (sel != LB_ERR) {
+                    selected_idx = (int)SendMessage(hListDict, LB_GETITEMDATA, sel, 0);
+                }
+
+                // Check exact duplicate
+                bool duplicate_found = false;
+                for (size_t i = 0; i < g_dict_entries.size(); i++) {
+                    if ((int)i != selected_idx && g_dict_entries[i].roman_key == r_str && g_dict_entries[i].bengali_word == b_str) {
+                        duplicate_found = true;
+                        break;
                     }
+                }
+                if (duplicate_found) {
+                    std::wstring msg = L"⚠️ '" + r_str + L"' → '" + b_str + L"' ইতিমধ্যে যুক্ত আছে!";
+                    SetWindowTextW(hLblStatus, msg.c_str());
+                    break;
+                }
+
+                uint64_t now = GetCurrentUnixTimestamp();
+                if (selected_idx >= 0 && selected_idx < (int)g_dict_entries.size()) {
+                    // Update existing selected entry
+                    g_dict_entries[selected_idx].roman_key = r_str;
+                    g_dict_entries[selected_idx].bengali_word = b_str;
+                    g_dict_entries[selected_idx].updated_at = now;
+                    SaveDictionaryEntries();
+                    wchar_t filter[128] = {0};
+                    if (hEditSearchDict) GetWindowTextW(hEditSearchDict, filter, 128);
+                    RefreshDictionaryList(filter);
+                    std::wstring msg = L"✅ '" + r_str + L"' → '" + b_str + L"' আপডেট সম্পন্ন হয়েছে!";
+                    SetWindowTextW(hLblStatus, msg.c_str());
+                } else {
+                    // Add new entry
+                    DictEntry entry;
+                    entry.id = std::to_wstring(g_dict_entries.size() + 1);
+                    entry.roman_key = r_str;
+                    entry.bengali_word = b_str;
+                    entry.frequency = 1;
+                    entry.created_at = now;
+                    entry.updated_at = now;
+                    g_dict_entries.push_back(entry);
+                    SaveDictionaryEntries();
+                    wchar_t filter[128] = {0};
+                    if (hEditSearchDict) GetWindowTextW(hEditSearchDict, filter, 128);
+                    RefreshDictionaryList(filter);
+                    std::wstring msg = L"✅ নতুন শব্দ '" + r_str + L"' → '" + b_str + L"' সফলভাবে যুক্ত হয়েছে!";
+                    SetWindowTextW(hLblStatus, msg.c_str());
+                    SetWindowTextW(hEditRoman, L"");
+                    SetWindowTextW(hEditBangla, L"");
                 }
             } else if (wmId == IDC_BTN_DEL_WORD) {
                 int sel = (int)SendMessage(hListDict, LB_GETCURSEL, 0, 0);
+                int target_idx = -1;
                 if (sel != LB_ERR) {
-                    wchar_t sel_text[256];
-                    SendMessageW(hListDict, LB_GETTEXT, sel, (LPARAM)sel_text);
-
-                    std::wstring dict_file = GetConfigDirectory() + L"\\personal_dict.txt";
-                    std::wifstream in(dict_file.c_str());
-                    std::vector<std::wstring> lines;
-                    std::wstring line;
-                    while (std::getline(in, line)) {
-                        if (line != sel_text && !line.empty()) {
-                            lines.push_back(line);
+                    target_idx = (int)SendMessage(hListDict, LB_GETITEMDATA, sel, 0);
+                } else {
+                    wchar_t r_buf[128] = {0}, b_buf[128] = {0};
+                    GetWindowTextW(hEditRoman, r_buf, 128);
+                    GetWindowTextW(hEditBangla, b_buf, 128);
+                    std::wstring r_str = ToLowerW(TrimW(r_buf));
+                    std::wstring b_str = TrimW(b_buf);
+                    if (!r_str.empty() && !b_str.empty()) {
+                        for (size_t i = 0; i < g_dict_entries.size(); i++) {
+                            if (g_dict_entries[i].roman_key == r_str && g_dict_entries[i].bengali_word == b_str) {
+                                target_idx = (int)i;
+                                break;
+                            }
                         }
                     }
-                    in.close();
+                }
 
-                    std::wofstream out(dict_file.c_str(), std::ios::trunc);
-                    for (const auto& l : lines) out << l << L"\n";
-                    out.close();
+                if (target_idx >= 0 && target_idx < (int)g_dict_entries.size()) {
+                    std::wstring r_str = g_dict_entries[target_idx].roman_key;
+                    std::wstring b_str = g_dict_entries[target_idx].bengali_word;
+                    g_dict_entries.erase(g_dict_entries.begin() + target_idx);
+                    SaveDictionaryEntries();
+                    wchar_t filter[128] = {0};
+                    if (hEditSearchDict) GetWindowTextW(hEditSearchDict, filter, 128);
+                    RefreshDictionaryList(filter);
+                    SetWindowTextW(hEditRoman, L"");
+                    SetWindowTextW(hEditBangla, L"");
+                    SendMessage(hListDict, LB_SETCURSEL, (WPARAM)-1, 0);
+                    std::wstring msg = L"🗑️ '" + r_str + L"' → '" + b_str + L"' মুছে ফেলা হয়েছে।";
+                    SetWindowTextW(hLblStatus, msg.c_str());
+                } else {
+                    SetWindowTextW(hLblStatus, L"⚠️ মুছে ফেলার জন্য তালিকা থেকে একটি শব্দ নির্বাচন করুন।");
+                }
+            } else if (wmId == IDC_BTN_IMPORT) {
+                wchar_t szFile[MAX_PATH] = {0};
+                OPENFILENAMEW ofn;
+                memset(&ofn, 0, sizeof(ofn));
+                ofn.lStructSize = sizeof(ofn);
+                ofn.hwndOwner = hWnd;
+                ofn.lpstrFilter = L"Text Files (*.txt;*.tsv)\0*.txt;*.tsv\0All Files (*.*)\0*.*\0";
+                ofn.lpstrFile = szFile;
+                ofn.nMaxFile = MAX_PATH;
+                ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 
-                    RefreshDictionaryList();
-                    SetWindowTextW(hLblStatus, L"🗑️ শব্দটি মুছে ফেলা হয়েছে।");
+                if (GetOpenFileNameW(&ofn)) {
+                    std::ifstream in(WideToUtf8(szFile).c_str());
+                    if (in.is_open()) {
+                        std::string line;
+                        int imported_count = 0;
+                        uint64_t now = GetCurrentUnixTimestamp();
+                        while (std::getline(in, line)) {
+                            if (line.empty()) continue;
+                            if (!line.empty() && line.back() == '\r') line.pop_back();
+                            if (line.empty()) continue;
+
+                            std::stringstream ss(line);
+                            std::string token;
+                            std::vector<std::string> tokens;
+                            while (std::getline(ss, token, '\t')) {
+                                tokens.push_back(token);
+                            }
+                            if (tokens.size() < 2) continue;
+
+                            std::wstring r_key = ToLowerW(TrimW(Utf8ToWide(tokens[0])));
+                            std::wstring b_word = TrimW(Utf8ToWide(tokens[1]));
+                            if (r_key.empty() || b_word.empty()) continue;
+
+                            bool exists = false;
+                            for (const auto& e : g_dict_entries) {
+                                if (e.roman_key == r_key && e.bengali_word == b_word) {
+                                    exists = true;
+                                    break;
+                                }
+                            }
+                            if (!exists) {
+                                DictEntry entry;
+                                entry.id = std::to_wstring(g_dict_entries.size() + 1);
+                                entry.roman_key = r_key;
+                                entry.bengali_word = b_word;
+                                entry.frequency = (tokens.size() >= 3) ? (uint32_t)std::strtoul(tokens[2].c_str(), nullptr, 10) : 1;
+                                if (entry.frequency == 0) entry.frequency = 1;
+                                entry.created_at = (tokens.size() >= 4) ? std::strtoull(tokens[3].c_str(), nullptr, 10) : now;
+                                entry.updated_at = (tokens.size() >= 5) ? std::strtoull(tokens[4].c_str(), nullptr, 10) : now;
+                                g_dict_entries.push_back(entry);
+                                imported_count++;
+                            }
+                        }
+                        SaveDictionaryEntries();
+                        wchar_t filter[128] = {0};
+                        if (hEditSearchDict) GetWindowTextW(hEditSearchDict, filter, 128);
+                        RefreshDictionaryList(filter);
+                        std::wstring msg = L"✅ সফলভাবে " + std::to_wstring(imported_count) + L" টি শব্দ ইমপোর্ট করা হয়েছে!";
+                        SetWindowTextW(hLblStatus, msg.c_str());
+                    }
+                }
+            } else if (wmId == IDC_BTN_EXPORT) {
+                wchar_t szFile[MAX_PATH] = L"likhi_personal_dict_export.txt";
+                OPENFILENAMEW ofn;
+                memset(&ofn, 0, sizeof(ofn));
+                ofn.lStructSize = sizeof(ofn);
+                ofn.hwndOwner = hWnd;
+                ofn.lpstrFilter = L"Text Files (*.txt)\0*.txt\0All Files (*.*)\0*.*\0";
+                ofn.lpstrFile = szFile;
+                ofn.nMaxFile = MAX_PATH;
+                ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
+
+                if (GetSaveFileNameW(&ofn)) {
+                    std::ofstream out(WideToUtf8(szFile).c_str(), std::ios::trunc);
+                    if (out.is_open()) {
+                        for (const auto& e : g_dict_entries) {
+                            out << WideToUtf8(e.roman_key) << "\t"
+                                << WideToUtf8(e.bengali_word) << "\t"
+                                << e.frequency << "\t"
+                                << e.created_at << "\t"
+                                << e.updated_at << "\t"
+                                << WideToUtf8(e.id) << "\n";
+                        }
+                        out.flush();
+                        SetWindowTextW(hLblStatus, L"✅ ব্যক্তিগত শব্দভাণ্ডার এক্সপোর্ট সম্পন্ন হয়েছে!");
+                    }
                 }
             } else if (wmId == IDC_BTN_RESET_DEF) {
                 g_settings = AppSettings();

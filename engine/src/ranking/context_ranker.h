@@ -37,7 +37,7 @@ public:
         const std::unordered_map<std::string, float>& user_dict_boosts,
         bool auto_correct_enabled,
         float auto_correct_threshold,
-        size_t max_candidates = 5
+        size_t max_candidates = 6
     ) const;
 
     std::vector<ScoredCandidate> PredictNextWords(

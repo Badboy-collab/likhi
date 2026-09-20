@@ -160,6 +160,55 @@ void PhoneticParser::ExpandState(const std::string& roman, const ParseState& sta
         append_consonant(CONSONANT_DDHA, 3, 0.0f); // ঢ
         return;
     }
+    if (MatchPrefix(roman, pos, "shsh") || MatchPrefix(roman, pos, "ssh")) {
+        size_t consumed = MatchPrefix(roman, pos, "shsh") ? 4 : 3;
+        ParseState s = state;
+        if (state.in_consonant && state.last_consonant != 0) {
+            s.bengali.push_back(HASANT);
+        }
+        s.bengali += {CONSONANT_SA, HASANT, CONSONANT_YA}; // স্য
+        s.roman_pos = pos + consumed;
+        s.penalty += 0.01f;
+        s.in_consonant = true;
+        s.last_consonant = CONSONANT_YA;
+        next_states.push_back(s);
+
+        ParseState s2 = state;
+        if (state.in_consonant && state.last_consonant != 0) {
+            s2.bengali.push_back(HASANT);
+        }
+        s2.bengali += {CONSONANT_SHA, HASANT, CONSONANT_SHA}; // শ + শ
+        s2.roman_pos = pos + consumed;
+        s2.penalty += 0.02f;
+        s2.in_consonant = true;
+        s2.last_consonant = CONSONANT_SHA;
+        next_states.push_back(s2);
+        return;
+    }
+    if (MatchPrefix(roman, pos, "ss")) {
+        ParseState s = state;
+        if (state.in_consonant && state.last_consonant != 0) {
+            s.bengali.push_back(HASANT);
+        }
+        s.bengali += {CONSONANT_SA, HASANT, CONSONANT_YA}; // স্য
+        s.roman_pos = pos + 2;
+        s.penalty += 0.01f;
+        s.in_consonant = true;
+        s.last_consonant = CONSONANT_YA;
+        next_states.push_back(s);
+
+        ParseState s2 = state;
+        if (state.in_consonant && state.last_consonant != 0) {
+            s2.bengali.push_back(HASANT);
+        }
+        s2.bengali += {CONSONANT_SA, HASANT, CONSONANT_SA}; // স্স
+        s2.roman_pos = pos + 2;
+        s2.penalty += 0.02f;
+        s2.in_consonant = true;
+        s2.last_consonant = CONSONANT_SA;
+        next_states.push_back(s2);
+        return;
+    }
 
     // 2. Digraph Consonants
     if (MatchPrefix(roman, pos, "kh")) {
@@ -229,9 +278,17 @@ void PhoneticParser::ExpandState(const std::string& roman, const ParseState& sta
         append_vowel(VOWEL_UU, KAR_UU, 2, 0.02f);
         return;
     }
-    if (MatchPrefix(roman, pos, "ri") || MatchPrefix(roman, pos, "rri")) {
-        append_vowel(VOWEL_RI, KAR_RI, (MatchPrefix(roman, pos, "rri") ? 3 : 2), 0.0f);
+    if (MatchPrefix(roman, pos, "rri")) {
+        append_vowel(VOWEL_RI, KAR_RI, 3, 0.0f);
         return;
+    }
+    if (MatchPrefix(roman, pos, "ri")) {
+        if (pos == 0) {
+            append_vowel(VOWEL_RI, KAR_RI, 2, 0.02f);
+        } else if (state.in_consonant) {
+            append_vowel(VOWEL_RI, KAR_RI, 2, 0.05f);
+        }
+        // Fall through to allow 'r' + 'i' (CONSONANT_RA + KAR_I) to evaluate normally
     }
     if (MatchPrefix(roman, pos, "oi")) {
         append_vowel(VOWEL_OI, KAR_OI, 2, 0.0f);
@@ -278,14 +335,17 @@ void PhoneticParser::ExpandState(const std::string& roman, const ParseState& sta
             break;
         case 'c':
             append_consonant(CONSONANT_CA, 1, 0.0f);
+            append_consonant(CONSONANT_CHA, 1, 0.02f); // c -> ছ
             append_consonant(CONSONANT_KA, 1, 0.05f);
             break;
         case 'C':
             append_consonant(CONSONANT_CHA, 1, 0.0f);
+            append_consonant(CONSONANT_CA, 1, 0.02f);
             break;
         case 'j':
             append_consonant(CONSONANT_JA, 1, 0.0f);
             append_consonant(CONSONANT_YA, 1, 0.01f);
+            append_consonant(CONSONANT_JHA, 1, 0.03f); // j -> ঝ
             break;
         case 'J':
             append_consonant(CONSONANT_JHA, 1, 0.0f);
@@ -337,18 +397,21 @@ void PhoneticParser::ExpandState(const std::string& roman, const ParseState& sta
             break;
         case 'r':
             append_consonant(CONSONANT_RA, 1, 0.0f);
-            append_consonant(CONSONANT_RRA, 1, 0.04f);
+            append_consonant(CONSONANT_RRA, 1, 0.03f); // r -> ড়
+            append_consonant(CONSONANT_RHA, 1, 0.05f); // r -> ঢ়
             break;
         case 'R':
             append_consonant(CONSONANT_RRA, 1, 0.0f);
-            append_consonant(CONSONANT_RA, 1, 0.05f);
+            append_consonant(CONSONANT_RA, 1, 0.03f);
+            append_consonant(CONSONANT_RHA, 1, 0.05f);
             break;
         case 'l': case 'L':
             append_consonant(CONSONANT_LA, 1, 0.0f);
             break;
         case 's':
             append_consonant(CONSONANT_SA, 1, 0.0f);
-            append_consonant(CONSONANT_SHA, 1, 0.02f);
+            append_consonant(CONSONANT_SHA, 1, 0.02f); // s -> শ
+            append_consonant(CONSONANT_SSA, 1, 0.04f); // s -> ষ
             break;
         case 'S':
             append_consonant(CONSONANT_SHA, 1, 0.0f);

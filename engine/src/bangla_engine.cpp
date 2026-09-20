@@ -25,6 +25,8 @@ struct BanglaEngine {
     EngineConfig config;
     std::string composition;
     std::vector<std::string> sentence_history;
+    std::string lexicon_binary_path_storage;
+    std::string user_dict_path_storage;
 
     bangla::PhoneticParser phonetic_parser;
     bangla::LexiconTrie lexicon;
@@ -34,23 +36,31 @@ struct BanglaEngine {
     BanglaEngine(const EngineConfig* cfg) {
         if (cfg) {
             config = *cfg;
+            if (cfg->lexicon_binary_path) {
+                lexicon_binary_path_storage = cfg->lexicon_binary_path;
+                config.lexicon_binary_path = lexicon_binary_path_storage.c_str();
+            }
+            if (cfg->user_dict_path) {
+                user_dict_path_storage = cfg->user_dict_path;
+                config.user_dict_path = user_dict_path_storage.c_str();
+            }
         } else {
             BanglaEngine_GetDefaultConfig(&config);
         }
 
         lexicon.LoadDefaultVocabulary();
 
-        if (config.lexicon_binary_path && strlen(config.lexicon_binary_path) > 0) {
-            lexicon.LoadFromFile(config.lexicon_binary_path);
+        if (!lexicon_binary_path_storage.empty()) {
+            lexicon.LoadFromFile(lexicon_binary_path_storage);
         }
-        if (config.user_dict_path && strlen(config.user_dict_path) > 0) {
-            personal_dict.LoadFromFile(config.user_dict_path);
+        if (!user_dict_path_storage.empty()) {
+            personal_dict.LoadFromFile(user_dict_path_storage);
         }
     }
 
     ~BanglaEngine() {
-        if (config.user_dict_path && strlen(config.user_dict_path) > 0) {
-            personal_dict.SaveToFile(config.user_dict_path);
+        if (!user_dict_path_storage.empty()) {
+            personal_dict.SaveToFile(user_dict_path_storage);
         }
     }
 };
@@ -59,7 +69,7 @@ void BanglaEngine_GetDefaultConfig(EngineConfig* config) {
     if (!config) return;
     config->auto_correct_enabled = false;
     config->auto_correct_threshold = 0.85f;
-    config->max_candidates = 5;
+    config->max_candidates = 6;
     config->lexicon_binary_path = nullptr;
     config->user_dict_path = nullptr;
 }
@@ -103,11 +113,15 @@ const char* BanglaEngine_GetComposition(const BanglaEngine* engine) {
     return engine->composition.c_str();
 }
 
-void BanglaEngine_CommitWord(BanglaEngine* engine, const char* bengali_word) {
+void BanglaEngine_CommitWordWithOrigin(BanglaEngine* engine, const char* roman_origin, const char* bengali_word) {
+    (void)roman_origin;
     if (!engine || !bengali_word) return;
     engine->sentence_history.push_back(bengali_word);
-    engine->personal_dict.IncrementFrequency(bengali_word);
     engine->composition.clear();
+}
+
+void BanglaEngine_CommitWord(BanglaEngine* engine, const char* bengali_word) {
+    BanglaEngine_CommitWordWithOrigin(engine, "", bengali_word);
 }
 
 void BanglaEngine_ResetContext(BanglaEngine* engine) {
@@ -128,6 +142,49 @@ void BanglaEngine_GetCandidates(BanglaEngine* engine, CandidateList* out_list) {
         return;
     }
 
+    // 0. Emoji shortcuts: if composition starts with ':', match standard emojis
+    if (engine->composition[0] == ':') {
+        static const std::pair<const char*, const char*> kEmojis[] = {
+            {":smile:", "😊"},
+            {":joy:", "😂"},
+            {":love:", "❤️"},
+            {":heart:", "❤️"},
+            {":like:", "👍"},
+            {":thumbsup:", "👍"},
+            {":ok:", "👌"},
+            {":fire:", "🔥"},
+            {":star:", "⭐"},
+            {":clap:", "👏"},
+            {":pray:", "🙏"},
+            {":100:", "💯"},
+            {":sad:", "😢"},
+            {":cry:", "😭"},
+            {":cool:", "😎"},
+            {":wink:", "😉"},
+            {":party:", "🎉"},
+            {":flower:", "🌸"}
+        };
+        std::string lower_comp = engine->composition;
+        for (char& c : lower_comp) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+        out_list->count = 0;
+        for (const auto& em : kEmojis) {
+            std::string tag = em.first;
+            if (tag == lower_comp || (tag.rfind(lower_comp, 0) == 0 && lower_comp.size() >= 2)) {
+                if (out_list->count >= engine->config.max_candidates) break;
+                strncpy(out_list->candidates[out_list->count].bengali_text, em.second, sizeof(out_list->candidates[out_list->count].bengali_text) - 1);
+                strncpy(out_list->candidates[out_list->count].roman_origin, engine->composition.c_str(), sizeof(out_list->candidates[out_list->count].roman_origin) - 1);
+                out_list->candidates[out_list->count].score = 1.0f;
+                out_list->candidates[out_list->count].category_flags = CANDIDATE_FLAG_PRIMARY | CANDIDATE_FLAG_EXACT_MATCH;
+                out_list->candidates[out_list->count].auto_correct_recommended = false;
+                out_list->count++;
+            }
+        }
+        if (out_list->count > 0) {
+            return;
+        }
+    }
+
     // 1. Generate phonetic candidates via beam search
     std::vector<bangla::PhoneticCandidate> phonetic_cands = engine->phonetic_parser.Parse(engine->composition, 8);
 
@@ -139,6 +196,7 @@ void BanglaEngine_GetCandidates(BanglaEngine* engine, CandidateList* out_list) {
     std::unordered_map<std::string, float> user_boosts;
     for (const auto& ue : user_entries) {
         user_boosts[ue.bengali_word] = 1.0f;
+
         bangla::PhoneticCandidate pc;
         pc.text = ue.bengali_word;
         pc.score = 1.0f;
@@ -158,41 +216,77 @@ void BanglaEngine_GetCandidates(BanglaEngine* engine, CandidateList* out_list) {
         engine->config.max_candidates
     );
 
-    // 5. Curated override dictionary wins: any lexicon entry flagged as an
-    //    override that exactly matches the typed roman key is emitted first,
-    //    in lexicon frequency order (i.e. file order in roman_overrides.txt).
+    // 5. User Personal Dictionary Entries + Curated Exact Overrides:
+    // Personal dictionary entries explicitly defined by the user take top priority.
     std::string lower_composition = engine->composition;
     std::transform(lower_composition.begin(), lower_composition.end(), lower_composition.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    std::vector<std::string> override_texts;
+    std::vector<std::string> priority_texts;
+
+    // 5a. Explicit User Personal Dictionary Entries (Top Priority)
+    for (const auto& ue : user_entries) {
+        if (std::find(priority_texts.begin(), priority_texts.end(), ue.bengali_word) == priority_texts.end()) {
+            priority_texts.push_back(ue.bengali_word);
+        }
+    }
+
+    // 5b. Curated exact overrides (matching Google Input Tools: authoritative dictionary spellings)
     if (!lower_composition.empty()) {
         auto exact = engine->lexicon.SearchRoman(lower_composition, 8);
         for (const auto& rm : exact) {
             if ((rm.flags & kLexiconOverrideFlag) == 0) continue;
-            if (std::find(override_texts.begin(), override_texts.end(), rm.bengali_word) == override_texts.end()) {
-                override_texts.push_back(rm.bengali_word);
+            if (std::find(priority_texts.begin(), priority_texts.end(), rm.bengali_word) == priority_texts.end()) {
+                priority_texts.push_back(rm.bengali_word);
             }
         }
     }
 
-    // 6. Populate output list: overrides first, then remaining ranked candidates.
+    // 5c. Context-aware sorting of priority texts: if bigram context boosts an override candidate, respect it
+    if (priority_texts.size() > 1 && !ranked.empty() && !prev_word.empty()) {
+        bool has_any_bigram = false;
+        for (const auto& r : ranked) {
+            if (r.bigram_score > 0.0f) {
+                has_any_bigram = true;
+                break;
+            }
+        }
+        if (has_any_bigram) {
+            std::stable_sort(priority_texts.begin(), priority_texts.end(), [&](const std::string& a, const std::string& b) {
+                float bigram_a = 0.0f;
+                float bigram_b = 0.0f;
+                for (const auto& r : ranked) {
+                    if (r.bengali_text == a) bigram_a = r.bigram_score;
+                    if (r.bengali_text == b) bigram_b = r.bigram_score;
+                }
+                return bigram_a > bigram_b;
+            });
+        }
+    }
+
+    // 6. Populate output list: priority texts (personal + overrides) first, then remaining ranked candidates.
     out_list->count = 0;
-    float override_score = 1.0f;
+    float priority_score = 1.0f;
     const uint32_t max_out = static_cast<uint32_t>(engine->config.max_candidates);
-    for (const auto& ov_text : override_texts) {
+    for (const auto& p_text : priority_texts) {
         if (out_list->count >= max_out) break;
-        strncpy(out_list->candidates[out_list->count].bengali_text, ov_text.c_str(), sizeof(out_list->candidates[out_list->count].bengali_text) - 1);
+        strncpy(out_list->candidates[out_list->count].bengali_text, p_text.c_str(), sizeof(out_list->candidates[out_list->count].bengali_text) - 1);
         strncpy(out_list->candidates[out_list->count].roman_origin, engine->composition.c_str(), sizeof(out_list->candidates[out_list->count].roman_origin) - 1);
-        out_list->candidates[out_list->count].score = override_score;
+        out_list->candidates[out_list->count].score = priority_score;
         out_list->candidates[out_list->count].category_flags = CANDIDATE_FLAG_PRIMARY | CANDIDATE_FLAG_EXACT_MATCH;
+        for (const auto& ue : user_entries) {
+            if (ue.bengali_word == p_text) {
+                out_list->candidates[out_list->count].category_flags |= CANDIDATE_FLAG_PERSONAL;
+                break;
+            }
+        }
         out_list->candidates[out_list->count].auto_correct_recommended =
-            (engine->config.auto_correct_enabled && override_score >= engine->config.auto_correct_threshold - 1e-4f);
+            (engine->config.auto_correct_enabled && priority_score >= engine->config.auto_correct_threshold - 1e-4f);
         out_list->count++;
-        override_score -= 0.001f;
+        priority_score -= 0.001f;
     }
     for (uint32_t i = 0; i < static_cast<uint32_t>(ranked.size()) && out_list->count < max_out; i++) {
-        if (std::find(override_texts.begin(), override_texts.end(), ranked[i].bengali_text) != override_texts.end()) {
-            continue; // already emitted as an override
+        if (std::find(priority_texts.begin(), priority_texts.end(), ranked[i].bengali_text) != priority_texts.end()) {
+            continue; // already emitted as a priority item
         }
         strncpy(out_list->candidates[out_list->count].bengali_text, ranked[i].bengali_text.c_str(), sizeof(out_list->candidates[out_list->count].bengali_text) - 1);
         strncpy(out_list->candidates[out_list->count].roman_origin, ranked[i].roman_origin.c_str(), sizeof(out_list->candidates[out_list->count].roman_origin) - 1);
@@ -279,7 +373,7 @@ bool BanglaEngine_TransliterateSentence(BanglaEngine* engine, const char* roman_
         chosen += trailing_punct;
 
         committed.push_back(chosen);
-        BanglaEngine_CommitWord(engine, committed_word.c_str());
+        BanglaEngine_CommitWordWithOrigin(engine, token.c_str(), committed_word.c_str());
     }
 
     std::string result;
@@ -299,10 +393,28 @@ bool BanglaEngine_TransliterateSentence(BanglaEngine* engine, const char* roman_
 
 bool BanglaEngine_AddUserWord(BanglaEngine* engine, const char* roman_key, const char* bengali_word) {
     if (!engine || !roman_key || !bengali_word) return false;
-    return engine->personal_dict.AddWord(roman_key, bengali_word);
+    bool ok = engine->personal_dict.AddWord(roman_key, bengali_word);
+    if (ok && !engine->user_dict_path_storage.empty()) {
+        engine->personal_dict.SaveToFile(engine->user_dict_path_storage);
+    }
+    return ok;
 }
 
 bool BanglaEngine_RemoveUserWord(BanglaEngine* engine, const char* roman_key, const char* bengali_word) {
     if (!engine || !roman_key || !bengali_word) return false;
-    return engine->personal_dict.RemoveWord(roman_key, bengali_word);
+    bool ok = engine->personal_dict.RemoveWord(roman_key, bengali_word);
+    if (ok && !engine->user_dict_path_storage.empty()) {
+        engine->personal_dict.SaveToFile(engine->user_dict_path_storage);
+    }
+    return ok;
+}
+
+bool BanglaEngine_ReloadUserDict(BanglaEngine* engine) {
+    if (!engine || engine->user_dict_path_storage.empty()) return false;
+    return engine->personal_dict.LoadFromFile(engine->user_dict_path_storage);
+}
+
+void BanglaEngine_SetAutoCorrectEnabled(BanglaEngine* engine, bool enabled) {
+    if (!engine) return;
+    engine->config.auto_correct_enabled = enabled;
 }

@@ -1,5 +1,6 @@
 #include "../include/text_service.h"
 #include "../include/key_policy.h"
+#include "../include/tsf_log.h"
 #include <iostream>
 
 namespace bangla_tsf {
@@ -84,6 +85,10 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* pic, WPARAM wParam, LPARAM l
 
     KeyDecision d = DecideKey(st);
 
+    TsfLog("OnTestKeyDown: pic=%p vk=0x%X ('%c') comp=%d eat=%d act=%d comm_first=%d",
+           pic, (UINT)wParam, (wParam >= 32 && wParam <= 126) ? (char)wParam : '?',
+           st.composing, d.eat, (int)d.action, d.commit_first);
+
     // Pass-through keys that break composition: commit BEFORE the host sees
     // the key so the number/Shift+letter/Tab/F-key/navigation lands AFTER the
     // committed Bengali word (e.g. "am"+"0" → "আম0", never "0আম").
@@ -111,6 +116,10 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* pic, WPARAM wParam, LPARAM lPara
     st.digit_selectable   = ComputeDigitSelectable(wParam, st.numlock, composition_mgr_);
 
     KeyDecision d = DecideKey(st);
+    TsfLog("OnKeyDown: pic=%p vk=0x%X ('%c') eat=%d act=%d",
+           pic, (UINT)wParam, (wParam >= 32 && wParam <= 126) ? (char)wParam : '?',
+           d.eat, (int)d.action);
+
     if (!d.eat) {
         // Host processes the key natively; we never touched it in OnKeyDown.
         *pfEaten = FALSE;
@@ -121,9 +130,8 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* pic, WPARAM wParam, LPARAM lPara
         case KeyAction::kProcessCharacter: {
             char ch = static_cast<char>(wParam);
             bool caps_lock = (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
-            // Shift is never eaten (always passes through), so only CapsLock
-            // can alter the case of a letter we actually process here.
-            if (caps_lock) {
+            bool is_upper = (st.shift ^ caps_lock);
+            if (is_upper) {
                 if (ch >= 'a' && ch <= 'z') ch = ch - 'a' + 'A';
             } else {
                 if (ch >= 'A' && ch <= 'Z') ch = ch - 'A' + 'a';

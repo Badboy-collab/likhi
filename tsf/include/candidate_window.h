@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <cstdint>
 
 namespace bangla_tsf {
 
@@ -18,7 +19,7 @@ public:
     bool Initialize(HINSTANCE hInst);
     void Destroy();
 
-    void ShowCandidates(const std::vector<std::wstring>& candidates, size_t selected_index, const RECT& caret_rect);
+    void ShowCandidates(const std::vector<std::wstring>& candidates, size_t selected_index, const RECT& caret_rect, const std::wstring& roman_input = L"");
     void Hide();
     bool IsVisible() const { return is_visible_; }
 
@@ -26,6 +27,9 @@ public:
     size_t GetSelectedIndex() const { return selected_index_; }
     void SelectNext();
     void SelectPrev();
+
+    HWND GetHwnd() const { return hwnd_; }
+    const RECT& GetCaretRect() const { return caret_rect_; }
 
 private:
     static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
@@ -37,15 +41,18 @@ private:
     HWND hwnd_;
     HINSTANCE hinst_;
     bool is_visible_;
+    std::wstring roman_input_;
     std::vector<std::wstring> candidates_;
     std::vector<RECT> candidate_item_rects_;
+    RECT up_button_rect_;
+    RECT down_button_rect_;
     size_t selected_index_;
     RECT caret_rect_;
     SelectionCallback selection_callback_;
 
     HFONT hfont_bengali_;
     HFONT hfont_number_;
-    HFONT hfont_score_;
+    HFONT hfont_header_;
 
     int width_;
     int height_;

@@ -231,7 +231,104 @@ int main() {
         comp_mgr.OnFocusLost(nullptr);
         ASSERT_TSF_TRUE(!comp_mgr.IsComposing(), "Composition safely closed on focus loss");
     }
-    std::cout << "  [PASS] Punctuation and focus switching handling verified.\n\n";
+    // =========================================================================
+    // SUITE 8: Requested High-Frequency Words & Engine Offline Transliteration
+    // =========================================================================
+    std::cout << "=== [SUITE 8] Requested Words & Engine Offline Transliteration ===\n";
+    {
+        // 1. Vocabulary Overrides
+        struct WordTest {
+            std::string roman;
+            std::wstring expected_bengali;
+        };
+        std::vector<WordTest> word_tests = {
+            {"use", L"ইউস"},
+            {"babohar", L"ব্যবহার"},
+            {"jotokhon", L"যতক্ষণ"},
+            {"totokhon", L"ততক্ষণ"},
+            {"kichukhon", L"কিছুক্ষণ"},
+            {"sarakhon", L"সারাক্ষণ"},
+            {"saradin", L"সারাদিন"},
+            {"jotodin", L"যতদিন"},
+            {"totodin", L"ততদিন"},
+            {"porishkar", L"পরিষ্কার"},
+            {"poriskar", L"পরিষ্কার"},
+            {"suchi", L"শুচি"},
+            {"suddho", L"শুদ্ধ"},
+            {"saf", L"সাফ"},
+            {"pobitro", L"পবিত্র"},
+            {"nirmol", L"নির্মল"},
+            {"sohojboddo", L"সহজবোধ্য"},
+            {"sohojbodho", L"সহজবোধ্য"},
+            {"najjo", L"ন্যায্য"},
+            {"cholonsoi", L"চলনসই"},
+            {"sundor", L"সুন্দর"},
+            {"obadh", L"অবাধ"},
+            {"ujjol", L"উজ্জ্বল"},
+            {"bisudhho", L"বিশুদ্ধ"},
+            {"khati", L"খাঁটি"},
+            {"poripati", L"পরিপাটি"},
+            {"chimcham", L"ছিমছাম"},
+            {"susrikhono", L"সুশৃঙ্খল"},
+            {"fitfat", L"ফিটফাট"},
+            {"porichonno", L"পরিচ্ছন্ন"},
+            {"sushongoto", L"সুসঙ্গত"},
+            {"songlogno", L"সংলগ্ন"},
+            {"songsokto", L"সংসক্ত"},
+            {"ekotro", L"একত্র"},
+            {"sommilito", L"সম্মিলিত"},
+            {"soscho", L"স্বচ্ছ"},
+            {"prajol", L"প্রাঞ্জল"},
+            {"okolokko", L"অকলঙ্ক"},
+            {"onindo", L"অনিন্দ্য"},
+            {"vassor", L"ভাস্বর"},
+            {"anshuman", L"অংশুমান"},
+            {"spostobokta", L"স্পষ্টবক্তা"},
+            {"okopot", L"অকপট"},
+            {"ruju", L"ঋজু"},
+            {"omayik", L"অমায়িক"},
+            {"budhiman", L"বুদ্ধিমান"},
+            {"medhabi", L"মেধাবী"},
+            {"chotur", L"চতুর"},
+            {"chalak", L"চালাক"},
+            {"motiman", L"মতিমান"},
+            {"sustho", L"সুস্থ"},
+            {"shasthokor", L"স্বাস্থ্যকর"},
+            {"shasthoban", L"স্বাস্থ্যবান"},
+            {"niramoi", L"নিরাময়"},
+            {"finfine", L"ফিনফিনে"},
+            {"sfotik", L"স্ফটিক"},
+            {"jilliboth", L"ঝিল্লিবৎ"},
+            {"mayamoi", L"মায়াময়"},
+            {"obostha", L"অবস্থা"},
+            {"dosa", L"দশা"},
+            {"khosmejaje", L"খোসমেজাজে"},
+            {"pottokhogochor", L"প্রত্যক্ষগোচর"},
+            {"sonsoiviti", L"সংশয়াতীত"}
+        };
+
+        for (const auto& wt : word_tests) {
+            for (char ch : wt.roman) comp_mgr.OnCharacter(nullptr, ch);
+            const auto& cands = comp_mgr.GetCurrentCandidates();
+            ASSERT_TSF_TRUE(!cands.empty(), "Candidates generated for " + wt.roman);
+            if (!cands.empty()) {
+                ASSERT_TSF_TRUE(cands[0] == wt.expected_bengali,
+                                wt.roman + " -> candidate 0 matches expected override");
+            }
+            comp_mgr.OnSpace(nullptr);
+        }
+
+        // 2. Offline Determinism & High-Frequency Validation
+        // Verify 'amar' generates Bengali candidates purely locally without any network
+        for (char ch : std::string("amar")) comp_mgr.OnCharacter(nullptr, ch);
+        const auto& amar_cands = comp_mgr.GetCurrentCandidates();
+        ASSERT_TSF_TRUE(!amar_cands.empty(), "Offline candidate list generated for 'amar'");
+        if (!amar_cands.empty()) {
+            ASSERT_TSF_TRUE(amar_cands[0] == L"আমার", "Local candidate 0 for 'amar' is 'আমার'");
+        }
+        comp_mgr.OnSpace(nullptr);
+    }
+    std::cout << "  [PASS] Requested words and Engine Offline Transliteration verified.\n\n";
 
     comp_mgr.Shutdown();
 

@@ -134,13 +134,39 @@ int main() {
         win_d.win = true;
         Check(!DecideKey(win_d).eat, "Win+D never eaten");
 
-        // Shift+letter -> native capital letter, never eaten
-        KeyState shift_a = St('A');
-        shift_a.shift = true;
-        shift_a.composing = true;
-        KeyDecision dsa = DecideKey(shift_a);
-        Check(!dsa.eat && dsa.commit_first,
-              "Shift+A while composing: not eaten, commits BEFORE host types 'A'");
+        // Shift+letter -> phonetic composition input (e.g. Shift+B, Shift+N, Shift+T)
+        KeyState shift_b = St('B');
+        shift_b.shift = true;
+        shift_b.composing = true;
+        KeyDecision dsb = DecideKey(shift_b);
+        Check(dsb.eat && dsb.action == KeyAction::kProcessCharacter && !dsb.commit_first,
+              "Shift+B while composing: eaten as phonetic composition input (kProcessCharacter)");
+
+        KeyState shift_n = St('N');
+        shift_n.shift = true;
+        shift_n.composing = true;
+        KeyDecision dsn = DecideKey(shift_n);
+        Check(dsn.eat && dsn.action == KeyAction::kProcessCharacter && !dsn.commit_first,
+              "Shift+N while composing: eaten as phonetic composition input (kProcessCharacter)");
+
+        KeyState shift_b_idle = St('B');
+        shift_b_idle.shift = true;
+        KeyDecision dsbi = DecideKey(shift_b_idle);
+        Check(dsbi.eat && dsbi.action == KeyAction::kProcessCharacter && !dsbi.commit_first,
+              "Shift+B while idle: eaten, starts phonetic composition input (kProcessCharacter)");
+
+        // Shortcut safety: Ctrl+B and Ctrl+N must remain pass-through
+        KeyState ctrl_b = St('B');
+        ctrl_b.ctrl = true;
+        ctrl_b.composing = true;
+        KeyDecision dcb = DecideKey(ctrl_b);
+        Check(!dcb.eat && dcb.commit_first, "Ctrl+B while composing: not eaten, commits first (Word Bold)");
+
+        KeyState ctrl_n = St('N');
+        ctrl_n.ctrl = true;
+        ctrl_n.composing = true;
+        KeyDecision dcn = DecideKey(ctrl_n);
+        Check(!dcn.eat && dcn.commit_first, "Ctrl+N while composing: not eaten, commits first (Word New)");
 
         // Shift+digit -> native symbol (! @ # ...), never eaten
         KeyState shift_1 = St('1');
@@ -392,7 +418,8 @@ int main() {
     Section("Period -> Bengali Dāri");
     {
         KeyDecision idle = DecideKey(St(VK_OEM_PERIOD));
-        Check(!idle.eat, "Period not eaten when idle");
+        Check(idle.eat && idle.action == KeyAction::kProcessPeriod,
+              "Period idle: eaten, inserts Bengali Dāri (।)");
 
         KeyState comp = St(VK_OEM_PERIOD);
         comp.composing = true;
@@ -426,7 +453,7 @@ int main() {
             VK_ADD, VK_SUBTRACT, VK_MULTIPLY, VK_DIVIDE, VK_DECIMAL, VK_SEPARATOR,
             VK_NUMPAD0, VK_NUMPAD1, VK_NUMPAD2, VK_NUMPAD3, VK_NUMPAD4,
             VK_NUMPAD5, VK_NUMPAD6, VK_NUMPAD7, VK_NUMPAD8, VK_NUMPAD9,
-            VK_OEM_PERIOD, VK_OEM_COMMA, VK_OEM_MINUS, VK_OEM_PLUS,
+            VK_OEM_COMMA, VK_OEM_MINUS, VK_OEM_PLUS,
             VK_OEM_1, VK_OEM_2, VK_OEM_3, VK_OEM_4, VK_OEM_5, VK_OEM_6, VK_OEM_7,
             '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
             VK_CONTROL, VK_MENU, VK_SHIFT, VK_LWIN, VK_RWIN, VK_APPS

@@ -1,5 +1,6 @@
 #include "../include/text_service.h"
 #include "../include/bangla_tsf_clsid.h"
+#include "../include/tsf_log.h"
 #include <iostream>
 
 namespace bangla_tsf {
@@ -12,9 +13,11 @@ TextService::TextService()
       client_id_(TF_CLIENTID_NULL),
       thread_mgr_sink_cookie_(TF_INVALID_COOKIE),
       composition_mgr_(this) {
+    TsfLog("TextService::TextService constructed");
 }
 
 TextService::~TextService() {
+    TsfLog("TextService::~TextService destroyed");
     Deactivate();
 }
 
@@ -31,6 +34,8 @@ STDMETHODIMP TextService::QueryInterface(REFIID riid, void** ppvObj) {
         *ppvObj = static_cast<ITfKeyEventSink*>(this);
     } else if (IsEqualIID(riid, IID_ITfCompositionSink)) {
         *ppvObj = static_cast<ITfCompositionSink*>(this);
+    } else if (IsEqualIID(riid, IID_ITfDisplayAttributeProvider)) {
+        *ppvObj = static_cast<ITfDisplayAttributeProvider*>(this);
     }
 
     if (*ppvObj) {
@@ -53,6 +58,7 @@ STDMETHODIMP_(ULONG) TextService::Release() {
 }
 
 STDMETHODIMP TextService::Activate(ITfThreadMgr* ptim, TfClientId tid) {
+    TsfLog("TextService::Activate ptim=%p tid=%lu", ptim, tid);
     if (!ptim) return E_INVALIDARG;
 
     thread_mgr_ = ptim;
@@ -61,26 +67,31 @@ STDMETHODIMP TextService::Activate(ITfThreadMgr* ptim, TfClientId tid) {
 
     // 1. Initialize ThreadMgrEventSink
     if (!InitThreadMgrEventSink()) {
+        TsfLog("TextService::Activate FAIL: InitThreadMgrEventSink failed");
         Deactivate();
         return E_FAIL;
     }
 
     // 2. Initialize KeyEventSink
     if (!InitKeyEventSink()) {
+        TsfLog("TextService::Activate FAIL: InitKeyEventSink failed");
         Deactivate();
         return E_FAIL;
     }
 
     // 3. Initialize Composition Manager
     if (!composition_mgr_.Initialize(g_hInstance)) {
+        TsfLog("TextService::Activate FAIL: composition_mgr_.Initialize failed");
         Deactivate();
         return E_FAIL;
     }
 
+    TsfLog("TextService::Activate SUCCESS");
     return S_OK;
 }
 
 STDMETHODIMP TextService::Deactivate() {
+    TsfLog("TextService::Deactivate");
     UninitKeyEventSink();
     UninitThreadMgrEventSink();
 
@@ -170,6 +181,19 @@ STDMETHODIMP TextService::OnPopContext(ITfContext* pic) {
 STDMETHODIMP TextService::OnCompositionTerminated(TfEditCookie ecWrite, ITfComposition* pComposition) {
     composition_mgr_.OnCompositionTerminated(nullptr, pComposition);
     return S_OK;
+}
+
+STDMETHODIMP TextService::EnumDisplayAttributeInfo(IEnumTfDisplayAttributeInfo** ppEnum) {
+    if (!ppEnum) return E_INVALIDARG;
+    *ppEnum = nullptr;
+    return S_FALSE; // No custom display attributes
+}
+
+STDMETHODIMP TextService::GetDisplayAttributeInfo(REFGUID guid, ITfDisplayAttributeInfo** ppInfo) {
+    (void)guid;
+    if (!ppInfo) return E_INVALIDARG;
+    *ppInfo = nullptr;
+    return TF_E_NOPROVIDER;
 }
 
 } // namespace bangla_tsf

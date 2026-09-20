@@ -64,10 +64,12 @@ KeyDecision DecideKey(const KeyState& s) {
         return d;
     }
 
-    // 3. Shift combinations: full pass-through (Shift+letter / Shift+digit
-    //    keep the native Windows/application behavior). Commit first if
-    //    composing, BEFORE the host produces the shifted character.
-    if (s.shift) {
+    // 3. Shift combinations:
+    //    - Shift + pure alpha key (A-Z) is phonetic composition input (e.g. Shift+B, Shift+N, Shift+T).
+    //      Do not pass through; let it fall through to step 10 so it is eaten as kProcessCharacter.
+    //    - All other Shift combinations (Shift+digit e.g. Shift+1="!", Shift+nav, Shift+symbols)
+    //      pass through natively. Commit first if composing.
+    if (s.shift && !IsAlphaKey(s.vk)) {
         d.commit_first = s.composing;
         return d;
     }
@@ -172,11 +174,13 @@ KeyDecision DecideKey(const KeyState& s) {
         return d;
     }
 
-    // 15. Period → Bengali Dāri (।) while composing.
+    // 15. Period → Bengali Dāri (।) both while composing and in idle Bangla mode
     if (s.vk == VK_OEM_PERIOD) {
-        if (s.composing) {
+        if (!s.shift && !s.ctrl && !s.alt) {
             d.eat = true;
             d.action = KeyAction::kProcessPeriod;
+        } else if (s.shift) {
+            d.commit_first = s.composing;
         }
         return d;
     }
