@@ -13,6 +13,7 @@
 | **Phonetic & Engine Unit Tests** | `build/test_runner.exe` | 220 Cases | **100% (220/220)** |
 | **TSF Integration Suite** | `build/test_tsf_integration.exe` | 86 Cases | **100% (86/86)** |
 | **Real-World Live QA Runner** | `build/real_world_qa_runner.exe` | 90 Cases | **100% (90/90)** |
+| **Universal Mode Safety Gate** | `build/test_universal_typing.exe` | 86 Cases | **100% (86/86)** |
 | **520 Gold Sentences Benchmark** | `tools/benchmark_runner/benchmark_expanded.py` | 520 Sentences | **$\ge 98.0\%$ Accuracy** |
 | **Banglish Spelling Variations** | `tools/benchmark_runner/benchmark_expanded.py` | 45 Variations | **100% (45/45)** |
 
@@ -54,3 +55,35 @@
 - `TEST-VOCAB-001`: `battery` / `battary` / `batery` $\to$ `ব্যাটারি`.
 - `TEST-VOCAB-002`: `fan` $\to$ `ফ্যান`, `table` $\to$ `টেবিল`, `chair` $\to$ `চেয়ার`, `computer` $\to$ `কম্পিউটার`, `mouse` $\to$ `মাউস`, `control` $\to$ `কন্ট্রোল`, `office` $\to$ `অফিস`.
 - `TEST-ENG-001`: `office` $\to$ `অফিস | office | অফিসে` (Original English preserved).
+
+---
+
+## 4. Universal Mode Regression Catalog (non-TSF fallback path)
+
+Universal Mode exists because TSF cannot reach every host (UWP/Store apps such as
+WhatsApp Desktop, some Java UIs, games, remote sessions). It buffers the roman
+letters while they travel to the application and, at a word boundary, replaces
+them with the Bengali word typed as Unicode. Because that touches real text, the
+safety rules are a permanent gate (`build/test_universal_typing.exe`):
+
+### Never transformed (whatever is buffered, whatever the mode)
+- `TEST-UNI-001`: `Ctrl+C/V/X/A/Z/Y/S/F/P` $\to$ pass-through, **zero erasures**, and the pending word survives the chord.
+- `TEST-UNI-002`: `Ctrl+Space` (IME toggle) and `Win+Space` (language switch) $\to$ pass-through.
+- `TEST-UNI-003`: `Alt+letter`, `Alt+F4` $\to$ pass-through with no erasure.
+- `TEST-UNI-004`: `F1`-`F24` $\to$ pass-through, no erasure.
+- `TEST-UNI-005`: Arrows, `Home`, `End`, `Page Up/Down`, `Insert`, `Delete`, unknown/system keys $\to$ pass-through, no erasure, preview dropped (the caret may have moved).
+- `TEST-UNI-006`: Numpad digits and operators $\to$ pass-through, never transformed.
+- `TEST-UNI-007`: Modifiers and locks alone (`Shift`, `Ctrl`, `Alt`, `Caps Lock`, `Num Lock`, `Win`, Menu) $\to$ pass-through, preview kept.
+
+### Minimal-interference composition
+- `TEST-UNI-010`: With an empty preview, space/enter/tab/digits/punctuation are native (`12.5`, IP addresses and English text stay untouched).
+- `TEST-UNI-011`: Exactly one key per word is consumed: the word boundary.
+- `TEST-UNI-012`: `Backspace`/`Esc` are never consumed; they keep native behaviour and only adjust the preview (`TEST-P0-031` parity).
+- `TEST-UNI-013`: `space` commits the word with exactly one `U+0020`; a second space is native.
+- `TEST-UNI-014`: `.` after a word becomes the Bengali full stop `।`; other punctuation/digits are kept after the word.
+- `TEST-UNI-015`: Preview overflow (32 letters) leaves the rest of that word completely alone and requests no erasure.
+- `TEST-UNI-016`: Mode off, `Reset()` and caret/focus changes always leave nothing to replace.
+- `TEST-UNI-017`: Input mode policy — `TSF Only` never uses the universal path, `Universal Only` always does, `Automatic` stands down while TSF is active for the focused application.
+
+### Same engine, one personalisation
+- `TEST-UNI-020`: Universal Mode must transliterate through the shared `BanglaEngine` (same lexicon, fuzzy matcher, personal dictionary, learning) — it must never introduce a second transliteration engine.

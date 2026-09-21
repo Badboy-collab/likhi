@@ -173,6 +173,15 @@ add_executable(test_key_policy
 )
 target_link_libraries(test_key_policy PRIVATE user32)
 
+# Universal Mode (non-TSF fallback input path): pure decision layer, shared by
+# the Win32 host. No Windows types, so it is testable without a desktop session.
+add_library(likhi_universal_core STATIC universal/src/universal_typing.cpp)
+target_include_directories(likhi_universal_core PUBLIC universal/include)
+
+# Universal Mode safety regression target
+add_executable(test_universal_typing tests/unit/test_universal_typing.cpp)
+target_link_libraries(test_universal_typing PRIVATE likhi_universal_core)
+
 # Native Settings App Target
 add_executable(bangla_settings WIN32
     tools/settings_app/settings_main.cpp
@@ -315,6 +324,7 @@ else()
     target_link_options(test_tsf_integration PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_p0_keyboard PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_key_policy PRIVATE -static -static-libgcc -static-libstdc++)
+    target_link_options(test_universal_typing PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(benchmark_perf PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(inspect_unicode PRIVATE -static -static-libgcc -static-libstdc++)
 endif()
