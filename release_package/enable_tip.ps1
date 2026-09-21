@@ -37,7 +37,38 @@ try {
     Set-WinUILanguageOverride -Language "en-US" -ErrorAction SilentlyContinue
     Set-Culture "en-US" -ErrorAction SilentlyContinue
 
-    Set-WinUserLanguageList $list -Force
+    # 4. Unload any lingering ghost keyboard layouts via Win32 API
+    $unloaderCode = @"
+using System;
+using System.Runtime.InteropServices;
+public class GhostKbdCleaner {
+    [DllImport("user32.dll")]
+    public static extern bool UnloadKeyboardLayout(IntPtr hkl);
+    [DllImport("user32.dll")]
+    public static extern uint GetKeyboardLayoutList(int nBuff, [Out] IntPtr[] lpList);
+    public static void Clean() {
+        uint count = GetKeyboardLayoutList(0, null);
+        if (count == 0) return;
+        IntPtr[] list = new IntPtr[count];
+        GetKeyboardLayoutList((int)count, list);
+        for (int i = 0; i < count; i++) {
+            long hkl = list[i].ToInt64();
+            long lang = hkl & 0xFFFF;
+            if (lang != 0x0409 && lang != 0x0845 && lang != 0x0445) {
+                UnloadKeyboardLayout(list[i]);
+            }
+        }
+    }
+}
+"@
+    Add-Type -TypeDefinition $unloaderCode -ErrorAction SilentlyContinue
+    [GhostKbdCleaner]::Clean()
+
+    # 5. Restart TextInputHost to refresh UI flyout
+    Stop-Process -Name "TextInputHost" -Force -ErrorAction SilentlyContinue
+    Stop-Process -Name "ctfmon" -Force -ErrorAction SilentlyContinue
+    Start-Process "ctfmon.exe"
+
     Write-Output "SUCCESS: Likhi TIP cleanly configured (Default US English + Likhi Bangla)."
 } catch {
     Write-Warning "Failed to set WinUserLanguageList: $_"
