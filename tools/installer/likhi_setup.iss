@@ -25,8 +25,7 @@ OutputBaseFilename=Likhi_Setup_v{#MyAppVersion}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
-PrivilegesRequired=lowest
-PrivilegesRequiredOverridesAllowed=dialog commandline
+PrivilegesRequired=admin
 ArchitecturesInstallIn64BitMode=x64
 CloseApplications=force
 UninstallDisplayName={#MyAppFullName} - Intelligent Bangla Typing System
@@ -106,6 +105,8 @@ Root: HKA; Subkey: "Software\Microsoft\CTF\TIP\{{B4F1470A-7C69-4C62-972F-6379532
 Root: HKA; Subkey: "Software\Microsoft\CTF\TIP\{{B4F1470A-7C69-4C62-972F-6379532856E1}\Category\Item\{{B4F1470A-7C69-4C62-972F-6379532856E1}"; ValueType: dword; ValueName: "{{25504FB4-7BAB-4BC1-9C69-CF81890F0EF5}"; ValueData: 0; Flags: uninsdeletekey
 
 [Run]
+; Grant ALL APPLICATION PACKAGES permission to installation folder for UWP / Windows Store apps (WhatsApp Desktop)
+Filename: "icacls.exe"; Parameters: """{app}"" /grant ""*S-1-15-2-1:(OI)(CI)(RX)"" /T"; Flags: runhidden; StatusMsg: "Configuring security permissions for Windows Store apps..."
 ; Self-register the 64-bit DLL via regsvr32
 Filename: "{sys}\regsvr32.exe"; Parameters: "/s ""{app}\bangla_tsf.dll"""; StatusMsg: "Registering 64-bit Text Services Framework components..."
 ; Self-register the 32-bit DLL via 32-bit regsvr32 (for 32-bit apps like MS Office)
