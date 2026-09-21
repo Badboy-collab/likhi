@@ -76,7 +76,11 @@ HRESULT RegisterTSFProfiles(HINSTANCE hInst) {
     hr = CoCreateInstance(CLSID_TF_CategoryMgr, NULL, CLSCTX_INPROC_SERVER, IID_ITfCategoryMgr, (void**)&pCategoryMgr);
     if (SUCCEEDED(hr) && pCategoryMgr) {
         pCategoryMgr->RegisterCategory(CLSID_BanglaTextService, GUID_TFCAT_TIP_KEYBOARD, CLSID_BanglaTextService);
-        pCategoryMgr->RegisterCategory(CLSID_BanglaTextService, GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER, CLSID_BanglaTextService);
+        // NOTE: no GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER here. This service does
+        // not implement ITfDisplayAttributeProvider, and claiming the category
+        // made strict/immersive hosts fail to activate it. Unregister any entry
+        // left by older builds.
+        pCategoryMgr->UnregisterCategory(CLSID_BanglaTextService, GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER, CLSID_BanglaTextService);
         pCategoryMgr->Release();
     }
 

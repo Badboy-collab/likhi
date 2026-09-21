@@ -61,7 +61,6 @@ private:
     ITfThreadMgr* thread_mgr_;
     TfClientId client_id_;
     DWORD thread_mgr_sink_cookie_;
-
     CompositionManager composition_mgr_;
 };
 
