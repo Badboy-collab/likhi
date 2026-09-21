@@ -40,7 +40,22 @@ Remove-Item -Path "HKCU:\Software\Microsoft\CTF\TIP\$clsid" -Recurse -Force -Err
 Write-Host "`n[3/6] Removing old installation files in C:\Program Files\Likhi..." -ForegroundColor Yellow
 $installDir = "C:\Program Files\Likhi"
 if (Test-Path $installDir) {
-    Get-ChildItem -Path $installDir -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    # If DLLs are locked by active background apps, rename them so new files can be written cleanly
+    if (Test-Path "$installDir\bangla_tsf.dll") {
+        try {
+            Remove-Item -Path "$installDir\bangla_tsf.dll" -Force -ErrorAction Stop
+        } catch {
+            Move-Item -Path "$installDir\bangla_tsf.dll" -Destination "$installDir\bangla_tsf.dll.old" -Force -ErrorAction SilentlyContinue
+        }
+    }
+    if (Test-Path "$installDir\bangla_tsf32.dll") {
+        try {
+            Remove-Item -Path "$installDir\bangla_tsf32.dll" -Force -ErrorAction Stop
+        } catch {
+            Move-Item -Path "$installDir\bangla_tsf32.dll" -Destination "$installDir\bangla_tsf32.dll.old" -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Get-ChildItem -Path $installDir -Exclude "*.old" -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 } else {
     New-Item -ItemType Directory -Path $installDir -Force | Out-Null
 }

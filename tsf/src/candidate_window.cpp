@@ -3,20 +3,8 @@
 
 namespace bangla_tsf {
 
-static const wchar_t* WINDOW_CLASS_NAME = L"PC_Bangla_Candidate_Window_Class";
 
-static std::wstring ToBengaliDigits(size_t num) {
-    std::wstring s = std::to_wstring(num);
-    std::wstring res;
-    for (wchar_t ch : s) {
-        if (ch >= L'0' && ch <= L'9') {
-            res.push_back((wchar_t)(0x09E6 + (ch - L'0')));
-        } else {
-            res.push_back(ch);
-        }
-    }
-    return res + L".";
-}
+static const wchar_t* WINDOW_CLASS_NAME = L"PC_Bangla_Candidate_Window_Class";
 
 CandidateWindow::CandidateWindow()
     : hwnd_(nullptr),
@@ -26,8 +14,9 @@ CandidateWindow::CandidateWindow()
       hfont_bengali_(nullptr),
       hfont_number_(nullptr),
       hfont_header_(nullptr),
-      width_(115),
-      height_(190) {
+      hfont_hint_(nullptr),
+      width_(140),
+      height_(200) {
     memset(&caret_rect_, 0, sizeof(RECT));
     memset(&up_button_rect_, 0, sizeof(RECT));
     memset(&down_button_rect_, 0, sizeof(RECT));
@@ -66,34 +55,63 @@ bool CandidateWindow::Initialize(HINSTANCE hInst) {
 
     if (!hwnd_) return false;
 
-    // Create Clean Modern Fonts matching Google Translate / Input Tools
+    // Enable Windows 11 Rounded Corners dynamically if supported by OS
+    typedef HRESULT(WINAPI* PFN_DwmSetWindowAttribute)(HWND, DWORD, LPCVOID, DWORD);
+    HMODULE hDwm = LoadLibraryW(L"dwmapi.dll");
+    if (hDwm) {
+        PFN_DwmSetWindowAttribute pfnDwmSetWindowAttribute =
+            (PFN_DwmSetWindowAttribute)GetProcAddress(hDwm, "DwmSetWindowAttribute");
+        if (pfnDwmSetWindowAttribute) {
+            DWORD corner_preference = 2; // DWMWCP_ROUND (Windows 11 modern rounded corners)
+            pfnDwmSetWindowAttribute(hwnd_, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */,
+                                     &corner_preference, sizeof(corner_preference));
+        }
+        FreeLibrary(hDwm);
+    }
+
+    // Create Clean Modern Fonts matching Windows 11 Fluent UI
     hfont_header_ = CreateFontW(
-        -14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        -13, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+        L"Segoe UI Variable Text"
+    );
+    if (!hfont_header_) {
+        hfont_header_ = CreateFontW(
+            -13, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+            L"Segoe UI"
+        );
+    }
+
+    hfont_bengali_ = CreateFontW(
+        -17, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+        L"Nirmala UI"
+    );
+    if (!hfont_bengali_) {
+        hfont_bengali_ = CreateFontW(
+            -17, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+            L"Vrinda"
+        );
+    }
+
+    hfont_number_ = CreateFontW(
+        -11, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
         L"Segoe UI"
     );
 
-    hfont_bengali_ = CreateFontW(
-        -15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+    hfont_hint_ = CreateFontW(
+        -11, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"Vrinda"
-    );
-    if (!hfont_bengali_) {
-        hfont_bengali_ = CreateFontW(
-            -15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-            L"Nirmala UI"
-        );
-    }
-
-    hfont_number_ = CreateFontW(
-        -13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        L"Nirmala UI"
+        L"Segoe UI"
     );
 
     return true;
@@ -116,6 +134,10 @@ void CandidateWindow::Destroy() {
         DeleteObject(hfont_header_);
         hfont_header_ = nullptr;
     }
+    if (hfont_hint_) {
+        DeleteObject(hfont_hint_);
+        hfont_hint_ = nullptr;
+    }
     if (hinst_) {
         UnregisterClassW(WINDOW_CLASS_NAME, hinst_);
         hinst_ = nullptr;
@@ -128,10 +150,11 @@ void CandidateWindow::UpdateDimensions() {
     HDC hdc = GetDC(hwnd_);
     HFONT old_font = (HFONT)SelectObject(hdc, hfont_bengali_);
 
-    const int HEADER_H = 22;
-    const int ITEM_H = 23;
+    const int HEADER_H = 26;
+    const int ITEM_H = 28;
+    const int FOOTER_H = 24;
 
-    int max_content_w = 60;
+    int max_content_w = 120;
 
     // Header measurement
     if (!roman_input_.empty()) {
@@ -139,49 +162,45 @@ void CandidateWindow::UpdateDimensions() {
         SIZE header_sz;
         ZeroMemory(&header_sz, sizeof(header_sz));
         GetTextExtentPoint32W(hdc, roman_input_.c_str(), (int)roman_input_.size(), &header_sz);
-        if (header_sz.cx > max_content_w) max_content_w = header_sz.cx;
+        int header_w = header_sz.cx + 60;
+        if (header_w > max_content_w) max_content_w = header_w;
     }
 
     // Candidates measurement
     for (size_t i = 0; i < candidates_.size(); i++) {
-        SIZE num_sz, text_sz;
-        ZeroMemory(&num_sz, sizeof(num_sz));
+        SIZE text_sz;
         ZeroMemory(&text_sz, sizeof(text_sz));
-
-        SelectObject(hdc, hfont_number_);
-        std::wstring num_str = ToBengaliDigits(i + 1);
-        GetTextExtentPoint32W(hdc, num_str.c_str(), (int)num_str.size(), &num_sz);
 
         SelectObject(hdc, hfont_bengali_);
         GetTextExtentPoint32W(hdc, candidates_[i].c_str(), (int)candidates_[i].size(), &text_sz);
 
-        int line_w = num_sz.cx + text_sz.cx + 20;
+        int line_w = 40 + text_sz.cx + 16;
         if (line_w > max_content_w) max_content_w = line_w;
     }
 
     SelectObject(hdc, old_font);
     ReleaseDC(hwnd_, hdc);
 
-    // Dynamic width with sensible limits (105px to 280px)
-    width_ = (std::max)(105, max_content_w + 24);
-    if (width_ > 280) width_ = 280;
+    // Dynamic width with sensible limits (150px to 340px)
+    width_ = (std::max)(150, max_content_w);
+    if (width_ > 340) width_ = 340;
 
     candidate_item_rects_.clear();
     int cur_y = HEADER_H + 4;
 
     for (size_t i = 0; i < candidates_.size(); i++) {
-        RECT r = { 3, cur_y, width_ - 3, cur_y + ITEM_H };
+        RECT r = { 4, cur_y, width_ - 4, cur_y + ITEM_H };
         candidate_item_rects_.push_back(r);
         cur_y += ITEM_H;
     }
 
-    // Small square pagination buttons at the bottom: [ ^ ] [ v ]
-    int btn_size = 17;
+    // Footer buttons and hint
+    int btn_size = 18;
     int footer_y = cur_y + 4;
     up_button_rect_ = { 8, footer_y, 8 + btn_size, footer_y + btn_size };
     down_button_rect_ = { 8 + btn_size + 4, footer_y, 8 + btn_size * 2 + 4, footer_y + btn_size };
 
-    height_ = footer_y + btn_size + 7;
+    height_ = footer_y + FOOTER_H;
 }
 
 void CandidateWindow::ShowCandidates(const std::vector<std::wstring>& candidates, size_t selected_index, const RECT& caret_rect, const std::wstring& roman_input) {
@@ -262,70 +281,117 @@ void CandidateWindow::OnPaint(HWND hWnd) {
     HBITMAP memBitmap = CreateCompatibleBitmap(hdc, client_rect.right, client_rect.bottom);
     HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, memBitmap);
 
-    // 1. Pure White Background
+    // 1. Fluent background (Pure white card)
     HBRUSH bg_brush = CreateSolidBrush(RGB(255, 255, 255));
     FillRect(memDC, &client_rect, bg_brush);
     DeleteObject(bg_brush);
 
     SetBkMode(memDC, TRANSPARENT);
 
-    // 2. Header Row (Input buffer with blue caret)
+    const int HEADER_H = 26;
+
+    // 2. Header Area
+    RECT header_bg = { 0, 0, client_rect.right, HEADER_H };
+    HBRUSH hdr_bg_brush = CreateSolidBrush(RGB(249, 250, 252));
+    FillRect(memDC, &header_bg, hdr_bg_brush);
+    DeleteObject(hdr_bg_brush);
+
+    // Header divider line
+    HPEN div_pen = CreatePen(PS_SOLID, 1, RGB(232, 235, 240));
+    HPEN old_pen = (HPEN)SelectObject(memDC, div_pen);
+    MoveToEx(memDC, 0, HEADER_H, NULL);
+    LineTo(memDC, client_rect.right, HEADER_H);
+
+    // Input buffer with blue cursor
     if (!roman_input_.empty()) {
         SelectObject(memDC, hfont_header_);
-        SetTextColor(memDC, RGB(32, 33, 36));
-        RECT header_r = { 8, 4, client_rect.right - 8, 22 };
-        DrawTextW(memDC, roman_input_.c_str(), (int)roman_input_.size(), &header_r, DT_LEFT | DT_TOP | DT_SINGLELINE);
+        SetTextColor(memDC, RGB(24, 28, 36));
+        RECT header_r = { 10, 2, client_rect.right - 50, HEADER_H };
+        DrawTextW(memDC, roman_input_.c_str(), (int)roman_input_.size(), &header_r, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
-        // Blue cursor line right after roman input
+        // Vibrant blue cursor
         SIZE txt_sz;
         ZeroMemory(&txt_sz, sizeof(txt_sz));
         GetTextExtentPoint32W(memDC, roman_input_.c_str(), (int)roman_input_.size(), &txt_sz);
-        int caret_x = 8 + txt_sz.cx + 1;
-        HPEN caret_pen = CreatePen(PS_SOLID, 2, RGB(26, 115, 232));
-        HPEN old_pen = (HPEN)SelectObject(memDC, caret_pen);
-        MoveToEx(memDC, caret_x, 4, NULL);
-        LineTo(memDC, caret_x, 19);
-        SelectObject(memDC, old_pen);
+        int caret_x = 10 + txt_sz.cx + 2;
+        HPEN caret_pen = CreatePen(PS_SOLID, 2, RGB(0, 103, 192));
+        SelectObject(memDC, caret_pen);
+        MoveToEx(memDC, caret_x, 5, NULL);
+        LineTo(memDC, caret_x, HEADER_H - 5);
         DeleteObject(caret_pen);
     }
 
-    // 3. Vertical Candidate Rows (Matching screenshot)
+    // App Brand badge on header right: "Likhi"
+    SelectObject(memDC, hfont_hint_);
+    SetTextColor(memDC, RGB(160, 166, 178));
+    RECT brand_r = { client_rect.right - 48, 0, client_rect.right - 8, HEADER_H };
+    DrawTextW(memDC, L"Likhi", 5, &brand_r, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+
+    // 3. Vertical Candidate Rows
     for (size_t i = 0; i < candidates_.size() && i < candidate_item_rects_.size(); i++) {
         const RECT& item_rect = candidate_item_rects_[i];
         bool is_selected = (i == selected_index_);
 
         if (is_selected) {
-            // Selected candidate background highlight: Google soft gray (#F1F3F4)
-            HBRUSH sel_brush = CreateSolidBrush(RGB(241, 243, 244));
-            FillRect(memDC, &item_rect, sel_brush);
+            // Selected item: Windows 11 Fluent Soft Blue Pill with 6px corner radius
+            HBRUSH sel_brush = CreateSolidBrush(RGB(236, 243, 254));
+            HPEN sel_pen = CreatePen(PS_SOLID, 1, RGB(196, 220, 252));
+            SelectObject(memDC, sel_brush);
+            SelectObject(memDC, sel_pen);
+            RoundRect(memDC, item_rect.left, item_rect.top, item_rect.right, item_rect.bottom, 6, 6);
+            DeleteObject(sel_pen);
             DeleteObject(sel_brush);
+
+            // Left vertical accent bar (Windows 11 Fluent selection indicator)
+            HBRUSH bar_brush = CreateSolidBrush(RGB(0, 103, 192));
+            RECT bar_r = { item_rect.left + 2, item_rect.top + 5, item_rect.left + 5, item_rect.bottom - 5 };
+            FillRect(memDC, &bar_r, bar_brush);
+            DeleteObject(bar_brush);
         }
 
-        // Bengali number prefix: ১., ২., ৩., etc.
+        // Hotkey number badge pill: [ 1 ], [ 2 ], [ 3 ] ...
+        RECT badge_r = { item_rect.left + 9, item_rect.top + 4, item_rect.left + 27, item_rect.bottom - 4 };
+        HBRUSH badge_bg = CreateSolidBrush(is_selected ? RGB(216, 232, 255) : RGB(242, 244, 247));
+        HPEN badge_border = CreatePen(PS_SOLID, 1, is_selected ? RGB(180, 210, 250) : RGB(228, 230, 235));
+        SelectObject(memDC, badge_bg);
+        SelectObject(memDC, badge_border);
+        RoundRect(memDC, badge_r.left, badge_r.top, badge_r.right, badge_r.bottom, 4, 4);
+        DeleteObject(badge_border);
+        DeleteObject(badge_bg);
+
+        // Hotkey number text
         SelectObject(memDC, hfont_number_);
-        SetTextColor(memDC, RGB(95, 99, 104));
-        std::wstring num_str = ToBengaliDigits(i + 1);
-        RECT num_r = item_rect;
-        num_r.left += 6;
-        num_r.right = num_r.left + 16;
-        DrawTextW(memDC, num_str.c_str(), (int)num_str.size(), &num_r, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        SetTextColor(memDC, is_selected ? RGB(0, 95, 184) : RGB(100, 106, 118));
+        std::wstring num_str = std::to_wstring(i + 1);
+        DrawTextW(memDC, num_str.c_str(), (int)num_str.size(), &badge_r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
         // Bengali candidate word
         SelectObject(memDC, hfont_bengali_);
-        SetTextColor(memDC, RGB(32, 33, 36));
+        SetTextColor(memDC, is_selected ? RGB(10, 20, 35) : RGB(32, 34, 38));
         RECT text_r = item_rect;
-        text_r.left += 23;
+        text_r.left += 34;
+        text_r.right -= 8;
         DrawTextW(memDC, candidates_[i].c_str(), (int)candidates_[i].size(), &text_r, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     }
 
-    // 4. Footer Pagination Buttons: [ ^ ] [ v ]
-    HBRUSH btn_border_brush = CreateSolidBrush(RGB(218, 220, 224));
-    FrameRect(memDC, &up_button_rect_, btn_border_brush);
-    FrameRect(memDC, &down_button_rect_, btn_border_brush);
-    DeleteObject(btn_border_brush);
+    // 4. Footer Row
+    int footer_top = (up_button_rect_.top > 0) ? up_button_rect_.top - 4 : (client_rect.bottom - 24);
+    SelectObject(memDC, div_pen);
+    MoveToEx(memDC, 0, footer_top, NULL);
+    LineTo(memDC, client_rect.right, footer_top);
 
-    HPEN chevron_pen = CreatePen(PS_SOLID, 1, RGB(95, 99, 104));
-    HPEN old_pen = (HPEN)SelectObject(memDC, chevron_pen);
+    // Footer Pagination Buttons: [ ∧ ] [ ∨ ]
+    HBRUSH btn_bg_brush = CreateSolidBrush(RGB(246, 248, 250));
+    HPEN btn_border_pen = CreatePen(PS_SOLID, 1, RGB(220, 224, 230));
+    SelectObject(memDC, btn_bg_brush);
+    SelectObject(memDC, btn_border_pen);
+    RoundRect(memDC, up_button_rect_.left, up_button_rect_.top, up_button_rect_.right, up_button_rect_.bottom, 4, 4);
+    RoundRect(memDC, down_button_rect_.left, down_button_rect_.top, down_button_rect_.right, down_button_rect_.bottom, 4, 4);
+    DeleteObject(btn_border_pen);
+    DeleteObject(btn_bg_brush);
+
+    HPEN chevron_pen = CreatePen(PS_SOLID, 1, RGB(90, 95, 105));
+    SelectObject(memDC, chevron_pen);
 
     // Up chevron ^
     int up_cx = (up_button_rect_.left + up_button_rect_.right) / 2;
@@ -341,16 +407,23 @@ void CandidateWindow::OnPaint(HWND hWnd) {
     LineTo(memDC, dn_cx, dn_cy + 2);
     LineTo(memDC, dn_cx + 4, dn_cy - 2);
 
-    SelectObject(memDC, old_pen);
     DeleteObject(chevron_pen);
 
-    // 5. Outer 1px Border (Clean light gray #DADCE0)
-    HPEN border_pen = CreatePen(PS_SOLID, 1, RGB(218, 220, 224));
-    old_pen = (HPEN)SelectObject(memDC, border_pen);
+    // Keyboard navigation hint text on footer right
+    SelectObject(memDC, hfont_hint_);
+    SetTextColor(memDC, RGB(140, 146, 158));
+    RECT hint_r = { down_button_rect_.right + 8, footer_top, client_rect.right - 8, client_rect.bottom };
+    DrawTextW(memDC, L"Tab \x21B9  Enter \x21B5", 13, &hint_r, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+
+    // 5. Outer 1px Crisp Border (Windows 11 light neutral #D1D5DB)
+    HPEN border_pen = CreatePen(PS_SOLID, 1, RGB(210, 215, 222));
+    SelectObject(memDC, border_pen);
     SelectObject(memDC, GetStockObject(NULL_BRUSH));
     Rectangle(memDC, client_rect.left, client_rect.top, client_rect.right, client_rect.bottom);
-    SelectObject(memDC, old_pen);
     DeleteObject(border_pen);
+
+    SelectObject(memDC, old_pen);
+    DeleteObject(div_pen);
 
     // Blit to screen
     BitBlt(hdc, 0, 0, client_rect.right, client_rect.bottom, memDC, 0, 0, SRCCOPY);

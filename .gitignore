@@ -10,9 +10,9 @@ out/
 *.exe.manifest
 
 # Compiled binaries (use release_package/ for distribution)
-*.dll.old
-*.dll.old2
-*.dll.old3
+*.dll.old*
+*.old*
+*.locked*
 *.dll.bak
 *.dll.old_trash*
 *old_trash*

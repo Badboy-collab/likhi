@@ -53,6 +53,7 @@ private:
     HFONT hfont_bengali_;
     HFONT hfont_number_;
     HFONT hfont_header_;
+    HFONT hfont_hint_;
 
     int width_;
     int height_;
