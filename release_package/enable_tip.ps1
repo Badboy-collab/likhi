@@ -33,6 +33,10 @@ try {
         }
     }
 
+    # 3. Clean any ghost UK English layouts by aligning UI language override to en-US
+    Set-WinUILanguageOverride -Language "en-US" -ErrorAction SilentlyContinue
+    Set-Culture "en-US" -ErrorAction SilentlyContinue
+
     Set-WinUserLanguageList $list -Force
     Write-Output "SUCCESS: Likhi TIP cleanly configured (Default US English + Likhi Bangla)."
 } catch {
