@@ -40,11 +40,12 @@ const LexiconEntry* LexiconTrie::Find(const std::string& bengali_word) const {
 
             int cmp = bengali_word.compare(word_view);
             if (cmp == 0) {
-                cached_find_entry_.bengali_word = std::string(word_view);
-                cached_find_entry_.roman_key = std::string(string_pool_ + entry.r_offset, entry.r_len);
-                cached_find_entry_.frequency = entry.frequency;
-                cached_find_entry_.flags = entry.flags;
-                return &cached_find_entry_;
+                thread_local LexiconEntry tls_find_entry;
+                tls_find_entry.bengali_word = std::string(word_view);
+                tls_find_entry.roman_key = std::string(string_pool_ + entry.r_offset, entry.r_len);
+                tls_find_entry.frequency = entry.frequency;
+                tls_find_entry.flags = entry.flags;
+                return &tls_find_entry;
             } else if (cmp < 0) {
                 high = mid - 1;
             } else {

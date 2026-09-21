@@ -16,6 +16,15 @@ DEFINE_GUID(GUID_BanglaProfile,
 DEFINE_GUID(GUID_BanglaDisplayAttribute,
     0x4c1b14e1, 0x2678, 0x4f15, 0xb6, 0xd1, 0xfe, 0x3c, 0x8b, 0x72, 0xaa, 0x41);
 
+// GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT: {13A016DF-560B-46CD-947A-4C3AF1E0E35D}
+// Required for Windows 8, 10, 11 to load TIP in Modern/Store/UWP/AppContainer apps (e.g. WhatsApp Desktop)
+DEFINE_GUID(GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
+    0x13a016df, 0x560b, 0x46cd, 0x94, 0x7a, 0x4c, 0x3a, 0xf1, 0xe0, 0xe3, 0x5d);
+
+// GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT: {25504FB4-7BAB-4BC1-9C69-CF81890F0EF5}
+DEFINE_GUID(GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT,
+    0x25504fb4, 0x7bab, 0x4bc1, 0x9c, 0x69, 0xcf, 0x81, 0x89, 0x0f, 0x0e, 0xf5);
+
 // Language IDs as CANONICAL numeric literals matching Windows winnt.h:
 // MAKELANGID(LANG_BENGALI, SUBLANG_BENGALI_BANGLADESH) = (0x02 << 10) | 0x45 = 0x0845 (bn-BD)
 // MAKELANGID(LANG_BENGALI, SUBLANG_BENGALI_INDIA)      = (0x01 << 10) | 0x45 = 0x0445 (bn-IN)

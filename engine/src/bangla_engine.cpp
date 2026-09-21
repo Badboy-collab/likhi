@@ -114,9 +114,16 @@ const char* BanglaEngine_GetComposition(const BanglaEngine* engine) {
 }
 
 void BanglaEngine_CommitWordWithOrigin(BanglaEngine* engine, const char* roman_origin, const char* bengali_word) {
-    (void)roman_origin;
     if (!engine || !bengali_word) return;
     engine->sentence_history.push_back(bengali_word);
+    if (roman_origin && strlen(roman_origin) > 0) {
+        engine->personal_dict.AddWord(roman_origin, bengali_word);
+    } else {
+        engine->personal_dict.IncrementFrequency(bengali_word);
+    }
+    if (!engine->user_dict_path_storage.empty()) {
+        engine->personal_dict.SaveToFile(engine->user_dict_path_storage);
+    }
     engine->composition.clear();
 }
 
@@ -223,10 +230,23 @@ void BanglaEngine_GetCandidates(BanglaEngine* engine, CandidateList* out_list) {
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     std::vector<std::string> priority_texts;
 
-    // 5a. Explicit User Personal Dictionary Entries (Top Priority)
+    bool has_exact_lexicon = false;
+    if (!lower_composition.empty()) {
+        auto exact = engine->lexicon.SearchRoman(lower_composition, 8);
+        for (const auto& rm : exact) {
+            if (rm.roman_key == lower_composition) {
+                has_exact_lexicon = true;
+                break;
+            }
+        }
+    }
+
+    // 5a. User Personal Dictionary Entries (Top Priority if frequency >= 3 or no competing base lexicon word exists)
     for (const auto& ue : user_entries) {
-        if (std::find(priority_texts.begin(), priority_texts.end(), ue.bengali_word) == priority_texts.end()) {
-            priority_texts.push_back(ue.bengali_word);
+        if (ue.frequency >= 3 || !has_exact_lexicon) {
+            if (std::find(priority_texts.begin(), priority_texts.end(), ue.bengali_word) == priority_texts.end()) {
+                priority_texts.push_back(ue.bengali_word);
+            }
         }
     }
 

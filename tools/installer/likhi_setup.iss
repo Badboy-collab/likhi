@@ -97,6 +97,14 @@ Root: HKA; Subkey: "Software\Microsoft\CTF\TIP\{{B4F1470A-7C69-4C62-972F-6379532
 Root: HKA; Subkey: "Software\Microsoft\CTF\TIP\{{B4F1470A-7C69-4C62-972F-6379532856E1}\Category\Category\{{34745C63-B2F0-4784-8B67-5E12C8701A31}\{{B4F1470A-7C69-4C62-972F-6379532856E1}"; ValueType: none; Flags: uninsdeletekey
 Root: HKA; Subkey: "Software\Microsoft\CTF\TIP\{{B4F1470A-7C69-4C62-972F-6379532856E1}\Category\Item\{{B4F1470A-7C69-4C62-972F-6379532856E1}"; ValueType: dword; ValueName: "{{34745C63-B2F0-4784-8B67-5E12C8701A31}"; ValueData: 0; Flags: uninsdeletekey
 
+; Category: Immersive / UWP Support (Required for Windows Store apps like WhatsApp Desktop)
+Root: HKA; Subkey: "Software\Microsoft\CTF\TIP\{{B4F1470A-7C69-4C62-972F-6379532856E1}\Category\Category\{{13A016DF-560B-46CD-947A-4C3AF1E0E35D}\{{B4F1470A-7C69-4C62-972F-6379532856E1}"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Microsoft\CTF\TIP\{{B4F1470A-7C69-4C62-972F-6379532856E1}\Category\Item\{{B4F1470A-7C69-4C62-972F-6379532856E1}"; ValueType: dword; ValueName: "{{13A016DF-560B-46CD-947A-4C3AF1E0E35D}"; ValueData: 0; Flags: uninsdeletekey
+
+; Category: Systray Support
+Root: HKA; Subkey: "Software\Microsoft\CTF\TIP\{{B4F1470A-7C69-4C62-972F-6379532856E1}\Category\Category\{{25504FB4-7BAB-4BC1-9C69-CF81890F0EF5}\{{B4F1470A-7C69-4C62-972F-6379532856E1}"; ValueType: none; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Microsoft\CTF\TIP\{{B4F1470A-7C69-4C62-972F-6379532856E1}\Category\Item\{{B4F1470A-7C69-4C62-972F-6379532856E1}"; ValueType: dword; ValueName: "{{25504FB4-7BAB-4BC1-9C69-CF81890F0EF5}"; ValueData: 0; Flags: uninsdeletekey
+
 [Run]
 ; Self-register the 64-bit DLL via regsvr32
 Filename: "{sys}\regsvr32.exe"; Parameters: "/s ""{app}\bangla_tsf.dll"""; StatusMsg: "Registering 64-bit Text Services Framework components..."

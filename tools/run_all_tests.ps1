@@ -30,7 +30,11 @@ foreach ($t in $tests) {
     Write-Host " Running $t ..." -ForegroundColor Cyan
     Write-Host "=========================================================" -ForegroundColor Cyan
     
-    & $exePath
+    if ($t -eq "test_global_model_reader.exe") {
+        & $exePath $buildDir
+    } else {
+        & $exePath
+    }
     $code = $LASTEXITCODE
     if ($code -eq 0) {
         Write-Host " [PASS] $t" -ForegroundColor Green

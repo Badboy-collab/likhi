@@ -80,11 +80,13 @@ HRESULT RegisterTSFProfiles(HINSTANCE hInst) {
     }
     pProfiles->Release();
 
-    // Register Categories: Text Service is a standard keyboard TIP
+    // Register Categories: Text Service is a standard keyboard TIP with Immersive/UWP app support
     ITfCategoryMgr* pCategoryMgr = nullptr;
     hr = CoCreateInstance(CLSID_TF_CategoryMgr, NULL, CLSCTX_INPROC_SERVER, IID_ITfCategoryMgr, (void**)&pCategoryMgr);
     if (SUCCEEDED(hr) && pCategoryMgr) {
         pCategoryMgr->RegisterCategory(CLSID_BanglaTextService, GUID_TFCAT_TIP_KEYBOARD, CLSID_BanglaTextService);
+        pCategoryMgr->RegisterCategory(CLSID_BanglaTextService, GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT, CLSID_BanglaTextService);
+        pCategoryMgr->RegisterCategory(CLSID_BanglaTextService, GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT, CLSID_BanglaTextService);
         // Cleanly remove any stale GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER from older builds
         pCategoryMgr->UnregisterCategory(CLSID_BanglaTextService, GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER, CLSID_BanglaTextService);
         pCategoryMgr->Release();
@@ -103,6 +105,8 @@ HRESULT UnregisterTSFProfiles() {
     ITfCategoryMgr* pCategoryMgr = nullptr;
     if (SUCCEEDED(CoCreateInstance(CLSID_TF_CategoryMgr, NULL, CLSCTX_INPROC_SERVER, IID_ITfCategoryMgr, (void**)&pCategoryMgr))) {
         pCategoryMgr->UnregisterCategory(CLSID_BanglaTextService, GUID_TFCAT_TIP_KEYBOARD, CLSID_BanglaTextService);
+        pCategoryMgr->UnregisterCategory(CLSID_BanglaTextService, GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT, CLSID_BanglaTextService);
+        pCategoryMgr->UnregisterCategory(CLSID_BanglaTextService, GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT, CLSID_BanglaTextService);
         pCategoryMgr->UnregisterCategory(CLSID_BanglaTextService, GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER, CLSID_BanglaTextService);
         pCategoryMgr->Release();
     }

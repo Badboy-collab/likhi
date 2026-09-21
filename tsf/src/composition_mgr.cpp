@@ -382,6 +382,19 @@ void CompositionManager::UpdateCompositionAndUI(ITfContext* pContext) {
                 HRESULT hrSetText = pRange->SetText(ec, 0, this->current_bengali_top_.c_str(), (LONG)this->current_bengali_top_.length());
                 TsfLog("pRange->SetText hr=0x%08X", hrSetText);
 
+                // Update selection to the end of the active composition so host apps
+                // (such as WhatsApp/Chromium/Electron) maintain accurate cursor state.
+                ITfRange* pSelectionRange = nullptr;
+                if (SUCCEEDED(pRange->Clone(&pSelectionRange)) && pSelectionRange) {
+                    pSelectionRange->Collapse(ec, TF_ANCHOR_END);
+                    TF_SELECTION sel;
+                    sel.range = pSelectionRange;
+                    sel.style.ase = TF_AE_NONE;
+                    sel.style.fInterimChar = FALSE;
+                    pContext->SetSelection(ec, 1, &sel);
+                    pSelectionRange->Release();
+                }
+
                 ITfContextView* pView = nullptr;
                 if (SUCCEEDED(pContext->GetActiveView(&pView)) && pView) {
                     RECT rc = {0, 0, 0, 0};

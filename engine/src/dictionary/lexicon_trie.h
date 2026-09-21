@@ -54,11 +54,8 @@ private:
     uint32_t count_;
     uint32_t str_pool_size_;
 
-    // Fallback dynamic entries for runtime runtime insertions (if any)
+    // Fallback dynamic entries for runtime insertions (if any)
     std::vector<LexiconEntry> dynamic_entries_;
-
-    // Thread-safe / cached find return buffer
-    mutable LexiconEntry cached_find_entry_;
 };
 
 } // namespace bangla
