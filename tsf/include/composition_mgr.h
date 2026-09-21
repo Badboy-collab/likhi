@@ -8,6 +8,10 @@
 #include "../../engine/include/bangla_engine.h"
 #include "candidate_window.h"
 #include "cloud_translit.h"
+#include "voice_input.h"
+
+#include <memory>
+#include <thread>
 
 namespace bangla_tsf {
 
@@ -74,6 +78,25 @@ public:
     void SetCloudTranslitEnabled(bool enabled);
     bool IsCloudTranslitEnabled() const { return cloud_enabled_; }
 
+    // Suggestion strip on/off (Settings app: the "show suggestions" checkbox).
+    // When OFF the popup is never shown and the online lookup is stopped as
+    // well; typing and committing the word behave exactly the same.
+    void SetSuggestionsEnabled(bool enabled);
+    bool IsSuggestionsEnabled() const { return suggestions_enabled_; }
+
+    // ---- voice input (speech -> text, see voice_input.h) ----------------
+    // Active only when %APPDATA%\PC-Bangla-Typing-App\voice.json holds an API
+    // key; otherwise the hotkey and the microphone row stay inert.
+    bool IsVoiceEnabled() const { return voice_enabled_; }
+    bool IsRecordingVoice() const { return voice_rec_ != nullptr && voice_rec_->IsRecording(); }
+    // One toggle starts recording, the next stops it, recognises the audio and
+    // inserts the text at the caret (Ctrl+Alt+V or a click on the microphone).
+    void ToggleVoice();
+    // Recognition result, delivered on the UI thread by the candidate window.
+    void OnVoiceResult(const std::wstring& text, const std::wstring& error);
+    // Inserts text at the caret WITHOUT starting a composition.
+    bool InsertTextAtCaret(const std::wstring& text);
+
     // Query candidates
     const std::vector<std::wstring>& GetCurrentCandidates() const { return current_candidates_w_; }
 
@@ -117,6 +140,7 @@ private:
     bool auto_correct_enabled_ = false;
     uint32_t max_candidates_ = 5;
     bool personal_learning_enabled_ = true;
+    bool suggestions_enabled_ = true;
 
     // Last successfully resolved anchor for the suggestion popup. Persists across
     // updates so a transient TF_E_NOLAYOUT never makes the window jump elsewhere.
@@ -131,6 +155,14 @@ private:
 
     ITfComposition* active_composition_;
     ITfContext* current_context_;
+
+    // ---- voice plumbing -------------------------------------------------
+    void InitVoice();
+    void RefreshVoiceRow();
+    VoiceConfig voice_cfg_;
+    std::unique_ptr<VoiceRecorder> voice_rec_;
+    bool voice_enabled_ = false;   // voice.json has a usable key
+    bool voice_pending_ = false;   // recognition in flight
 };
 
 } // namespace bangla_tsf

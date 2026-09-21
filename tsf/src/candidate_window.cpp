@@ -11,11 +11,75 @@ namespace {
 // UI thread (the candidate window is owned by the UI thread).
 const UINT kCloudResultMsg = WM_APP + 0x6A;
 
+// Same idea for the voice recognition result (worker thread -> UI thread).
+const UINT kVoiceResultMsg = WM_APP + 0x6B;
+
+// Bengali numerals (U+09E6..U+09EF) for the candidate index. The strip is a
+// vertical IME list, so numbering uses the user's own script.
+const wchar_t* kBengaliDigits = L"\u09E6\u09E7\u09E8\u09E9\u09EA\u09EB\u09EC\u09ED\u09EE\u09EF";
+
+std::wstring IndexLabel(size_t one_based) {
+    std::wstring digits;
+    size_t n = one_based;
+    do {
+        digits.insert(digits.begin(), kBengaliDigits[n % 10]);
+        n /= 10;
+    } while (n > 0);
+    digits += L".";
+    return digits;
+}
+
+// Selection uses number keys 1..9, so the strip never shows more rows.
+const size_t kMaxVisible = 9;
+
+// Vertical strip metrics. Compact but airy, matching the reference UI
+// (bangla_extracted_engine/index.html .suggestion-item: 8px padding, 12px
+// index, 8px radius, soft shadow).
+const int kItemH    = 26;
+const int kItemGapY = 0;
+const int kPadX     = 12;
+const int kTopPad   = 4;
+const int kNumColW  = 28;
+const int kCornerR  = 8;
+
+// Microphone row under the candidate rows.
+const int kVoiceRowH    = 24;
+const int kVoiceIconBox = 22;
+const int kMinWidth     = 132;
+
 struct CloudResultPayload {
     std::wstring word;
     size_t generation;
     std::vector<std::wstring> candidates;
 };
+
+struct VoiceResultPayload {
+    std::wstring text;
+    std::wstring error;
+};
+
+// Small GDI microphone glyph (capsule + cradle + stand).
+void DrawMicGlyph(HDC dc, int cx, int top, COLORREF color) {
+    HBRUSH brush = CreateSolidBrush(color);
+    HPEN pen = CreatePen(PS_SOLID, 1, color);
+    HGDIOBJ old_brush = SelectObject(dc, brush);
+    HGDIOBJ old_pen = SelectObject(dc, pen);
+
+    RoundRect(dc, cx - 3, top + 2, cx + 3, top + 11, 6, 6);       // capsule
+    SelectObject(dc, GetStockObject(NULL_BRUSH));
+    SelectObject(dc, GetStockObject(NULL_PEN));
+    Arc(dc, cx - 6, top + 6, cx + 6, top + 16, cx - 6, top + 11, cx + 6, top + 11);
+    SelectObject(dc, pen);
+    MoveToEx(dc, cx, top + 15, nullptr);
+    LineTo(dc, cx, top + 18);
+    MoveToEx(dc, cx - 4, top + 18, nullptr);
+    LineTo(dc, cx + 4, top + 18);
+
+    SelectObject(dc, old_brush);
+    SelectObject(dc, old_pen);
+    DeleteObject(brush);
+    DeleteObject(pen);
+}
 
 } // namespace
 
@@ -28,7 +92,8 @@ CandidateWindow::CandidateWindow()
       hfont_number_(nullptr),
       hfont_score_(nullptr),
       width_(250),
-      height_(42) {
+      height_(42),
+      voice_state_(VoiceState::Off) {
     memset(&caret_rect_, 0, sizeof(RECT));
 }
 
@@ -41,7 +106,7 @@ bool CandidateWindow::Initialize(HINSTANCE hInst) {
 
     WNDCLASSEXW wcex = {0};
     wcex.cbSize = sizeof(WNDCLASSEXW);
-    wcex.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
+    wcex.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS | CS_DROPSHADOW;
     wcex.lpfnWndProc = CandidateWindow::WndProc;
     wcex.cbClsExtra = 0;
     wcex.cbWndExtra = sizeof(CandidateWindow*);
@@ -56,7 +121,7 @@ bool CandidateWindow::Initialize(HINSTANCE hInst) {
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         WINDOW_CLASS_NAME,
         L"Bangla Suggestions",
-        WS_POPUP | WS_BORDER,
+        WS_POPUP,  // rounded custom border + drop shadow instead of the 3D system border
         0, 0, width_, height_,
         NULL, NULL, hInst, this
     );
@@ -65,14 +130,14 @@ bool CandidateWindow::Initialize(HINSTANCE hInst) {
 
     // Create Anti-Aliased Clean Fonts
     hfont_bengali_ = CreateFontW(
-        -16, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+        -15, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
         L"Nirmala UI"
     );
 
     hfont_number_ = CreateFontW(
-        -12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        -11, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
         L"Segoe UI"
@@ -101,41 +166,68 @@ void CandidateWindow::Destroy() {
 }
 
 void CandidateWindow::UpdateDimensions() {
-    if (candidates_.empty() || !hwnd_) return;
+    if (!hwnd_) return;
 
     HDC hdc = GetDC(hwnd_);
-    HFONT old_font = (HFONT)SelectObject(hdc, hfont_bengali_);
+    HFONT old_font = (HFONT)SelectObject(hdc, hfont_number_);
 
     candidate_item_rects_.clear();
-    int current_x = 10;
-    int max_item_h = 36;
+    mic_rect_ = RECT{0, 0, 0, 0};
 
-    for (size_t i = 0; i < candidates_.size(); i++) {
+    // VERTICAL strip: one candidate per row, number in a left column so the
+    // Bengali words line up. Width = widest row, height = rows + padding.
+    const size_t count = (candidates_.size() < kMaxVisible) ? candidates_.size() : kMaxVisible;
+
+    int widest = 0;
+    int y = kTopPad;
+    for (size_t i = 0; i < count; i++) {
         SIZE num_size = {0}, text_size = {0};
 
         SelectObject(hdc, hfont_number_);
-        std::wstring num_str = std::to_wstring(i + 1) + L". ";
+        const std::wstring num_str = IndexLabel(i + 1);
         GetTextExtentPoint32W(hdc, num_str.c_str(), (int)num_str.size(), &num_size);
 
         SelectObject(hdc, hfont_bengali_);
         GetTextExtentPoint32W(hdc, candidates_[i].c_str(), (int)candidates_[i].size(), &text_size);
 
-        int item_w = num_size.cx + text_size.cx + 16;
-        RECT item_r = { current_x, 4, current_x + item_w, 4 + max_item_h };
+        int item_w = kPadX + num_size.cx + 8 + text_size.cx + kPadX;
+        if (item_w > widest) widest = item_w;
+
+        RECT item_r = { 6, y, 6 + item_w, y + kItemH };
         candidate_item_rects_.push_back(item_r);
 
-        current_x += item_w + 6;
+        y += kItemH + kItemGapY;
+    }
+
+    for (RECT& r : candidate_item_rects_) r.right = r.left + widest; // full-width rows
+
+    // Microphone row (voice input) sits under the candidates, separated by a
+    // hairline. This is the clickable microphone of the strip.
+    if (voice_state_ != VoiceState::Off) {
+        SIZE label_size = {0};
+        SelectObject(hdc, hfont_bengali_);
+        const std::wstring label = VoiceLabel();
+        if (!label.empty()) {
+            GetTextExtentPoint32W(hdc, label.c_str(), (int)label.size(), &label_size);
+        }
+        const int voice_w = kPadX + kVoiceIconBox + label_size.cx + kPadX + 24;
+        if (voice_w > widest) widest = voice_w;
+        mic_rect_ = RECT{6, y, 6 + widest, y + kVoiceRowH};
+        y += kVoiceRowH;
     }
 
     SelectObject(hdc, old_font);
     ReleaseDC(hwnd_, hdc);
 
-    width_ = current_x + 10;
-    height_ = max_item_h + 8;
+    if (widest < kMinWidth) widest = kMinWidth;
+    width_ = widest + 12;
+    height_ = y + kTopPad;
 }
 
 void CandidateWindow::ShowCandidates(const std::vector<std::wstring>& candidates, size_t selected_index, const RECT& caret_rect) {
-    if (candidates.empty()) {
+    // An empty list only hides the strip when the microphone row is inactive:
+    // voice typing shows the strip on its own while nothing is composed.
+    if (candidates.empty() && voice_state_ == VoiceState::Off) {
         Hide();
         return;
     }
@@ -166,6 +258,11 @@ void CandidateWindow::ShowCandidates(const std::vector<std::wstring>& candidates
     if (pos_x + width_ > work.right) pos_x = work.right - width_ - 8;
     if (pos_x < work.left)           pos_x = work.left + 8;
     if (pos_y < work.top)            pos_y = work.top + 8;
+
+    // Rounded corners so the popup looks like the reference suggestion box.
+    HRGN region = CreateRoundRectRgn(0, 0, width_ + 1, height_ + 1,
+                                     kCornerR * 2, kCornerR * 2);
+    if (region) SetWindowRgn(hwnd_, region, TRUE);  // window owns the region now
 
     SetWindowPos(
         hwnd_, HWND_TOPMOST,
@@ -250,29 +347,66 @@ void CandidateWindow::OnPaint(HWND hWnd) {
 
         SetBkMode(memDC, TRANSPARENT);
 
-        // Draw index number
+        // Draw index number (Bengali numerals, vertically centered in its row)
         SelectObject(memDC, hfont_number_);
-        SetTextColor(memDC, is_selected ? RGB(26, 115, 232) : RGB(128, 134, 139));
-        std::wstring num_str = std::to_wstring(i + 1) + L".";
+        SetTextColor(memDC, is_selected ? RGB(26, 115, 232) : RGB(95, 99, 104));
+        const std::wstring num_str = IndexLabel(i + 1);
         RECT num_rect = item_rect;
-        num_rect.left += 6;
-        num_rect.top += 8;
-        DrawTextW(memDC, num_str.c_str(), (int)num_str.size(), &num_rect, DT_LEFT | DT_NOCLIP);
+        num_rect.left += 8;
+        DrawTextW(memDC, num_str.c_str(), (int)num_str.size(), &num_rect,
+                  DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
 
-        // Draw Bengali Word
+        // Draw Bengali Word (own column -> all words align)
         SelectObject(memDC, hfont_bengali_);
         SetTextColor(memDC, is_selected ? RGB(26, 115, 232) : RGB(32, 33, 36));
         RECT text_rect = item_rect;
-        text_rect.left += 22;
-        text_rect.top += 6;
-        DrawTextW(memDC, candidates_[i].c_str(), (int)candidates_[i].size(), &text_rect, DT_LEFT | DT_NOCLIP);
+        text_rect.left += kNumColW;
+        DrawTextW(memDC, candidates_[i].c_str(), (int)candidates_[i].size(), &text_rect,
+                  DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+    }
+
+    // ---- microphone row (voice input) ----
+    if (voice_state_ != VoiceState::Off && mic_rect_.bottom > mic_rect_.top) {
+        HPEN sep_pen = CreatePen(PS_SOLID, 1, RGB(232, 234, 237));
+        HGDIOBJ old_sep = SelectObject(memDC, sep_pen);
+        MoveToEx(memDC, mic_rect_.left + kPadX, mic_rect_.top, nullptr);
+        LineTo(memDC, client_rect.right - kPadX, mic_rect_.top);
+        SelectObject(memDC, old_sep);
+        DeleteObject(sep_pen);
+
+        const COLORREF mic_color = (voice_state_ == VoiceState::Recording) ? RGB(217, 48, 37)
+                                 : (voice_state_ == VoiceState::Busy)      ? RGB(26, 115, 232)
+                                                                          : RGB(95, 99, 104);
+        const int cy = mic_rect_.top + kVoiceRowH / 2;
+        DrawMicGlyph(memDC, mic_rect_.left + kPadX - 4 + kVoiceIconBox / 2, cy - 9, mic_color);
+
+        if (voice_state_ == VoiceState::Recording) {  // live red dot
+            HBRUSH dot = CreateSolidBrush(RGB(217, 48, 37));
+            HGDIOBJ old_dot = SelectObject(memDC, dot);
+            HGDIOBJ old_dot_pen = SelectObject(memDC, GetStockObject(NULL_PEN));
+            Ellipse(memDC, mic_rect_.right - 24, cy - 4, mic_rect_.right - 16, cy + 4);
+            SelectObject(memDC, old_dot);
+            SelectObject(memDC, old_dot_pen);
+            DeleteObject(dot);
+        }
+
+        SetBkMode(memDC, TRANSPARENT);
+        SelectObject(memDC, hfont_bengali_);
+        SetTextColor(memDC, mic_color);
+        const std::wstring label = VoiceLabel();
+        RECT label_rect = mic_rect_;
+        label_rect.left += kVoiceIconBox;
+        label_rect.right -= 24;
+        DrawTextW(memDC, label.c_str(), (int)label.size(), &label_rect,
+                  DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP | DT_END_ELLIPSIS);
     }
 
     // Border
     HPEN border_pen = CreatePen(PS_SOLID, 1, RGB(218, 220, 224));
     HGDIOBJ old_pen = SelectObject(memDC, border_pen);
     SelectObject(memDC, GetStockObject(NULL_BRUSH));
-    Rectangle(memDC, client_rect.left, client_rect.top, client_rect.right, client_rect.bottom);
+    RoundRect(memDC, client_rect.left, client_rect.top, client_rect.right - 1,
+              client_rect.bottom - 1, kCornerR * 2, kCornerR * 2);
     SelectObject(memDC, old_pen);
     DeleteObject(border_pen);
 
@@ -287,6 +421,12 @@ void CandidateWindow::OnPaint(HWND hWnd) {
 }
 
 void CandidateWindow::OnLButtonDown(HWND hWnd, int x, int y) {
+    // Microphone row first: it is a button, not a candidate.
+    if (voice_state_ != VoiceState::Off &&
+        PtInRect(&mic_rect_, POINT{x, y}) && voice_toggle_cb_) {
+        voice_toggle_cb_();
+        return;
+    }
     for (size_t i = 0; i < candidate_item_rects_.size(); i++) {
         if (PtInRect(&candidate_item_rects_[i], POINT{x, y})) {
             selected_index_ = i;
@@ -307,6 +447,51 @@ void CandidateWindow::OnMouseMove(HWND hWnd, int x, int y) {
             }
             break;
         }
+    }
+}
+
+std::wstring CandidateWindow::VoiceLabel() const {
+    if (!voice_label_.empty()) return voice_label_;
+    switch (voice_state_) {
+        case VoiceState::Recording: return L"\u09B6\u09C1\u09A8\u099B\u09BF...";
+        case VoiceState::Busy:      return L"\u09B2\u09BF\u0996\u099B\u09BF...";
+        default:                    return L"\u09AD\u09AF\u09BC\u09C7\u09B8";
+    }
+}
+
+void CandidateWindow::SetVoiceState(VoiceState state, const std::wstring& label) {
+    voice_state_ = state;
+    voice_label_ = label;
+    if (!hwnd_) return;
+    if (state == VoiceState::Off && candidates_.empty()) {
+        Hide();
+        return;
+    }
+    if (!is_visible_) return;  // next Show* picks the new state up
+
+    RECT wr = {0, 0, 0, 0};
+    GetWindowRect(hwnd_, &wr);
+    UpdateDimensions();
+
+    HRGN region = CreateRoundRectRgn(0, 0, width_ + 1, height_ + 1,
+                                     kCornerR * 2, kCornerR * 2);
+    if (region) SetWindowRgn(hwnd_, region, TRUE);
+
+    SetWindowPos(hwnd_, HWND_TOPMOST, wr.left, wr.top, width_, height_,
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    InvalidateRect(hwnd_, NULL, TRUE);
+}
+
+void CandidateWindow::ShowVoiceStatus(const RECT& anchor_rect) {
+    if (voice_state_ == VoiceState::Off) return;
+    ShowCandidates(candidates_, selected_index_, anchor_rect);
+}
+
+void CandidateWindow::PostVoiceResult(const std::wstring& text, const std::wstring& error) {
+    if (!hwnd_) return;
+    VoiceResultPayload* p = new VoiceResultPayload{text, error};
+    if (!PostMessageW(hwnd_, kVoiceResultMsg, 0, reinterpret_cast<LPARAM>(p))) {
+        delete p;
     }
 }
 
@@ -333,6 +518,15 @@ LRESULT CALLBACK CandidateWindow::WndProc(HWND hWnd, UINT message, WPARAM wParam
             case WM_MOUSEMOVE:
                 pThis->OnMouseMove(hWnd, (int)(short)LOWORD(lParam), (int)(short)HIWORD(lParam));
                 return 0;
+            case kVoiceResultMsg: {
+                VoiceResultPayload* p = reinterpret_cast<VoiceResultPayload*>(lParam);
+                if (p) {
+                    VoiceResultCallback cb = pThis->voice_result_cb_;
+                    if (cb) cb(p->text, p->error);
+                    delete p;
+                }
+                return 0;
+            }
             case WM_MOUSEACTIVATE:
                 return MA_NOACTIVATE;
             case kCloudResultMsg: {

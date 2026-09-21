@@ -77,6 +77,17 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* pic, WPARAM wParam, LPARAM l
     if (!pfEaten) return E_INVALIDARG;
     *pfEaten = FALSE;
 
+    // Ctrl+Alt+V = voice typing. Eaten here so the host never sees the chord;
+    // the toggle itself runs in OnKeyDown (which never fires on auto-repeat).
+    if (wParam == 'V' && !composition_mgr_.IsVoiceEnabled() ) { /* fall through: still eaten */ }
+    if (wParam == 'V') {
+        KeyState probe = ReadKeyState(wParam);
+        if (probe.ctrl && probe.alt && !probe.shift && !probe.win) {
+            *pfEaten = TRUE;
+            return S_OK;
+        }
+    }
+
     KeyState st = ReadKeyState(wParam);
     st.composing          = composition_mgr_.IsComposing();
     st.candidates_visible = composition_mgr_.HasVisibleCandidates();
@@ -101,9 +112,19 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* pic, WPARAM wParam, LPARAM l
 // happened in OnTestKeyDown (if needed) and the host processes the key.
 // ============================================================
 STDMETHODIMP TextService::OnKeyDown(ITfContext* pic, WPARAM wParam, LPARAM lParam, BOOL* pfEaten) {
-    (void)lParam;
     if (!pfEaten) return E_INVALIDARG;
     *pfEaten = FALSE;
+
+    // Ctrl+Alt+V = voice typing (start / stop+insert). lParam bit 30 is the
+    // previous key state, so holding the chord down toggles exactly once.
+    if (wParam == 'V') {
+        KeyState probe = ReadKeyState(wParam);
+        if (probe.ctrl && probe.alt && !probe.shift && !probe.win) {
+            if ((lParam & (1 << 30)) == 0) composition_mgr_.ToggleVoice();
+            *pfEaten = TRUE;
+            return S_OK;
+        }
+    }
 
     KeyState st = ReadKeyState(wParam);
     st.composing          = composition_mgr_.IsComposing();

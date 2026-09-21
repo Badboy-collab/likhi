@@ -55,7 +55,7 @@ HRESULT RegisterTSFProfiles(HINSTANCE hInst) {
 
     hr = pProfiles->Register(CLSID_BanglaTextService);
     if (SUCCEEDED(hr)) {
-        // Register under Bengali (Bangladesh) - 0x0445 so the IME is listed
+        // Register under Bengali (Bangladesh) = 0x0845 so the IME is listed
         // under the user's "বাংলা (বাংলাদেশ)" input language in Win+Space.
         // (BANGLA_LANGID_BD is a fixed literal — see bangla_tsf_clsid.h.)
         pProfiles->AddLanguageProfile(

@@ -200,7 +200,7 @@ int main() {
     std::cout << "\n=== [TEST SUITE 3] Context-Aware Ranking & Bigrams (100+ Cases) ===\n";
     std::vector<TestCase> context_sentences = {
         {"ami ajke office e jabo", "আমি আজকে অফিসে যাব", "commute context"},
-        {"tumi kemon acho", "তুমি কেমন আছ", "greeting context"},
+        {"tumi kemon acho", "তুমি কেমন আছো", "greeting context"},
         {"apnar shathe kotha bole valo laglo", "আপনার সাথে কথা বলে ভালো লাগল", "courtesy context"},
         {"amra shobai eksathe kaaj korbo", "আমরা সবাই একসাথে কাজ করব", "teamwork context"},
         {"ajke brishti hocche", "আজকে বৃষ্টি হচ্ছে", "weather context"},

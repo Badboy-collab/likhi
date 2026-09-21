@@ -17,33 +17,82 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-def generate_phonetic_keys(bengali_word):
-    """Generates standard Banglish romanization keys for a Bengali word."""
-    char_map = {
-        'অ': 'o', 'আ': 'a', 'ই': 'i', 'ঈ': 'i', 'উ': 'u', 'ঊ': 'u', 'ঋ': 'ri',
-        'এ': 'e', 'ঐ': 'oi', 'ও': 'o', 'ঔ': 'ou',
-        'ক': 'k', 'খ': 'kh', 'গ': 'g', 'ঘ': 'gh', 'ঙ': 'ng',
-        'চ': 'ch', 'ছ': 'ch', 'জ': 'j', 'ঝ': 'jh', 'ঞ': 'n',
-        'ট': 't', 'ঠ': 'th', 'ড': 'd', 'ঢ': 'dh', 'ণ': 'n',
-        'ত': 't', 'থ': 'th', 'দ': 'd', 'ধ': 'dh', 'ন': 'n',
-        'প': 'p', 'ফ': 'f', 'ব': 'b', 'ভ': 'bh', 'ম': 'm',
-        'য': 'j', 'র': 'r', 'ল': 'l', 'শ': 'sh', 'ষ': 'sh', 'স': 's', 'হ': 'h',
-        'ড়': 'r', 'ঢ়': 'rh', 'য়': 'y', 'ৎ': 't',
-        'া': 'a', 'ি': 'i', 'ী': 'i', 'ু': 'u', 'ূ': 'u', 'ৃ': 'ri',
-        'ে': 'e', 'ৈ': 'oi', 'ো': 'o', 'ৌ': 'ou',
-        '্': '', 'ং': 'ng', 'ঃ': 'h', 'ঁ': '',
-        '।': '.', '॥': '.'
-    }
+_CHAR_MAP = {
+    'অ': 'o', 'আ': 'a', 'ই': 'i', 'ঈ': 'i', 'উ': 'u', 'ঊ': 'u', 'ঋ': 'ri',
+    'এ': 'e', 'ঐ': 'oi', 'ও': 'o', 'ঔ': 'ou',
+    'ক': 'k', 'খ': 'kh', 'গ': 'g', 'ঘ': 'gh', 'ঙ': 'ng',
+    'চ': 'ch', 'ছ': 'ch', 'জ': 'j', 'ঝ': 'jh', 'ঞ': 'n',
+    'ট': 't', 'ঠ': 'th', 'ড': 'd', 'ঢ': 'dh', 'ণ': 'n',
+    'ত': 't', 'থ': 'th', 'দ': 'd', 'ধ': 'dh', 'ন': 'n',
+    'প': 'p', 'ফ': 'f', 'ব': 'b', 'ভ': 'bh', 'ম': 'm',
+    'য': 'j', 'র': 'r', 'ল': 'l', 'শ': 'sh', 'ষ': 'sh', 'স': 's', 'হ': 'h',
+    'ড়': 'r', 'ঢ়': 'rh', 'য়': 'y', 'ৎ': 't',
+    'া': 'a', 'ি': 'i', 'ী': 'i', 'ু': 'u', 'ূ': 'u', 'ৃ': 'ri',
+    'ে': 'e', 'ৈ': 'oi', 'ো': 'o', 'ৌ': 'ou',
+    '্': '', 'ং': 'ng', 'ঃ': 'h', 'ঁ': '',
+    '।': '.', '॥': '.'
+}
 
+# Consonants that carry an inherent vowel, plus the ways people actually spell
+# them with Latin letters (e.g. both "chhuti" and "chuti" must find ছুটি).
+_CONSONANTS = set('কখগঘঙচছজঝঞটঠডঢণতথদধনপফবভমযরলশষসহড়ঢ়য়ৎ')
+_VOWEL_SIGNS = set('ািীুূৃেৈোৌ')
+_HASANT = '্'
+_CONSONANT_ALTS = {
+    'চ': ['ch', 'c'], 'ছ': ['ch', 'chh'], 'ট': ['t', 'tt'], 'ত': ['t'],
+    'শ': ['sh', 's'], 'ষ': ['sh', 's'], 'স': ['s', 'sh'], 'য': ['j', 'y'],
+    'য়': ['y', 'j'], 'ড়': ['r', 'd'], 'ঢ়': ['r', 'dh'], 'ব': ['b', 'v'],
+    'ভ': ['bh', 'v'], 'ফ': ['f', 'ph'], 'ঞ': ['n'], 'ণ': ['n'],
+    'ং': ['ng', 'n'], 'ঙ': ['ng', 'n'], 'ৎ': ['t'],
+}
+
+
+def generate_phonetic_keys(bengali_word):
+    """Generates the canonical Banglish romanization key for a Bengali word."""
     roman = []
-    i = 0
-    chars = list(bengali_word)
-    while i < len(chars):
-        c = chars[i]
-        if c in char_map:
-            roman.append(char_map[c])
-        i += 1
+    for c in bengali_word:
+        if c in _CHAR_MAP:
+            roman.append(_CHAR_MAP[c])
     return "".join(roman)
+
+
+def _roman_variant(bengali_word, insert_o, alt_pick):
+    """Builds one alternative roman spelling of a Bengali word.
+
+    insert_o  -> also write the inherent vowel ('o') after every consonant that
+                 is not followed by a vowel sign, so "koro"/"somosa" style
+                 typing matches করো / সমস্যা.
+    alt_pick  -> which spelling alternative to use for ambiguous letters
+                 (ch/chh, sh/s, j/y, b/v, t/tt ...).
+    """
+    chars = list(bengali_word)
+    out = []
+    for i, c in enumerate(chars):
+        if c in _CONSONANTS:
+            alts = _CONSONANT_ALTS.get(c) or [_CHAR_MAP.get(c, '')]
+            out.append(alts[min(alt_pick, len(alts) - 1)])
+            nxt = chars[i + 1] if i + 1 < len(chars) else ''
+            # No inherent vowel at the very end of the word: "খাব" must not also
+            # answer to "khabo" (that spelling belongs to খাবো, a different word).
+            if nxt and not (nxt in _VOWEL_SIGNS or nxt == _HASANT) and insert_o:
+                out.append('o')
+        else:
+            out.append(_CHAR_MAP.get(c, ''))
+    return "".join(out)
+
+
+def generate_roman_variants(bengali_word, base_key, max_variants=14):
+    """Returns the spellings a user may plausibly type for this word."""
+    variants = []
+    for insert_o in (False, True):
+        for alt_pick in range(3):
+            v = _roman_variant(bengali_word, insert_o, alt_pick)
+            if v and v not in variants:
+                variants.append(v)
+            if len(variants) >= max_variants:
+                return variants
+    return variants
+
 
 def build_large_lexicon():
     """
@@ -430,7 +479,31 @@ def build_large_lexicon():
         lexicon_list.append((b_word, r_key, freq, cat))
 
     lexicon_list.sort(key=lambda x: x[2], reverse=True)
-    print(f"[Lexicon Builder] Total unique validated Bengali entries compiled: {len(lexicon_list)}")
+
+    # Spelling-variant expansion for the common words.  A single generated key
+    # (kro / smsja / shj) never matches how people actually type (koro / somosa
+    # / shohaj), so every short, frequent word is registered under all plausible
+    # spellings as well.  Ordered by frequency, so the entry budget is spent on
+    # the words that matter most.
+    MAX_VARIANT_KEYS = 80000
+    existing = {(b, r) for (b, r, _f, _c) in lexicon_list}
+    extra = []
+    for (b_word, r_key, freq, cat) in lexicon_list:
+        if len(extra) >= MAX_VARIANT_KEYS:
+            break
+        if len(b_word) > 9:
+            continue
+        for alt in generate_roman_variants(b_word, r_key):
+            if alt == r_key or (b_word, alt) in existing:
+                continue
+            existing.add((b_word, alt))
+            extra.append((b_word, alt, freq - 4000, cat))
+            if len(extra) >= MAX_VARIANT_KEYS:
+                break
+    lexicon_list.extend(extra)
+    lexicon_list.sort(key=lambda x: x[2], reverse=True)
+    print(f"[Lexicon Builder] Total unique validated Bengali entries compiled: {len(lexicon_list)}"
+          f" ({len(extra)} of them alternative spellings)")
     return lexicon_list
 
 def export_flat_binary_lexicon(lexicon, output_path):
@@ -647,23 +720,35 @@ def main():
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     lexicon = build_large_lexicon()
 
+    def merge_pairs(entries, pairs, category, base_score):
+        """Replaces matching (bengali, roman) pairs with the given category."""
+        pair_set = set(pairs)
+        kept = {}
+        for (b, r, fr, cat) in entries:
+            if (b, r) in pair_set:
+                continue
+            key = (b, r)
+            if key not in kept or fr > kept[key][0]:
+                kept[key] = (fr, cat)
+        for (r, b) in pairs:
+            kept[(b, r)] = (base_score - len(kept) * 10, category)
+        return [(b, r, fr, cat) for (b, r), (fr, cat) in kept.items()]
+
+    # Words Google Input Tools has already confirmed: kept on disk so the same
+    # spelling keeps working offline (learn-from-cloud).
+    cloud_path = os.path.join(base_dir, "engine", "data", "cloud_learned.tsv")
+    cloud_pairs = load_roman_overrides(cloud_path)
+    if cloud_pairs:
+        lexicon = merge_pairs(lexicon, cloud_pairs, "cloud_learned", 5000000)
+        lexicon.sort(key=lambda x: x[2], reverse=True)
+        print(f"[Cloud] Merged {len(cloud_pairs)} Google-verified words; entries now: {len(lexicon)}")
+
     # Merge human-editable roman overrides on top of the generated vocabulary.
     # Existing (bengali, roman) pairs are replaced; new pairs are appended.
     override_path = os.path.join(base_dir, "engine", "data", "roman_overrides.txt")
     overrides = load_roman_overrides(override_path)
     if overrides:
-        # Drop any generated pair whose exact (bengali, roman) is overridden, dedupe, then add overrides
-        ov_set = set(overrides)
-        kept = {}
-        for (b, r, fr, cat) in lexicon:
-            if (b, r) in ov_set:
-                continue
-            key = (b, r)
-            if key not in kept or fr > kept[key][0]:
-                kept[key] = (fr, cat)
-        for (r, b) in overrides:
-            kept[(b, r)] = (9000000 - len(kept) * 10, "override")
-        lexicon = [(b, r, fr, cat) for (b, r), (fr, cat) in kept.items()]
+        lexicon = merge_pairs(lexicon, overrides, "override", 9000000)
         lexicon.sort(key=lambda x: x[2], reverse=True)
         print(f"[Overrides] Merged; total entries now: {len(lexicon)}")
 

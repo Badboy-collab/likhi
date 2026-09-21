@@ -6,7 +6,7 @@
   },
   {
     "input": "tumi kemon acho",
-    "expected": "তুমি কেমন আছ",
+    "expected": "তুমি কেমন আছো",
     "context_category": "greeting"
   },
   {

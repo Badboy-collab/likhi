@@ -41,6 +41,14 @@ add_custom_command(
 )
 
 # TSF Framework Source Files
+#
+# Network boundary (decision 2026-09-14): cloud_translit.cpp IS linked in on
+# purpose, so bangla_tsf.dll imports WINHTTP.dll and serves the online
+# suggestions the user asked for. The network_isolation_check gate below runs
+# in WARNING mode and prints every network import on each link, so the IME can
+# be re-isolated later (likhi_sync.exe + filesystem staging) by building with
+# -DLIKHI_ALLOW_NETWORK=0.
+# TSF Framework Source Files
 set(TSF_SOURCES
     tsf/src/dll_main.cpp
     tsf/src/class_factory.cpp
@@ -51,6 +59,7 @@ set(TSF_SOURCES
     tsf/src/edit_session.cpp
     tsf/src/candidate_window.cpp
     tsf/src/cloud_translit.cpp
+    tsf/src/voice_input.cpp    # online speech->text (user-approved, same boundary)
     tsf/src/register.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/tsf_rc.obj
     tsf/src/bangla_tsf.def
@@ -72,7 +81,27 @@ target_link_libraries(bangla_tsf PRIVATE
     advapi32
     shell32
     winhttp
+    winmm      # voice input capture (waveIn)
 )
+
+# ---- Network boundary gate (warning while cloud suggestions are ON) --------
+# Runs after EVERY link of the IME DLL and prints its network imports, so the
+# boundary stays visible. -DLIKHI_ALLOW_NETWORK=0 makes it fatal again.
+set(LIKHI_ALLOW_NETWORK 1 CACHE STRING "1 = cloud suggestions allowed in bangla_tsf.dll (warn), 0 = enforce network-free (fatal)")
+get_filename_component(_likhi_toolchain_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
+find_program(LIKHI_OBJDUMP NAMES objdump HINTS "${_likhi_toolchain_bin}")
+if(LIKHI_OBJDUMP)
+    add_custom_command(TARGET bangla_tsf POST_BUILD
+        COMMAND ${CMAKE_COMMAND}
+                -DBINARY=$<TARGET_FILE:bangla_tsf>
+                -DOBJDUMP="${LIKHI_OBJDUMP}"
+                -DALLOW_NETWORK=${LIKHI_ALLOW_NETWORK}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tools/check_network_isolation.cmake"
+        COMMENT "network isolation gate: bangla_tsf.dll import table"
+    )
+else()
+    message(WARNING "objdump not found - bangla_tsf.dll network isolation gate DISABLED")
+endif()
 
 # Interactive CLI Tool Target
 add_executable(cli_engine tools/cli_engine.cpp)
@@ -97,8 +126,10 @@ add_executable(test_tsf_integration
     tsf/src/candidate_window.cpp
     tsf/src/edit_session.cpp
     tsf/src/cloud_translit.cpp
+    tsf/src/voice_input.cpp
 )
 target_link_libraries(test_tsf_integration PRIVATE
+    winmm
     bangla_engine_static
     ole32
     oleaut32
@@ -119,9 +150,11 @@ add_executable(test_p0_keyboard
     tsf/src/candidate_window.cpp
     tsf/src/edit_session.cpp
     tsf/src/cloud_translit.cpp
+    tsf/src/voice_input.cpp
     tsf/src/text_service.cpp
 )
 target_link_libraries(test_p0_keyboard PRIVATE
+    winmm
     bangla_engine_static
     ole32
     oleaut32
@@ -184,6 +217,18 @@ target_link_libraries(likhi_setup PRIVATE
     uuid      # MinGW ships the TSF CLSIDs (CLSID_TF_*) inside libuuid
 )
 
+# Engine probe (dev aid: candidate lists for Banglish words)
+add_executable(probe_words tools/probe_words.cpp)
+target_link_libraries(probe_words PRIVATE bangla_engine_static)
+
+# Candidate strip visual preview (dev aid: shows the real popup with samples)
+add_executable(preview_candidates
+    tools/preview_candidates.cpp
+    tsf/src/candidate_window.cpp
+)
+target_include_directories(preview_candidates PRIVATE tsf/include)
+target_link_libraries(preview_candidates PRIVATE user32 gdi32)
+
 # Performance Benchmark Target
 add_executable(benchmark_perf tools/benchmark_perf.cpp)
 target_link_libraries(benchmark_perf PRIVATE bangla_engine_static psapi)
@@ -202,6 +247,14 @@ add_executable(test_cloud_parser
 )
 target_link_libraries(test_cloud_parser PRIVATE winhttp)
 
+# Voice Input Helper Regression Test Target (pure: no audio device, no network)
+add_executable(test_voice_input
+    tests/unit/test_voice_input.cpp
+    tsf/src/voice_input.cpp
+)
+target_include_directories(test_voice_input PRIVATE tsf/include)
+target_link_libraries(test_voice_input PRIVATE winmm winhttp)
+
 # Real-World QA Runner Target
 add_executable(real_world_qa_runner
     tools/real_world_qa_runner.cpp
@@ -209,8 +262,10 @@ add_executable(real_world_qa_runner
     tsf/src/candidate_window.cpp
     tsf/src/edit_session.cpp
     tsf/src/cloud_translit.cpp
+    tsf/src/voice_input.cpp
 )
 target_link_libraries(real_world_qa_runner PRIVATE
+    winmm
     bangla_engine_static
     ole32
     oleaut32

@@ -37,6 +37,11 @@ static std::string BigramsFilePathFor(const std::string& user_dict_path) {
     return dir + "user_bigrams.tsv";
 }
 
+static std::string DirOf(const std::string& path) {
+    size_t pos = path.find_last_of("\\/");
+    return (pos == std::string::npos) ? std::string() : path.substr(0, pos + 1);
+}
+
 static uint64_t NowSeconds() {
     using namespace std::chrono;
     return static_cast<uint64_t>(duration_cast<seconds>(system_clock::now().time_since_epoch()).count());
@@ -74,6 +79,7 @@ struct BanglaEngine {
     bool learning_enabled = true;         // "Pause learning" control
     std::string bigram_path_;             // user_bigrams.tsv beside user_dict
     std::unordered_map<std::string, std::unordered_map<std::string, uint32_t>> user_bigrams_;
+    bool trust_filter_enabled_ = false;   // real lexicon loaded -> validate learned spellings
 
     BanglaEngine(const EngineConfig* cfg) {
         if (cfg) {
@@ -98,9 +104,52 @@ struct BanglaEngine {
         if (!lexicon_path_.empty()) {
             lexicon.LoadFromFile(lexicon_path_);
         }
+        // A learned spelling may only outrank a real word when it IS a real
+        // word: older builds learned whatever the fallback produced (রাখয়া,
+        // শোহাজ, কর for "koro" ...) and those entries used to sit on top of
+        // the correct spelling even after the lexicon was fixed. The check
+        // needs a real lexicon - the tiny built-in word list used by unit
+        // tests must never filter anything.
+        trust_filter_enabled_ = lexicon.WordCount() > 1000;
         if (!user_dict_path_.empty()) {
             personal_dict.LoadFromFile(user_dict_path_);
             bigram_path_ = BigramsFilePathFor(user_dict_path_);
+
+            // --- one-time repair of dictionaries written by older builds ----
+            // Those builds auto-learned whatever the broken fallback produced
+            // (rakha -> রাখয়া, shohaj -> শোহাজ, koro -> কর) and the inflated
+            // counts made the wrong spelling stick even after the lexicon was
+            // fixed. Every entry that is not the lexicon's best (most
+            // frequent) answer for its roman key is dropped ONCE, after a
+            // backup, and the marker file below keeps this from ever running
+            // again - normal learning is untouched from then on.
+            if (trust_filter_enabled_) {
+                const std::string marker = DirOf(user_dict_path_) + "learned_repaired_v1.flag";
+                std::ifstream marker_in(marker);
+                if (!marker_in.is_open()) {
+                    std::vector<std::pair<std::string, std::string>> drop;
+                    for (const auto& ue : personal_dict.GetAllEntries()) {
+                        auto best = lexicon.SearchRoman(ue.roman_key, 8);
+                        if (best.empty()) continue;                            // no lexicon answer: keep (own names)
+                        if (best[0].bengali_word == ue.bengali_word) continue;  // already the best spelling
+                        drop.emplace_back(ue.roman_key, ue.bengali_word);
+                    }
+                    if (!drop.empty()) {
+                        std::ifstream in(user_dict_path_, std::ios::binary);
+                        std::string content((std::istreambuf_iterator<char>(in)),
+                                            std::istreambuf_iterator<char>());
+                        in.close();
+                        std::ofstream bak(user_dict_path_ + ".pre-lexicon-fix.bak", std::ios::binary);
+                        bak.write(content.data(), static_cast<std::streamsize>(content.size()));
+                        bak.close();
+                        for (const auto& d : drop) {
+                            personal_dict.RemoveWord(d.first, d.second);
+                        }
+                    }
+                    std::ofstream marker_out(marker);
+                    marker_out << "learned entries repaired against the fixed lexicon\n";
+                }
+            }
 
             // Load the learned word-context bigrams (offline personal context).
             std::ifstream bin(bigram_path_);
@@ -224,14 +273,67 @@ void BanglaEngine_GetCandidates(BanglaEngine* engine, CandidateList* out_list) {
     //    and defaults to it (Google-Input-Tools style).
     auto user_entries = engine->personal_dict.GetWordsByRomanKey(engine->composition);
     std::unordered_map<std::string, float> user_boosts;
+
+    // A learned spelling may only outrank the dictionary when it is
+    // trustworthy: either it is a real word in the lexicon, or the lexicon has
+    // no answer at all for this roman key (the user's own name, e.g.
+    // "parvej -> পারভেজ"). Older builds auto-learned whatever the broken
+    // fallback produced (rakha -> রাখয়া, shohaj -> শোহাজ, koro -> কর) and
+    // those entries used to sit on top of the correct word even after the
+    // lexicon was fixed - they must never do that again.
+    //
+    // "Trustworthy" is judged against the word the dictionary itself prefers
+    // for this exact roman key (the most frequent one): a spelling that is at
+    // least half as common is a plausible alternative the user may prefer, but
+    // a rare variant of a dominant spelling (রাখয়া 810k against রাখা 4.2M) is
+    // always kept below it - even if it gets learned again on a machine still
+    // running an older build.
+    auto best_dictionary_answer = [engine](const std::string& roman_key) -> const bangla::LexiconEntry* {
+        auto matches = engine->lexicon.SearchRoman(roman_key, 8);
+        const bangla::LexiconEntry* best = nullptr;
+        for (const auto& m : matches) {
+            if (!best || m.frequency > best->frequency) best = &m;
+        }
+        return best;
+    };
+    auto trusted_personal = [engine, &best_dictionary_answer](const bangla::UserWordEntry& ue) {
+        if (!engine->trust_filter_enabled_) return true;
+        const bangla::LexiconEntry* best = best_dictionary_answer(ue.roman_key);
+        if (!best) return true;  // no dictionary answer for this key: user's own spelling
+        const bangla::LexiconEntry* own = engine->lexicon.Find(ue.bengali_word);
+        if (!own) return false;  // not a word at all, while the key has real answers
+        return own->frequency * 2 >= best->frequency;
+    };
+    // A single passive commit is not evidence: only an explicitly added word or
+    // a spelling the user committed at least kMinEvidence times is boosted.
+    constexpr uint32_t kMinEvidence = 2;
+    auto may_boost = [](const bangla::UserWordEntry& ue) {
+        return !ue.auto_learned || ue.frequency >= kMinEvidence;
+    };
+
     for (const auto& ue : user_entries) {
-        float b = std::min(1.0f, 0.2f + std::log10(static_cast<float>(ue.frequency) + 1.0f) / 3.0f);
-        user_boosts[ue.bengali_word] = b;
+        // Only a deliberate choice is injected at all (it enters the ranking
+        // with phonetic_score 1.0): a real word the user keeps choosing, or a
+        // spelling they added themselves. A single passive commit - or a
+        // spelling the old fallback invented (rakha -> রাখয়া, koro -> কর) -
+        // must never outrank the dictionary; a kept-wrong spelling is exactly
+        // the "nothing changed after the update" the user reported.
+        if (!trusted_personal(ue)) {
+            continue;
+        }
         bangla::PhoneticCandidate pc;
         pc.text = ue.bengali_word;
-        pc.score = 1.0f;
+        // A deliberate choice enters the ranking at full phonetic score; a
+        // one-off commit is still OFFERED (the user may pick it again) but not
+        // pushed above the dictionary.
+        pc.score = may_boost(ue) ? 1.0f : 0.30f;
         pc.rule_path = "personal_dict";
         phonetic_cands.push_back(pc);
+        if (!may_boost(ue)) {
+            continue;
+        }
+        float b = std::min(1.0f, 0.2f + std::log10(static_cast<float>(ue.frequency) + 1.0f) / 3.0f);
+        user_boosts[ue.bengali_word] = b;
     }
 
     // 3b. Learned word-context (bigram) boost: if the user has committed
@@ -242,6 +344,7 @@ void BanglaEngine_GetCandidates(BanglaEngine* engine, CandidateList* out_list) {
         auto bit = engine->user_bigrams_.find(prev_word);
         if (bit != engine->user_bigrams_.end()) {
             for (const auto& ctx : bit->second) {
+                if (engine->trust_filter_enabled_ && !engine->lexicon.Find(ctx.first)) continue;
                 float b = std::min(1.0f, 0.35f + std::log10(static_cast<float>(ctx.second) + 1.0f) / 4.0f);
                 auto it = user_boosts.find(ctx.first);
                 if (it == user_boosts.end() || b > it->second) user_boosts[ctx.first] = b;
@@ -267,11 +370,11 @@ void BanglaEngine_GetCandidates(BanglaEngine* engine, CandidateList* out_list) {
     //     selection never reorders anything, while repeated choices take over.
     //     Equal-frequency habits are ordered by recency (unused old habits
     //     gradually decay). Curated overrides still outrank everything.
-    constexpr uint32_t kMinEvidence = 2;
     if (!user_entries.empty() && !ranked.empty()) {
         uint64_t now = NowSeconds();
         std::vector<bangla::UserWordEntry> lifted;
         for (const auto& ue : user_entries) {
+            if (!trusted_personal(ue)) continue;
             if (ue.frequency >= kMinEvidence) lifted.push_back(ue);
         }
         if (!lifted.empty()) {

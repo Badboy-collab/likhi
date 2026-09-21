@@ -20,7 +20,7 @@ graph TD
 
 - **Text Service CLSID**: `{B4F1470A-7C69-4C62-972F-6379532856E1}` (`CLSID_BanglaTextService`)
 - **Profile GUID**: `{D85B64E2-0D5C-40EE-BE15-1E7C146603F2}` (`GUID_BanglaProfile`)
-- **Language ID**: `0x0445` (Bengali - Bangladesh) & `0x0845` (Bengali - India)
+- **Language ID**: `0x0845` (Bengali - Bangladesh, the only profile Likhi registers) — note `0x0445` is Bengali - India and must NOT be used for Likhi.
 - **Category GUIDs**:
   - `GUID_TFCAT_TIP_KEYBOARD`
   - `GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER`

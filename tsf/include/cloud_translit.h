@@ -1,6 +1,21 @@
 #ifndef BANGLA_CLOUD_TRANSLIT_H
 #define BANGLA_CLOUD_TRANSLIT_H
 
+// ===========================================================================
+// NETWORK BOUNDARY NOTE (decision 2026-09-14, user-approved)
+//
+// This is the ONLY code in the tree that talks to the network
+// (WinHTTP -> inputtools.google.com). It IS intentionally linked into
+// bangla_tsf.dll again, because the online suggestions are a wanted feature.
+// Consequence: bangla_tsf.dll imports WINHTTP.dll.
+//
+// The network-isolation gate (tools/check_network_isolation.cmake) therefore
+// runs in WARNING mode and prints any network import on every link, so
+// re-isolating the IME later (moving this file into likhi_sync.exe with
+// filesystem staging only - no pipes, no COM IPC, no window messages) is a
+// one-line switch back to FATAL (LIKHI_ALLOW_NETWORK=0).
+// ===========================================================================
+
 #include <windows.h>
 #include <winhttp.h>
 #include <cstdint>
@@ -13,6 +28,7 @@
 #include <thread>
 #include <functional>
 #include <chrono>
+#include <map>
 
 namespace bangla_tsf {
 
@@ -71,6 +87,7 @@ private:
     bool EnsureHttp();
     void CloseHttp();
     bool DoHttpRequest(const std::wstring& word, uint32_t generation);
+    bool HttpGet(const std::wstring& path, std::string& body);
 
     std::thread worker_;
     std::atomic<bool> stop_{false};
@@ -85,6 +102,24 @@ private:
     HINTERNET h_session_ = nullptr;
     HINTERNET h_connect_ = nullptr;
     std::chrono::steady_clock::time_point offline_until_{};
+
+    // Timestamp of the last successful request. A socket idle longer than a
+    // few seconds is closed by the server, so the next request on it fails;
+    // we reopen proactively after kFreshAfter to avoid that ("sometimes no
+    // Google suggestion").
+    static constexpr int kFreshAfterSeconds = 20;
+    std::chrono::steady_clock::time_point fresh_after_{};
+
+    // Word -> candidates cache (worker thread only). A repeated word answers
+    // instantly instead of paying another HTTPS round trip - this is what makes
+    // the Google suggestions show up reliably while typing.
+    static constexpr size_t kCacheMax = 256;
+    std::map<std::wstring, std::vector<std::wstring>> cache_;
+    void CacheStore(const std::wstring& word, const std::vector<std::wstring>& cands);
+
+    // True only for the connection warm-up call, whose result must never be
+    // published as a suggestion.
+    bool warming_ = false;
 };
 
 } // namespace bangla_tsf

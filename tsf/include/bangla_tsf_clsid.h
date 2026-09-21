@@ -17,13 +17,16 @@ DEFINE_GUID(GUID_BanglaDisplayAttribute,
     0x4c1b14e1, 0x2678, 0x4f15, 0xb6, 0xd1, 0xfe, 0x3c, 0x8b, 0x72, 0xaa, 0x41);
 
 // Language IDs as CANONICAL numeric literals.
-// IMPORTANT: do NOT derive these from SUBLANG_BENGALI_BANGLADESH/INDIA:
-// several MinGW-w64 header versions SWAP those two constants (BD=0x02, IN=0x01),
-// which silently registers the TSF profile under the wrong Bengali locale.
-// Canonical values (winnt.h): SUBLANG_BENGALI_BANGLADESH = 0x01 -> 0x0445,
-//                             SUBLANG_BENGALI_INDIA      = 0x02 -> 0x0845.
-#define BANGLA_LANGID_BD   0x0445   // Bengali (Bangladesh)
-#define BANGLA_LANGID_IN   0x0845   // Bengali (India)
+// VERIFIED against Windows itself: [System.Globalization.CultureInfo]::GetCultureInfo(0x0445)
+// returns "bn-IN" and GetCultureInfo(0x0845) returns "bn-BD" (also see
+// docs/PROJECT_DECISIONS.md DEC-003: Likhi registers under Bangla (Bangladesh) = 0x0845).
+//
+// NEVER derive these from SUBLANG_BENGALI_* macros — they are easy to misread and an
+// earlier build shipped BD=0x0445, which registered Likhi as *Bengali (India)*; Windows
+// then showed Likhi under "বাংলা (ভারত)" and kept re-adding legacy Bangla keyboards
+// because "বাংলা (বাংলাদেশ)" had no input method left.
+#define BANGLA_LANGID_BD   0x0845   // Bengali (Bangladesh) -> bn-BD
+#define BANGLA_LANGID_IN   0x0445   // Bengali (India)      -> bn-IN
 #define BANGLA_LANGID_US   0x0409   // English (United States)
 
 #define BANGLA_IME_NAME_W      L"Likhi (লিখি)"

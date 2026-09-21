@@ -238,8 +238,7 @@ std::vector<ScoredCandidate> ContextRanker::RankCandidates(
             score *= 0.40f;
         }
 
-        sc.final_score = std::min(1.0f, score);
-    }
+        sc.final_score = std::min(1.0f, score);    }
 
     // 5. Flatten and Sort
     std::vector<ScoredCandidate> sorted_candidates;

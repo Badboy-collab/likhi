@@ -28,6 +28,26 @@ public:
     void SelectNext();
     void SelectPrev();
 
+    // ---- microphone row (voice input) ----------------------------------
+    // Off       : no microphone row at all
+    // Ready     : idle microphone button (clickable, same as Ctrl+Alt+V)
+    // Recording : red microphone + listening label
+    // Busy      : recognition in flight
+    enum class VoiceState { Off = 0, Ready = 1, Recording = 2, Busy = 3 };
+    using VoiceToggleCallback = std::function<void()>;
+    using VoiceResultCallback = std::function<void(const std::wstring& text,
+                                                   const std::wstring& error)>;
+
+    void SetVoiceState(VoiceState state, const std::wstring& label = std::wstring());
+    VoiceState GetVoiceState() const { return voice_state_; }
+    void SetVoiceToggleCallback(VoiceToggleCallback cb) { voice_toggle_cb_ = std::move(cb); }
+    void SetVoiceResultCallback(VoiceResultCallback cb) { voice_result_cb_ = std::move(cb); }
+    // Marshals a recognition result from the worker thread onto the UI thread.
+    void PostVoiceResult(const std::wstring& text, const std::wstring& error);
+    // (Re)shows the strip anchored at `anchor_rect`. Works with an empty
+    // candidate list, so the microphone row is reachable while not composing.
+    void ShowVoiceStatus(const RECT& anchor_rect);
+
     // Cloud suggestions are produced on a worker thread; PostCloudResult
     // marshals them onto this window's (UI) thread through a private window
     // message so the caller can update the dropdown without owning the thread.
@@ -61,6 +81,15 @@ private:
 
     int width_;
     int height_;
+
+    // Voice (microphone) state. Declared last so the constructor's init list
+    // order matches the declaration order.
+    std::wstring VoiceLabel() const;
+    VoiceState voice_state_;
+    std::wstring voice_label_;
+    RECT mic_rect_;
+    VoiceToggleCallback voice_toggle_cb_;
+    VoiceResultCallback voice_result_cb_;
 };
 
 } // namespace bangla_tsf

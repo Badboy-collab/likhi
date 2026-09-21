@@ -126,6 +126,15 @@ bool CompositionManager::Initialize(HINSTANCE hInst) {
         candidate_window_.SetSelectionCallback([this](size_t index) {
             OnCandidateWindowSelection(index);
         });
+        // Voice: the microphone row toggles recording; the worker thread hands
+        // the recognised sentence back through this window (UI thread).
+        candidate_window_.SetVoiceToggleCallback([this]() { ToggleVoice(); });
+        candidate_window_.SetVoiceResultCallback([this](const std::wstring& text,
+                                                        const std::wstring& error) {
+            OnVoiceResult(text, error);
+        });
+        InitVoice();
+        RefreshVoiceRow();
         // Cloud replies arrive on the CloudTranslit worker thread; marshal them
         // onto the UI thread via the candidate window before touching state.
         cloud_.SetResultCallback([this](const std::wstring& word, uint32_t generation,
@@ -146,6 +155,7 @@ void CompositionManager::Shutdown() {
         BanglaEngine_Destroy(engine_);
         engine_ = nullptr;
     }
+    if (voice_rec_) voice_rec_->Stop();  // release the microphone
     DropCloudState();
     cloud_.Stop();
     candidate_window_.Destroy();
@@ -217,6 +227,16 @@ void CompositionManager::SetCloudTranslitEnabled(bool enabled) {
     } else {
         DropCloudState();
         cloud_.Stop();
+    }
+}
+
+void CompositionManager::SetSuggestionsEnabled(bool enabled) {
+    if (enabled == suggestions_enabled_) return;
+    suggestions_enabled_ = enabled;
+    if (!enabled) {
+        // A hidden strip means no online lookup either.
+        SetCloudTranslitEnabled(false);
+        candidate_window_.Hide();
     }
 }
 
@@ -408,9 +428,9 @@ void CompositionManager::UpdateCompositionAndUI(ITfContext* pContext) {
     // Refresh the popup content immediately at the last known anchor (async-only
     // hosts like Chromium/Electron may not run the edit session until the next
     // message-loop tick, so this keeps the suggestion list feeling instant).
-    if (caret_rect_valid_ && !current_candidates_w_.empty()) {
+    if (suggestions_enabled_ && caret_rect_valid_ && !current_candidates_w_.empty()) {
         candidate_window_.ShowCandidates(current_candidates_w_, selected_candidate_idx_, caret_rect_);
-    } else if (current_candidates_w_.empty()) {
+    } else if (!suggestions_enabled_ || current_candidates_w_.empty()) {
         candidate_window_.Hide();
     }
 
@@ -762,6 +782,158 @@ void CompositionManager::OnCandidateWindowSelection(size_t index) {
     }
 }
 
+// =====================================================================
+// Voice input (speech -> text)
+//
+// The API key lives in %APPDATA%\PC-Bangla-Typing-App\voice.json (never in
+// the registry, never logged). Recording runs on the UI thread (winmm), the
+// network round trip runs on a short-lived worker thread, and the recognised
+// sentence is inserted by the UI thread through a PostMessage hop — so the
+// host application is never blocked.
+// =====================================================================
+
+static std::wstring VoiceAppDataDir() {
+    wchar_t appdata[MAX_PATH] = {0};
+    std::wstring dir;
+    if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appdata))) {
+        dir = std::wstring(appdata) + L"\\PC-Bangla-Typing-App";
+    } else {
+        dir = L"PC-Bangla-Typing-App";
+    }
+    CreateDirectoryW(dir.c_str(), NULL);  // fine if it already exists
+    return dir;
+}
+
+void CompositionManager::InitVoice() {
+    voice_cfg_ = VoiceConfig_Load(VoiceAppDataDir());
+    voice_enabled_ = voice_cfg_.enabled();
+    if (voice_enabled_ && !voice_rec_) {
+        voice_rec_.reset(new VoiceRecorder());
+    }
+}
+
+void CompositionManager::RefreshVoiceRow() {
+    using VS = CandidateWindow::VoiceState;
+    const bool recording = voice_rec_ != nullptr && voice_rec_->IsRecording();
+
+    if (!voice_enabled_ && !recording && !voice_pending_) {
+        candidate_window_.SetVoiceState(VS::Off);
+        return;
+    }
+    if (voice_pending_) {
+        candidate_window_.SetVoiceState(VS::Busy, L"\u09B2\u09BF\u0996\u099B\u09BF...");
+    } else if (recording) {
+        candidate_window_.SetVoiceState(
+            VS::Recording, L"\u09B6\u09C1\u09A8\u099B\u09BF...  (Ctrl+Alt+V)");
+    } else {
+        candidate_window_.SetVoiceState(
+            VS::Ready, L"\u09AD\u09AF\u09BC\u09C7\u09B8 \u0987\u09A8\u09AA\u09C1\u099F  (Ctrl+Alt+V)");
+    }
+}
+
+void CompositionManager::ToggleVoice() {
+    using VS = CandidateWindow::VoiceState;
+
+    if (!voice_enabled_) {
+        // Say why nothing happened instead of failing silently.
+        voice_pending_ = false;
+        const std::wstring hint = L"voice.json \u098F API key \u09A6\u09BF\u09A8";
+        candidate_window_.SetVoiceState(VS::Ready, hint);
+        RECT anchor = caret_rect_valid_ ? caret_rect_ : RECT{200, 200, 300, 220};
+        candidate_window_.ShowVoiceStatus(anchor);
+        return;
+    }
+    if (!voice_rec_) voice_rec_.reset(new VoiceRecorder());
+
+    if (voice_rec_->IsRecording()) {
+        // ---- stop -> recognise (worker thread) ----
+        std::vector<int16_t> pcm = voice_rec_->Stop();
+        if (pcm.empty()) {
+            voice_pending_ = false;
+            RefreshVoiceRow();
+            OnVoiceResult(std::wstring(), L"\u0995\u09BF\u099B\u09C1 \u09B6\u09C1\u09A8\u09A4\u09C7 \u09AA\u09BE\u09B0\u09BF\u09A8\u09BF");
+            return;
+        }
+        voice_pending_ = true;
+        RefreshVoiceRow();
+
+        const VoiceConfig cfg = voice_cfg_;
+        std::thread([this, pcm, cfg]() {
+            std::wstring err;
+            const std::string text8 = Voice_Transcribe(pcm, cfg, &err);
+            std::wstring text;
+            if (!text8.empty()) text = Utf8ToUtf16(text8);
+            candidate_window_.PostVoiceResult(text, err);
+        }).detach();
+        return;
+    }
+
+    // ---- start recording ----
+    if (is_composing_ && current_context_) {
+        // Never let the recognised sentence land inside a half-typed word.
+        CommitCurrentComposition(current_context_);
+    }
+    if (!voice_rec_->Start()) {
+        std::wstring err = voice_rec_->LastError();
+        if (err.empty()) err = L"\u09AE\u09BE\u0987\u0995\u09CD\u09B0\u09CB\u09AB\u09CB\u09A8 \u09AA\u09BE\u0993\u09AF\u09BC\u09BE \u09AF\u09BE\u09AF\u09BC\u09A8\u09BF";
+        OnVoiceResult(std::wstring(), err);
+        return;
+    }
+    RefreshVoiceRow();
+    RECT anchor = caret_rect_valid_ ? caret_rect_ : RECT{200, 200, 300, 220};
+    candidate_window_.ShowVoiceStatus(anchor);
+}
+
+void CompositionManager::OnVoiceResult(const std::wstring& text, const std::wstring& error) {
+    using VS = CandidateWindow::VoiceState;
+    voice_pending_ = false;
+
+    if (!text.empty()) {
+        std::wstring to_insert = text;
+        if (to_insert.back() != L' ' && to_insert.back() != L'\n') to_insert += L' ';
+        InsertTextAtCaret(to_insert);
+        RefreshVoiceRow();
+        if (!is_composing_ && candidate_window_.GetVoiceState() == VS::Ready) {
+            candidate_window_.SetVoiceState(VS::Off);  // done: strip disappears
+        }
+        return;
+    }
+
+    const std::wstring msg = error.empty()
+        ? std::wstring(L"\u09B2\u09C7\u0996\u09BE \u0986\u09B8\u09B2\u09CB \u09A8\u09BE")
+        : error;
+    candidate_window_.SetVoiceState(VS::Ready, msg);
+    RECT anchor = caret_rect_valid_ ? caret_rect_ : RECT{200, 200, 300, 220};
+    candidate_window_.ShowVoiceStatus(anchor);
+}
+
+bool CompositionManager::InsertTextAtCaret(const std::wstring& text) {
+    if (text.empty() || !current_context_ || !service_) return false;
+
+    ITfContext* pContext = current_context_;
+    ITfEditSession* session = new ActionEditSession(pContext,
+        [pContext, text](TfEditCookie ec) -> HRESULT {
+            ITfInsertAtSelection* insert_at_selection = nullptr;
+            if (SUCCEEDED(pContext->QueryInterface(IID_ITfInsertAtSelection,
+                                                  (void**)&insert_at_selection))) {
+                ITfRange* pRange = nullptr;
+                insert_at_selection->InsertTextAtSelection(ec, 0, text.c_str(),
+                                                           (LONG)text.length(), &pRange);
+                if (pRange) pRange->Release();
+                insert_at_selection->Release();
+            }
+            return S_OK;
+        });
+
+    HRESULT hrSession = S_OK;
+    HRESULT hr = pContext->RequestEditSession(service_->GetClientId(), session,
+                                              TF_ES_READWRITE | TF_ES_SYNC, &hrSession);
+    if (hr == TF_E_SYNCHRONOUS) {
+        pContext->RequestEditSession(service_->GetClientId(), session,
+                                     TF_ES_READWRITE, &hrSession);
+    }
+    session->Release();
+    return true;
+}
+
 } // namespace bangla_tsf
-
-

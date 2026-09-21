@@ -190,6 +190,18 @@ void CloudTranslit::Cancel() {
 
 void CloudTranslit::WorkerMain() {
     std::unique_lock<std::mutex> lk(mu_);
+
+    // One-off warm-up: open the HTTPS connection / TLS session so the user's
+    // first word does not pay the cold handshake (measured 3.5-12 s cold vs
+    // ~250 ms once kept alive). The result is deliberately never published.
+    if (!stop_) {
+        lk.unlock();
+        warming_ = true;
+        DoHttpRequest(L"ami", 0);
+        warming_ = false;
+        lk.lock();
+    }
+
     while (!stop_) {
         cv_.wait(lk, [&] { return stop_ || !pending_word_.empty(); });
         if (stop_) break;
@@ -236,10 +248,12 @@ bool CloudTranslit::EnsureHttp() {
                              WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                              WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!h_session_) {
-        offline_until_ = now + std::chrono::seconds(10);
+        offline_until_ = now + std::chrono::seconds(2);
         return false;
     }
-    DWORD ms = 4000; // aggressive timeouts: offline must fall back fast
+    // Keep-alive makes the steady state fast; the longer budget covers a slow
+    // first connect so the very first word still returns suggestions.
+    DWORD ms = 6000;
     WinHttpSetOption(h_session_, WINHTTP_OPTION_CONNECT_TIMEOUT, &ms, sizeof(ms));
     WinHttpSetOption(h_session_, WINHTTP_OPTION_SEND_TIMEOUT, &ms, sizeof(ms));
     WinHttpSetOption(h_session_, WINHTTP_OPTION_RECEIVE_TIMEOUT, &ms, sizeof(ms));
@@ -248,7 +262,7 @@ bool CloudTranslit::EnsureHttp() {
                                 INTERNET_DEFAULT_HTTPS_PORT, 0);
     if (!h_connect_) {
         CloseHttp();
-        offline_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        offline_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(2);
         return false;
     }
     return true;
@@ -259,8 +273,25 @@ void CloudTranslit::CloseHttp() {
     if (h_session_) { WinHttpCloseHandle(h_session_); h_session_ = nullptr; }
 }
 
+void CloudTranslit::CacheStore(const std::wstring& word,
+                              const std::vector<std::wstring>& cands) {
+    if (word.empty() || cands.empty()) return;
+    if (cache_.size() >= kCacheMax && cache_.find(word) == cache_.end()) {
+        cache_.erase(cache_.begin()); // cheap FIFO-ish eviction
+    }
+    cache_[word] = cands;
+}
+
 bool CloudTranslit::DoHttpRequest(const std::wstring& word, uint32_t generation) {
     if (word.empty() || stop_) return false;
+
+    // Cache hit: publish at once, no network round trip.
+    auto cached = cache_.find(word);
+    if (cached != cache_.end()) {
+        if (result_cb_ && !stop_ && !warming_) result_cb_(word, generation, cached->second);
+        return true;
+    }
+
     if (!EnsureHttp()) return false;
 
     // Same parameters as the extracted JS engine:
@@ -270,42 +301,37 @@ bool CloudTranslit::DoHttpRequest(const std::wstring& word, uint32_t generation)
         if (wc <= 0x7F) word8 += static_cast<char>(wc);
         else { /* roman buffer is ASCII; skip anything else */ }
     }
+    // Exact parameters used by the reference JS engine
+    // (bangla_extracted_engine/bangla_phonetic_ime.js, app=demopage).
     std::string path = "/request?text=" + UrlEncode(word8) +
-                       "&itc=bn-t-i0-und&num=5&cp=0&cs=1&ie=utf-8&oe=utf-8&app=likhi";
+                       "&itc=bn-t-i0-und&num=5&cp=0&cs=1&ie=utf-8&oe=utf-8&app=demopage";
 
     int wlen = MultiByteToWideChar(CP_UTF8, 0, path.data(), (int)path.size(), nullptr, 0);
     std::wstring pathw(wlen, L'\0');
     MultiByteToWideChar(CP_UTF8, 0, path.data(), (int)path.size(), &pathw[0], wlen);
 
-    HINTERNET req = WinHttpOpenRequest(h_connect_, L"GET", pathw.c_str(), nullptr,
-                                       WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
-                                       WINHTTP_FLAG_SECURE);
-    if (!req) {
+    const auto now = std::chrono::steady_clock::now();
+
+    // Stale-socket guard: an idle keep-alive connection is closed by the server
+    // and the first request sent on it fails. Reopen proactively after a gap.
+    if (h_connect_ && fresh_after_ != std::chrono::steady_clock::time_point{} &&
+        now - fresh_after_ > std::chrono::seconds(kFreshAfterSeconds)) {
         CloseHttp();
-        return false;
     }
 
-    BOOL ok = WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-                                 WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
-    if (ok) ok = WinHttpReceiveResponse(req, nullptr);
-
+    // Two attempts: the retry always runs on a brand new socket, which is what
+    // makes the suggestions arrive every time instead of "sometimes not".
     std::string body;
-    while (ok) {
-        DWORD avail = 0;
-        if (!WinHttpQueryDataAvailable(req, &avail) || avail == 0) break;
-        char buf[8192];
-        DWORD read = 0;
-        DWORD want = (std::min)(avail, (DWORD)sizeof(buf));
-        if (!WinHttpReadData(req, buf, want, &read) || read == 0) { ok = FALSE; break; }
-        body.append(buf, read);
-    }
-    WinHttpCloseHandle(req);
-
-    if (!ok) {
-        // Connection died (offline etc.): drop handles so the next attempt
-        // re-negotiates, and cool down for a few seconds.
+    bool transport_ok = false;
+    for (int attempt = 0; attempt < 2 && !stop_; ++attempt) {
+        if (attempt > 0) CloseHttp();
+        if (!EnsureHttp()) break;
+        if (HttpGet(pathw, body)) { transport_ok = true; break; }
         CloseHttp();
-        offline_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    }
+    if (!transport_ok) {
+        // Short cooldown only: the next keystroke may succeed immediately.
+        offline_until_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(1500);
         return false;
     }
 
@@ -313,8 +339,9 @@ bool CloudTranslit::DoHttpRequest(const std::wstring& word, uint32_t generation)
     if (!CloudTranslit_ParseGoogleResponse(body, candidates8)) {
         return false; // no suggestions (or unexpected shape) — fallback local
     }
-    // Success: reset any cooldown.
+    // Success: reset any cooldown and remember when the socket was last warm.
     offline_until_ = {};
+    fresh_after_ = now;
 
     std::vector<std::wstring> candidates;
     candidates.reserve(candidates8.size());
@@ -326,10 +353,47 @@ bool CloudTranslit::DoHttpRequest(const std::wstring& word, uint32_t generation)
     }
     if (candidates.empty()) return false;
 
-    if (result_cb_ && !stop_) {
+    CacheStore(word, candidates);
+
+    if (result_cb_ && !stop_ && !warming_) {
         result_cb_(word, generation, candidates);
     }
     return true;
+}
+
+bool CloudTranslit::HttpGet(const std::wstring& path, std::string& body) {
+    body.clear();
+    if (!h_connect_) return false;
+
+    HINTERNET req = WinHttpOpenRequest(h_connect_, L"GET", path.c_str(), nullptr,
+                                       WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                       WINHTTP_FLAG_SECURE);
+    if (!req) return false;
+
+    BOOL ok = WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+                                 WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
+    if (ok) ok = WinHttpReceiveResponse(req, nullptr);
+
+    DWORD status = 0;
+    DWORD len = sizeof(status);
+    WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                        WINHTTP_HEADER_NAME_BY_INDEX, &status, &len, WINHTTP_NO_HEADER_INDEX);
+
+    while (ok) {
+        DWORD avail = 0;
+        if (!WinHttpQueryDataAvailable(req, &avail) || avail == 0) break;
+        char buf[8192];
+        DWORD read = 0;
+        DWORD want = (std::min)(avail, (DWORD)sizeof(buf));
+        if (!WinHttpReadData(req, buf, want, &read) || read == 0) break;
+        body.append(buf, read);
+        if (body.size() > 64 * 1024) break;  // suggestions are tiny; stop runaway
+    }
+    WinHttpCloseHandle(req);
+
+    // A non-200 answer is a transport-level failure worth one retry.
+    if (status != 0 && status != 200) return false;
+    return ok != FALSE && !body.empty();
 }
 
 } // namespace bangla_tsf

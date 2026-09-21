@@ -13,7 +13,7 @@ This document details how the native C++20 language engine connects to the Windo
    - Sets `ThreadingModel = Apartment`.
 2. **TSF Category & Profile Registration (`RegisterTSFProfiles`)**:
    - Calls `ITfInputProcessorProfiles::Register(CLSID_BanglaTextService)`.
-   - Adds language profile for Bengali (`0x0445`).
+   - Adds language profile for Bengali (Bangladesh) = `0x0845` (`0x0445` is Bengali - India and is never used for Likhi).
    - Calls `ITfCategoryMgr::RegisterCategory` for keyboard TIP and display attributes.
 
 ---

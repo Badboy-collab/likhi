@@ -18,12 +18,34 @@ namespace {
 // Missing file / missing keys keep safe defaults. NOTE: cloud *contribution*
 // has no backend yet, so nothing is ever uploaded from here — "cloud" below
 // only means the per-word Google lookup for suggestions.
+// Store/UWP hosts (WhatsApp Desktop, Mail, Photos, ...) load the IME inside an
+// AppContainer: the user's %APPDATA% is not reachable and WinHTTP fails without
+// the internetClient capability. Typing must still work there, so a packaged
+// process gets the online lookup switched OFF up front instead of stalling on a
+// blocked socket; local engine suggestions are unaffected.
+bool RunningInAppContainer() {
+    HMODULE kernel = GetModuleHandleW(L"kernel32.dll");
+    if (!kernel) return false;
+    using GetCurrentPackageFullNameFn = LONG(WINAPI*)(UINT32*, PWSTR);
+    auto fn = reinterpret_cast<GetCurrentPackageFullNameFn>(
+        reinterpret_cast<void*>(GetProcAddress(kernel, "GetCurrentPackageFullName")));
+    if (!fn) return false;
+    UINT32 length = 0;
+    return fn(&length, nullptr) == ERROR_INSUFFICIENT_BUFFER;  // 122 => packaged host
+}
+
 struct StartupSettings {
     bool cloud_suggestions = true;   // lookup-only suggestions (ON by default)
 };
 
 StartupSettings ApplySettingsFile(CompositionManager& mgr) {
     StartupSettings out;
+
+    if (RunningInAppContainer()) {
+        out.cloud_suggestions = false;
+        mgr.SetCloudTranslitEnabled(false);
+        return out;
+    }
 
     wchar_t appdata[MAX_PATH] = {0};
     if (FAILED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appdata))) return out;
@@ -51,9 +73,13 @@ StartupSettings ApplySettingsFile(CompositionManager& mgr) {
             mgr.SetPersonalLearningEnabled(true);
         }
         // Suggestion strip hidden implies no cloud lookup either.
+        if (line.find("\"show_suggestions\": true") != std::string::npos) {
+            mgr.SetSuggestionsEnabled(true);
+        }
         if (line.find("\"cloud_suggestions\": false") != std::string::npos ||
             line.find("\"show_suggestions\": false") != std::string::npos) {
             out.cloud_suggestions = false;
+            mgr.SetSuggestionsEnabled(false);
         }
     }
     return out;

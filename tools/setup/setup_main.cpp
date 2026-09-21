@@ -217,7 +217,17 @@ static int CleanCompetingKeyboards() {
         TF_LANGUAGEPROFILE lp;
         ULONG fetched = 0;
         while (en->Next(1, &lp, &fetched) == S_OK && fetched == 1) {
-            if (IsEqualCLSID(lp.clsid, CLSID_BanglaTextService)) continue; // ours -> keep
+            if (IsEqualCLSID(lp.clsid, CLSID_BanglaTextService)) {
+                // Ours: keep ONLY the correct-langid profile. A profile of ours
+                // left under the other Bengali langid (older builds registered
+                // 0x0445 = Bengali-India by mistake) would make Likhi show up
+                // under TWO languages in Win+Space.
+                if (lp.langid == BANGLA_LANGID_BD) continue;
+                LogF(L"  removing stale Likhi profile under wrong language (langid 0x%04X)",
+                     lp.langid);
+                victims.push_back({ lp.clsid, lp.langid, lp.guidProfile });
+                continue;
+            }
             std::wstring name = ProfileDescription(profiles, lp.clsid, lp.langid, lp.guidProfile);
             LogF(L"  removing other Bengali keyboard: %ls (langid 0x%04X)", name.c_str(), lp.langid);
             victims.push_back({ lp.clsid, lp.langid, lp.guidProfile });
@@ -238,6 +248,28 @@ static int CleanCompetingKeyboards() {
 
     profiles->Release();
     return removed;
+}
+
+// ITfInputProcessorProfiles::RemoveLanguageProfile deletes the profile record but
+// LEAVES the TIP registry keys behind — and an empty key under the other Bengali
+// langid keeps an extra "বাংলা (ভারত)" entry alive in Windows' language list.
+// Sweep the stale langid key (install) or the whole TIP key (uninstall).
+static void PurgeStaleLangidKeys(bool removeAll) {
+    wchar_t guid[64] = {0};
+    if (StringFromGUID2(CLSID_BanglaTextService, guid, 64) <= 0) return;
+    wchar_t other[16] = {0};
+    swprintf(other, 16, L"0x%08X", (unsigned)BANGLA_LANGID_IN);
+
+    struct Root { HKEY h; const wchar_t* label; };
+    const Root roots[2] = { { HKEY_LOCAL_MACHINE, L"HKLM" }, { HKEY_CURRENT_USER, L"HKCU" } };
+    for (const Root& r : roots) {
+        std::wstring tip = std::wstring(L"SOFTWARE\\Microsoft\\CTF\\TIP\\") + guid;
+        std::wstring path = removeAll ? tip : (tip + L"\\LanguageProfile\\" + other);
+        if (g_dry) { LogF(L"  [dry] would delete %ls\\%ls", r.label, path.c_str()); continue; }
+        if (RegDeleteTreeW(r.h, path.c_str()) == ERROR_SUCCESS) {
+            LogF(L"  removed stale TIP key %ls\\%ls", r.label, path.c_str());
+        }
+    }
 }
 
 static bool SetLikhiDefaultBengaliProfile() {
@@ -333,6 +365,60 @@ static void RemoveShortcuts() {
 }
 
 // ---------------------------------------------------------------------------
+// Machine-wide COM registration (HKLM)
+//
+// register.cpp writes the per-user key (HKCU\Software\Classes\CLSID\...), which
+// is what the user's ctfmon resolves first. A stale machine-wide key left behind
+// by an older dev build (pointing into a build folder instead of the installed
+// one) is still found by processes running as another user or elevated — exactly
+// how a wrong DLL got loaded before. The installer is always elevated, so it
+// rewrites HKLM to THE INSTALLED DLL and the uninstaller removes it again.
+// ---------------------------------------------------------------------------
+static void WriteMachineWideClsid(const std::wstring& installDir) {
+    wchar_t guid[64] = {0};
+    if (StringFromGUID2(CLSID_BanglaTextService, guid, 64) <= 0) return;
+    std::wstring dll = installDir + L"\\bangla_tsf.dll";
+    if (g_dry) {
+        LogF(L"  [dry] would point HKLM CLSID %ls -> %ls", guid, dll.c_str());
+        return;
+    }
+
+    std::wstring base = std::wstring(L"SOFTWARE\\Classes\\CLSID\\") + guid;
+    HKEY hKey = nullptr;
+    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, base.c_str(), 0, nullptr,
+                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) != ERROR_SUCCESS) {
+        LogF(L"  [warn] cannot open HKLM\\%ls (error %lu)", base.c_str(), GetLastError());
+        return;
+    }
+    RegSetValueExW(hKey, nullptr, 0, REG_SZ, (const BYTE*)BANGLA_IME_NAME_W,
+                   (DWORD)((wcslen(BANGLA_IME_NAME_W) + 1) * sizeof(wchar_t)));
+    RegCloseKey(hKey);
+
+    std::wstring inproc = base + L"\\InprocServer32";
+    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, inproc.c_str(), 0, nullptr,
+                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) != ERROR_SUCCESS) {
+        LogF(L"  [warn] cannot create HKLM\\%ls (error %lu)", inproc.c_str(), GetLastError());
+        return;
+    }
+    RegSetValueExW(hKey, nullptr, 0, REG_SZ, (const BYTE*)dll.c_str(),
+                   (DWORD)((dll.size() + 1) * sizeof(wchar_t)));
+    const wchar_t* threading_model = L"Apartment";
+    RegSetValueExW(hKey, L"ThreadingModel", 0, REG_SZ, (const BYTE*)threading_model,
+                   (DWORD)((wcslen(threading_model) + 1) * sizeof(wchar_t)));
+    RegCloseKey(hKey);
+    LogF(L"  HKLM CLSID rewritten -> %ls", dll.c_str());
+}
+
+static void RemoveMachineWideClsid() {
+    if (g_dry) return;
+    wchar_t guid[64] = {0};
+    if (StringFromGUID2(CLSID_BanglaTextService, guid, 64) <= 0) return;
+    std::wstring base = std::wstring(L"SOFTWARE\\Classes\\CLSID\\") + guid;
+    RegDeleteKeyW(HKEY_LOCAL_MACHINE, (base + L"\\InprocServer32").c_str());
+    RegDeleteKeyW(HKEY_LOCAL_MACHINE, base.c_str());
+}
+
+// ---------------------------------------------------------------------------
 // Install / uninstall
 // ---------------------------------------------------------------------------
 static int DoInstall() {
@@ -378,11 +464,13 @@ static int DoInstall() {
         WriteLogFile();
         return 4;
     }
+    WriteMachineWideClsid(dir);
 
     // 3. input-method cleanup + default Bengali profile
     Log(L"[3/5] cleaning input-method list (keep PC keyboard + Likhi only)");
     int removed = CleanCompetingKeyboards();
     LogF(L"  removed %d other Bengali keyboard(s)", removed);
+    PurgeStaleLangidKeys(false); // empty TIP keys left by RemoveLanguageProfile
     SetLikhiDefaultBengaliProfile();
 
     // 4. shell integration
@@ -410,6 +498,8 @@ static int DoUninstall() {
     } else {
         Log(L"  DLL not found — nothing to unregister");
     }
+    RemoveMachineWideClsid();
+    PurgeStaleLangidKeys(true);
 
     Log(L"[2/4] removing shortcuts");
     if (!g_dry) RemoveShortcuts();
