@@ -23,6 +23,7 @@ enum SectionID {
     SEC_BANGLISH,
     SEC_DICTIONARY,
     SEC_KEYBOARD,
+    SEC_VOICE,
     SEC_APPEARANCE,
     SEC_ADVANCED,
     SEC_ABOUT,
@@ -60,6 +61,9 @@ enum SectionID {
 #define IDC_LBL_STATUS        2028
 #define IDC_BTN_CLEAR_FIELDS  2029
 #define IDC_EDIT_SEARCH_DICT  2030
+#define IDC_BTN_LAUNCH_VK     2031
+#define IDC_CHK_ENABLE_VOICE  2032
+#define IDC_BTN_TEST_VOICE    2033
 
 struct AppSettings {
     bool enable_likhi = true;
@@ -72,6 +76,7 @@ struct AppSettings {
     bool word_prediction = true;
     bool show_eng_candidate = true;
     bool auto_correct = false;
+    bool enable_voice = true;
     int max_candidates = 5;
     int theme = 0;
 };
@@ -108,6 +113,83 @@ static HBRUSH hBrushCard = NULL;
 static HBRUSH hBrushActiveNav = NULL;
 static HBRUSH hBrushHoverNav = NULL;
 static HBRUSH hBrushAccent = NULL;
+static HBRUSH hBrushList = NULL;
+static HBRUSH hBrushEdit = NULL;
+static bool g_current_is_dark = false;
+
+static bool IsSystemDarkMode() {
+    DWORD val = 1;
+    DWORD size = sizeof(val);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                     L"AppsUseLightTheme", RRF_RT_REG_DWORD, NULL, &val, &size) == ERROR_SUCCESS) {
+        return (val == 0);
+    }
+    return false;
+}
+
+static bool ShouldUseDarkMode(int theme) {
+    if (theme == 1) return false;
+    if (theme == 2) return true;
+    return IsSystemDarkMode();
+}
+
+static void ApplyTheme(HWND hWnd, bool is_dark) {
+    g_current_is_dark = is_dark;
+
+    // 1. DWM Immersive Dark Mode for Title Bar (Windows 10/11)
+    BOOL dark_val = is_dark ? TRUE : FALSE;
+    DwmSetWindowAttribute(hWnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark_val, sizeof(dark_val));
+    DwmSetWindowAttribute(hWnd, 19 /* legacy Win10 */, &dark_val, sizeof(dark_val));
+
+    // 2. Recreate GDI Brushes
+    if (hBrushBg) DeleteObject(hBrushBg);
+    if (hBrushSidebar) DeleteObject(hBrushSidebar);
+    if (hBrushCard) DeleteObject(hBrushCard);
+    if (hBrushActiveNav) DeleteObject(hBrushActiveNav);
+    if (hBrushHoverNav) DeleteObject(hBrushHoverNav);
+    if (hBrushAccent) DeleteObject(hBrushAccent);
+    if (hBrushList) DeleteObject(hBrushList);
+    if (hBrushEdit) DeleteObject(hBrushEdit);
+
+    if (is_dark) {
+        hBrushBg = CreateSolidBrush(RGB(24, 24, 28));
+        hBrushSidebar = CreateSolidBrush(RGB(32, 32, 36));
+        hBrushCard = CreateSolidBrush(RGB(40, 40, 46));
+        hBrushActiveNav = CreateSolidBrush(RGB(37, 99, 235));
+        hBrushHoverNav = CreateSolidBrush(RGB(50, 54, 66));
+        hBrushAccent = CreateSolidBrush(RGB(96, 165, 250));
+        hBrushList = CreateSolidBrush(RGB(32, 32, 36));
+        hBrushEdit = CreateSolidBrush(RGB(32, 32, 36));
+    } else {
+        hBrushBg = CreateSolidBrush(RGB(248, 250, 252));
+        hBrushSidebar = CreateSolidBrush(RGB(241, 245, 249));
+        hBrushCard = CreateSolidBrush(RGB(255, 255, 255));
+        hBrushActiveNav = CreateSolidBrush(RGB(37, 99, 235));
+        hBrushHoverNav = CreateSolidBrush(RGB(226, 232, 240));
+        hBrushAccent = CreateSolidBrush(RGB(14, 165, 233));
+        hBrushList = CreateSolidBrush(RGB(255, 255, 255));
+        hBrushEdit = CreateSolidBrush(RGB(255, 255, 255));
+    }
+
+    SetClassLongPtr(hWnd, GCLP_HBRBACKGROUND, (LONG_PTR)hBrushBg);
+
+    for (int s = 0; s < SEC_COUNT; s++) {
+        for (HWND hCtrl : g_section_controls[s]) {
+            if (is_dark) {
+                SetWindowTheme(hCtrl, L"DarkMode_Explorer", NULL);
+            } else {
+                SetWindowTheme(hCtrl, L"", L"");
+            }
+        }
+    }
+    if (hListDict) SetWindowTheme(hListDict, is_dark ? L"DarkMode_Explorer" : L"Explorer", NULL);
+    if (hEditRoman) SetWindowTheme(hEditRoman, is_dark ? L"DarkMode_CFD" : L"", NULL);
+    if (hEditBangla) SetWindowTheme(hEditBangla, is_dark ? L"DarkMode_CFD" : L"", NULL);
+    if (hEditSearchDict) SetWindowTheme(hEditSearchDict, is_dark ? L"DarkMode_CFD" : L"", NULL);
+
+    RedrawWindow(hWnd, NULL, NULL, RDW_ERASE | RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+}
 
 const wchar_t* g_navLabels[SEC_COUNT] = {
     L"  🏠  সাধারণ (General)",
@@ -116,6 +198,7 @@ const wchar_t* g_navLabels[SEC_COUNT] = {
     L"  🌐  বাংলিশ (Banglish)",
     L"  📖  অভিধান (Dictionary)",
     L"  🎛️  কীবোর্ড (Keyboard)",
+    L"  🎙️  ভয়েস (Voice Typing)",
     L"  🎨  রূপ (Appearance)",
     L"  ⚙️  উন্নত (Advanced)",
     L"  ℹ️  পরিচিতি (About)"
@@ -131,27 +214,63 @@ std::wstring GetConfigDirectory() {
     return L".";
 }
 
+static bool CheckStartupRegistry() {
+    HKEY hKey = NULL;
+    bool exists = false;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS) {
+        DWORD type = 0;
+        if (RegQueryValueExW(hKey, L"Likhi", NULL, &type, NULL, NULL) == ERROR_SUCCESS) {
+            exists = true;
+        }
+        RegCloseKey(hKey);
+    }
+    return exists;
+}
+
+static void SetStartupRegistry(bool enable) {
+    HKEY hKey = NULL;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
+        if (enable) {
+            wchar_t exePath[MAX_PATH];
+            if (GetModuleFileNameW(NULL, exePath, MAX_PATH) > 0) {
+                std::wstring cmd = L"\"" + std::wstring(exePath) + L"\"";
+                RegSetValueExW(hKey, L"Likhi", 0, REG_SZ, (const BYTE*)cmd.c_str(), (DWORD)((cmd.size() + 1) * sizeof(wchar_t)));
+            }
+        } else {
+            RegDeleteValueW(hKey, L"Likhi");
+        }
+        RegCloseKey(hKey);
+    }
+}
+
 void LoadSettings() {
     g_config_path = GetConfigDirectory() + L"\\settings.json";
     std::ifstream in(g_config_path.c_str());
-    if (!in.is_open()) return;
-
-    std::string line;
-    while (std::getline(in, line)) {
-        if (line.find("\"enable_likhi\": false") != std::string::npos) g_settings.enable_likhi = false;
-        if (line.find("\"auto_correct\": true") != std::string::npos) g_settings.auto_correct = true;
-        if (line.find("\"auto_correct\": false") != std::string::npos) g_settings.auto_correct = false;
-        if (line.find("\"show_suggestions\": false") != std::string::npos) g_settings.show_suggestions = false;
-        if (line.find("\"max_candidates\": 3") != std::string::npos) g_settings.max_candidates = 3;
-        if (line.find("\"max_candidates\": 4") != std::string::npos) g_settings.max_candidates = 4;
-        if (line.find("\"max_candidates\": 5") != std::string::npos) g_settings.max_candidates = 5;
-        if (line.find("\"launch_startup\": true") != std::string::npos) g_settings.launch_startup = true;
-        if (line.find("\"eng_to_bangla\": false") != std::string::npos) g_settings.eng_to_bangla = false;
-        if (line.find("\"word_prediction\": false") != std::string::npos) g_settings.word_prediction = false;
-        if (line.find("\"show_eng_candidate\": false") != std::string::npos) g_settings.show_eng_candidate = false;
-        if (line.find("\"fuzzy_spelling\": false") != std::string::npos) g_settings.fuzzy_spelling = false;
-        if (line.find("\"theme\": 1") != std::string::npos) g_settings.theme = 1;
-        if (line.find("\"theme\": 2") != std::string::npos) g_settings.theme = 2;
+    if (in.is_open()) {
+        std::string line;
+        while (std::getline(in, line)) {
+            if (line.find("\"enable_likhi\": false") != std::string::npos) g_settings.enable_likhi = false;
+            if (line.find("\"auto_correct\": true") != std::string::npos) g_settings.auto_correct = true;
+            if (line.find("\"auto_correct\": false") != std::string::npos) g_settings.auto_correct = false;
+            if (line.find("\"show_suggestions\": false") != std::string::npos) g_settings.show_suggestions = false;
+            if (line.find("\"max_candidates\": 3") != std::string::npos) g_settings.max_candidates = 3;
+            if (line.find("\"max_candidates\": 4") != std::string::npos) g_settings.max_candidates = 4;
+            if (line.find("\"max_candidates\": 5") != std::string::npos) g_settings.max_candidates = 5;
+            if (line.find("\"launch_startup\": true") != std::string::npos) g_settings.launch_startup = true;
+            if (line.find("\"launch_startup\": false") != std::string::npos) g_settings.launch_startup = false;
+            if (line.find("\"eng_to_bangla\": false") != std::string::npos) g_settings.eng_to_bangla = false;
+            if (line.find("\"word_prediction\": false") != std::string::npos) g_settings.word_prediction = false;
+            if (line.find("\"show_eng_candidate\": false") != std::string::npos) g_settings.show_eng_candidate = false;
+            if (line.find("\"fuzzy_spelling\": false") != std::string::npos) g_settings.fuzzy_spelling = false;
+            if (line.find("\"enable_voice\": false") != std::string::npos) g_settings.enable_voice = false;
+            if (line.find("\"enable_voice\": true") != std::string::npos) g_settings.enable_voice = true;
+            if (line.find("\"theme\": 1") != std::string::npos) g_settings.theme = 1;
+            if (line.find("\"theme\": 2") != std::string::npos) g_settings.theme = 2;
+        }
+    }
+    // Also synchronize with actual Windows Run registry state if present
+    if (CheckStartupRegistry()) {
+        g_settings.launch_startup = true;
     }
 }
 
@@ -170,6 +289,7 @@ void SaveSettings() {
     out << "  \"word_prediction\": " << (g_settings.word_prediction ? "true" : "false") << ",\n";
     out << "  \"show_eng_candidate\": " << (g_settings.show_eng_candidate ? "true" : "false") << ",\n";
     out << "  \"auto_correct\": " << (g_settings.auto_correct ? "true" : "false") << ",\n";
+    out << "  \"enable_voice\": " << (g_settings.enable_voice ? "true" : "false") << ",\n";
     out << "  \"max_candidates\": " << g_settings.max_candidates << ",\n";
     out << "  \"theme\": " << g_settings.theme << "\n";
     out << "}\n";
@@ -343,13 +463,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             hFontSub = CreateFontW(-12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
             hFontCredit = CreateFontW(-16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
 
-            // Color Palette
-            hBrushBg = CreateSolidBrush(RGB(248, 250, 252));        // Light surface
-            hBrushSidebar = CreateSolidBrush(RGB(241, 245, 249));   // Soft sidebar blue-gray
-            hBrushCard = CreateSolidBrush(RGB(255, 255, 255));      // Pure white card
-            hBrushActiveNav = CreateSolidBrush(RGB(37, 99, 235));   // Royal Blue
-            hBrushHoverNav = CreateSolidBrush(RGB(226, 232, 240));   // Soft hover
-            hBrushAccent = CreateSolidBrush(RGB(14, 165, 233));      // Cyan accent
+            // Initial Palette
+            ApplyTheme(hWnd, ShouldUseDarkMode(g_settings.theme));
 
             // ==============================================================
             // OWNER-DRAWN SIDEBAR NAVIGATION BUTTONS
@@ -358,7 +473,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 g_hNavButtons[i] = CreateWindowW(
                     L"BUTTON", g_navLabels[i],
                     WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
-                    15, 95 + (i * 38), 205, 34,
+                    15, 78 + (i * 37), 205, 33,
                     hWnd, (HMENU)(intptr_t)(IDC_NAV_BASE + i), hInst, NULL
                 );
             }
@@ -380,14 +495,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             SendMessage(hChkStart, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkStart, BM_SETCHECK, g_settings.launch_startup ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hG_LangCard = CreateWindowW(L"STATIC", L"📌 ডিফল্ট ইনপুট প্রোফাইল: বাংলা (বাংলাদেশ) — 0x0845\n\nকীবোর্ডে Win + Space চাপলে Likhi স্বয়ংক্রিয়ভাবে একটি মাত্র ক্লিন প্রোফাইল হিসেবে সক্রিয় থাকে।", WS_CHILD | SS_LEFT, 250, 210, 520, 80, hWnd, NULL, NULL, NULL);
+            HWND hG_LangCard = CreateWindowW(L"STATIC", L"📌 সক্রিয় ইনপুট প্রোফাইল: বাংলা (বাংলাদেশ) — Likhi\n\n• উইন্ডোজ ভাষা পরিবর্তন: Win + Space\n• বাংলা ভয়েস টাইピング: Win + H\n• Likhi Virtual Keyboard (অন-স্ক্রিন কীবোর্ড) উপলব্ধ", WS_CHILD | SS_LEFT, 250, 205, 520, 95, hWnd, NULL, NULL, NULL);
             SendMessage(hG_LangCard, WM_SETFONT, (WPARAM)hFontBody, TRUE);
+
+            HWND hG_BtnVK = CreateWindowW(L"BUTTON", L"⌨️ Likhi Virtual Keyboard খুলুন", WS_CHILD | BS_PUSHBUTTON, 250, 310, 360, 38, hWnd, (HMENU)IDC_BTN_LAUNCH_VK, NULL, NULL);
+            SendMessage(hG_BtnVK, WM_SETFONT, (WPARAM)hFontBold, TRUE);
 
             g_section_controls[SEC_GENERAL].push_back(hG_Title);
             g_section_controls[SEC_GENERAL].push_back(hG_Status);
             g_section_controls[SEC_GENERAL].push_back(hChkLikhi);
             g_section_controls[SEC_GENERAL].push_back(hChkStart);
             g_section_controls[SEC_GENERAL].push_back(hG_LangCard);
+            g_section_controls[SEC_GENERAL].push_back(hG_BtnVK);
 
             // ==============================================================
             // SECTION 1: TYPING
@@ -556,11 +675,49 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             HWND hK_Title = CreateWindowW(L"STATIC", L"কীবোর্ড ও শর্টকাট আচরণ", WS_CHILD | SS_LEFT, 250, 30, 520, 28, hWnd, NULL, NULL, NULL);
             SendMessage(hK_Title, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
-            HWND hK_Desc = CreateWindowW(L"STATIC", L"Likhi উইন্ডোজের সকল নেটিভ কীবোর্ড শর্টকাট সম্পূর্ণ অক্ষত রাখে।\n\n• Ctrl+C (Copy), Ctrl+V (Paste), Ctrl+A, Ctrl+Z ইত্যাদি সরাসরি কাজ করে\n• Numpad (0-9, +, -, *, .) সাধারণ সংখ্যার জন্য সংরক্ষিত\n• F1-F12 এবং অ্যারো কী স্বাভাবিকভাবে কাজ করে\n• উইন্ডোজ ভাষা পরিবর্তন: Win + Space\n\nসক্রিয় প্রোফাইল: Bangla (Bangladesh) — Likhi (লিখি)", WS_CHILD | SS_LEFT, 250, 75, 520, 280, hWnd, NULL, NULL, NULL);
+            HWND hK_Desc = CreateWindowW(L"STATIC", L"Likhi উইন্ডোজের সকল নেটিভ কীবোর্ড শর্টকাট সম্পূর্ণ অক্ষত রাখে।\n\n• Ctrl+C (Copy), Ctrl+V (Paste), Ctrl+A, Ctrl+Z ইত্যাদি সরাসরি কাজ করে\n• Numpad (0-9, +, -, *, .) সাধারণ সংখ্যার জন্য সংরক্ষিত\n• F1-F12 এবং অ্যারো কী স্বাভাবিকভাবে কাজ করে\n• উইন্ডোজ ভাষা পরিবর্তন: Win + Space\n\nসক্রিয় প্রোফাইল: Bangla (Bangladesh) — Likhi (লিখি)", WS_CHILD | SS_LEFT, 250, 75, 520, 165, hWnd, NULL, NULL, NULL);
             SendMessage(hK_Desc, WM_SETFONT, (WPARAM)hFontBody, TRUE);
+
+            HWND hK_BtnVK = CreateWindowW(L"BUTTON", L"⌨️ Likhi Virtual Keyboard চালু করুন (Launch Virtual Keyboard)", WS_CHILD | BS_PUSHBUTTON, 250, 255, 520, 38, hWnd, (HMENU)IDC_BTN_LAUNCH_VK, NULL, NULL);
+            SendMessage(hK_BtnVK, WM_SETFONT, (WPARAM)hFontBold, TRUE);
+
+            HWND hK_VKDesc = CreateWindowW(L"STATIC", L"💡 Likhi Virtual Keyboard অন-স্ক্রিন কীবোর্ড দিয়ে মাউস ক্লিকের মাধ্যমেই সরাসরি যেকোনো অ্যাপে (Word, Notepad, Browser) বাংলা টাইপ করতে পারবেন। মাউস ক্লিকে ফোকাস হারাবে না।", WS_CHILD | SS_LEFT, 250, 305, 520, 48, hWnd, NULL, NULL, NULL);
+            SendMessage(hK_VKDesc, WM_SETFONT, (WPARAM)hFontSub, TRUE);
 
             g_section_controls[SEC_KEYBOARD].push_back(hK_Title);
             g_section_controls[SEC_KEYBOARD].push_back(hK_Desc);
+            g_section_controls[SEC_KEYBOARD].push_back(hK_BtnVK);
+            g_section_controls[SEC_KEYBOARD].push_back(hK_VKDesc);
+
+            // ==============================================================
+            // SECTION 6: VOICE (VOICE TYPING)
+            // ==============================================================
+            HWND hV_Title = CreateWindowW(L"STATIC", L"ভয়েস টাইপিং (Voice Typing)", WS_CHILD | SS_LEFT, 250, 30, 520, 28, hWnd, NULL, NULL, NULL);
+            SendMessage(hV_Title, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
+
+            HWND hV_Desc = CreateWindowW(L"STATIC",
+                L"Likhi-তে সরাসরি ভয়েস টাইপিং সমর্থিত। মুখে কথা বলুন, উইন্ডোজ নিজে থেকেই বাংলা বা ইংরেজিতে নির্ভুল টাইপ করে দেবে।\n\n"
+                L"• ভয়েস টাইপিং শর্টকাট: Win + H (উইন্ডোজ কী চেপে ধরে H চাপুন)\n"
+                L"• যেকোনো টেক্সট ফিল্ডে (Notepad, Word, Browser, WhatsApp) কার্সর রেখে Win + H চাপলেই ভয়েস টাইপিং শুরু হবে।\n"
+                L"• উইন্ডোজ স্পিচ রিকগনিশনের মাধ্যমে সম্পূর্ণ নিখুঁতভাবে বাংলা উচ্চারণ গ্রহণ করা হয়।",
+                WS_CHILD | SS_LEFT, 250, 70, 520, 140, hWnd, NULL, NULL, NULL);
+            SendMessage(hV_Desc, WM_SETFONT, (WPARAM)hFontBody, TRUE);
+
+            HWND hChkVoi = CreateWindowW(L"BUTTON", L"ভয়েস টাইপিং নির্দেশক চালু রাখুন (Enable Voice Typing Shortcut Hint)", WS_CHILD | BS_AUTOCHECKBOX, 250, 220, 520, 24, hWnd, (HMENU)IDC_CHK_ENABLE_VOICE, NULL, NULL);
+            SendMessage(hChkVoi, WM_SETFONT, (WPARAM)hFontBody, TRUE);
+            SendMessage(hChkVoi, BM_SETCHECK, g_settings.enable_voice ? BST_CHECKED : BST_UNCHECKED, 0);
+
+            HWND hBtnVoiceTest = CreateWindowW(L"BUTTON", L"🎙️ এখনই ভয়েস টাইপিং পরীক্ষা করুন (Win + H)", WS_CHILD | BS_PUSHBUTTON, 250, 260, 420, 38, hWnd, (HMENU)IDC_BTN_TEST_VOICE, NULL, NULL);
+            SendMessage(hBtnVoiceTest, WM_SETFONT, (WPARAM)hFontBold, TRUE);
+
+            HWND hV_Tip = CreateWindowW(L"STATIC", L"💡 টিপস: ভয়েস টাইপিং শুরুর পূর্বে মাইক্রোফোন উইন্ডোজে সংযুক্ত আছে কিনা নিশ্চিত করুন।", WS_CHILD | SS_LEFT, 250, 310, 520, 35, hWnd, NULL, NULL, NULL);
+            SendMessage(hV_Tip, WM_SETFONT, (WPARAM)hFontSub, TRUE);
+
+            g_section_controls[SEC_VOICE].push_back(hV_Title);
+            g_section_controls[SEC_VOICE].push_back(hV_Desc);
+            g_section_controls[SEC_VOICE].push_back(hChkVoi);
+            g_section_controls[SEC_VOICE].push_back(hBtnVoiceTest);
+            g_section_controls[SEC_VOICE].push_back(hV_Tip);
 
             // ==============================================================
             // SECTION 6: APPEARANCE
@@ -598,7 +755,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             HWND hAdv_Desc = CreateWindowW(L"STATIC", L"• মেমোরি পদচিহ্ন: ~১৩.১ MB (অত্যন্ত হালকা)\n• টাইপিং লেটেন্সি: ~৪০ মাইক্রোসেকেন্ড / কীস্ট্রোক\n• ডিকশনারি এন্ট্রি: ৫২,৪১২টি ভ্যালিডেটেড শব্দ\n• আর্কিটেকচার: নেটিভ C++20 + Windows TSF", WS_CHILD | SS_LEFT, 250, 75, 520, 120, hWnd, NULL, NULL, NULL);
             SendMessage(hAdv_Desc, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hBtnReset = CreateWindowW(L"BUTTON", L"ফ্যাক্টরি রিসেট করুন (Reset to Defaults)", WS_CHILD | BS_PUSHBUTTON, 250, 210, 280, 36, hWnd, (HMENU)IDC_BTN_RESET_DEF, NULL, NULL);
+            HWND hBtnReset = CreateWindowW(L"BUTTON", L"ফ্যাক্টরি রিসেট করুন (Reset to Defaults)", WS_CHILD | BS_PUSHBUTTON, 250, 210, 400, 38, hWnd, (HMENU)IDC_BTN_RESET_DEF, NULL, NULL);
             SendMessage(hBtnReset, WM_SETFONT, (WPARAM)hFontBold, TRUE);
 
             g_section_controls[SEC_ADVANCED].push_back(hAdv_Title);
@@ -620,7 +777,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             HWND hAb_Desc = CreateWindowW(L"STATIC", L"• ১০০% অফলাইন ও ব্যক্তিগত (০ ট্র্যাকিং / ক্লাউডমুক্ত)\n• সম্পূর্ণ স্বাধীন ও আধুনিক C++20 ল্যাঙ্গুয়েজ ইঞ্জিন\n• লাইসেন্স: MIT License\n• ক্রিয়েটর ও ডেভেলপার: AH Creations", WS_CHILD | SS_LEFT, 250, 155, 520, 120, hWnd, NULL, NULL, NULL);
             SendMessage(hAb_Desc, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hBtnUpd = CreateWindowW(L"BUTTON", L"আপডেট পরীক্ষা করুন (Check Updates)", WS_CHILD | BS_PUSHBUTTON, 250, 285, 260, 34, hWnd, (HMENU)IDC_BTN_CHECK_UPDATE, NULL, NULL);
+            HWND hBtnUpd = CreateWindowW(L"BUTTON", L"আপডেট পরীক্ষা করুন (Check Updates)", WS_CHILD | BS_PUSHBUTTON, 250, 285, 360, 38, hWnd, (HMENU)IDC_BTN_CHECK_UPDATE, NULL, NULL);
             SendMessage(hBtnUpd, WM_SETFONT, (WPARAM)hFontBold, TRUE);
 
             g_section_controls[SEC_ABOUT].push_back(hAb_Title);
@@ -632,16 +789,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // ==============================================================
             // BOTTOM BAR CONTROLS
             // ==============================================================
-            hLblStatus = CreateWindowW(L"STATIC", L"Likhi প্রস্তুত।", WS_VISIBLE | WS_CHILD | SS_LEFT, 25, 485, 480, 26, hWnd, (HMENU)IDC_LBL_STATUS, NULL, NULL);
+            hLblStatus = CreateWindowW(L"STATIC", L"Likhi প্রস্তুত।", WS_VISIBLE | WS_CHILD | SS_LEFT, 25, 485, 470, 28, hWnd, (HMENU)IDC_LBL_STATUS, NULL, NULL);
             SendMessage(hLblStatus, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hBtnSave = CreateWindowW(L"BUTTON", L"সংরক্ষণ করুন (Save)", WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON, 530, 480, 160, 36, hWnd, (HMENU)IDC_BTN_SAVE, NULL, NULL);
-            HWND hBtnClose = CreateWindowW(L"BUTTON", L"বন্ধ করুন", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, 705, 480, 95, 36, hWnd, (HMENU)IDC_BTN_CLOSE, NULL, NULL);
+            HWND hBtnSave = CreateWindowW(L"BUTTON", L"সংরক্ষণ করুন (Save)", WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON, 505, 480, 185, 38, hWnd, (HMENU)IDC_BTN_SAVE, NULL, NULL);
+            HWND hBtnClose = CreateWindowW(L"BUTTON", L"বন্ধ করুন", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, 700, 480, 100, 38, hWnd, (HMENU)IDC_BTN_CLOSE, NULL, NULL);
 
             SendMessage(hBtnSave, WM_SETFONT, (WPARAM)hFontBold, TRUE);
             SendMessage(hBtnClose, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
             SwitchSection(hWnd, SEC_GENERAL);
+            ApplyTheme(hWnd, ShouldUseDarkMode(g_settings.theme));
             break;
         }
 
@@ -659,10 +817,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     SetTextColor(hdc, RGB(255, 255, 255));
                 } else if (pDIS->itemState & ODS_SELECTED) {
                     FillRect(hdc, &rc, hBrushHoverNav);
-                    SetTextColor(hdc, RGB(37, 99, 235));
+                    SetTextColor(hdc, g_current_is_dark ? RGB(147, 197, 253) : RGB(37, 99, 235));
                 } else {
                     FillRect(hdc, &rc, hBrushSidebar);
-                    SetTextColor(hdc, RGB(51, 65, 85));
+                    SetTextColor(hdc, g_current_is_dark ? RGB(226, 232, 240) : RGB(51, 65, 85));
                 }
 
                 SetBkMode(hdc, TRANSPARENT);
@@ -688,16 +846,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 DrawIconEx(hdc, 18, 18, hAppIcon, 48, 48, 0, NULL, DI_NORMAL);
             }
             SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(30, 58, 138)); // Deep Royal Blue
+            SetTextColor(hdc, g_current_is_dark ? RGB(147, 197, 253) : RGB(30, 58, 138));
             SelectObject(hdc, hFontTitle);
             TextOutW(hdc, 76, 18, L"Likhi (লিখি)", 12);
 
-            SetTextColor(hdc, RGB(100, 116, 139));
+            SetTextColor(hdc, g_current_is_dark ? RGB(156, 163, 175) : RGB(100, 116, 139));
             SelectObject(hdc, hFontSub);
             TextOutW(hdc, 76, 46, L"বাংলা লিখুন, সহজেই।", 19);
 
             // 3. Draw Vertical Divider
-            HPEN hPenDivider = CreatePen(PS_SOLID, 1, RGB(226, 232, 240));
+            HPEN hPenDivider = CreatePen(PS_SOLID, 1, g_current_is_dark ? RGB(60, 60, 68) : RGB(226, 232, 240));
             SelectObject(hdc, hPenDivider);
             MoveToEx(hdc, 235, 0, NULL);
             LineTo(hdc, 235, 580);
@@ -705,7 +863,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // 4. Draw Content Card Area
             RECT rcCard = {245, 15, 800, 465};
             FillRect(hdc, &rcCard, hBrushCard);
-            FrameRect(hdc, &rcCard, hBrushBg);
+            FrameRect(hdc, &rcCard, g_current_is_dark ? hBrushSidebar : hBrushBg);
 
             // 5. Draw About Logo if in About Section
             if (g_active_section == SEC_ABOUT && hAppIcon) {
@@ -726,6 +884,61 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 break;
             }
 
+            if (wmId == IDC_RADIO_THEME_SYS) {
+                g_settings.theme = 0;
+                ApplyTheme(hWnd, ShouldUseDarkMode(0));
+                SaveSettings();
+                SetWindowTextW(hLblStatus, L"🎨 থিম: উইন্ডোজ সিস্টেম ডিফল্ট প্রয়োগ করা হয়েছে।");
+                break;
+            } else if (wmId == IDC_RADIO_THEME_LIGHT) {
+                g_settings.theme = 1;
+                ApplyTheme(hWnd, ShouldUseDarkMode(1));
+                SaveSettings();
+                SetWindowTextW(hLblStatus, L"🎨 থিম: হালকা থিম (Light Mode) প্রয়োগ করা হয়েছে।");
+                break;
+            } else if (wmId == IDC_RADIO_THEME_DARK) {
+                g_settings.theme = 2;
+                ApplyTheme(hWnd, ShouldUseDarkMode(2));
+                SaveSettings();
+                SetWindowTextW(hLblStatus, L"🎨 থিম: ডার্ক থিম (Dark Mode) প্রয়োগ করা হয়েছে।");
+                break;
+            }
+
+            if (wmId == IDC_BTN_LAUNCH_VK) {
+                wchar_t exePath[MAX_PATH];
+                GetModuleFileNameW(NULL, exePath, MAX_PATH);
+                wchar_t* lastSlash = wcsrchr(exePath, L'\\');
+                if (lastSlash) {
+                    *(lastSlash + 1) = L'\0';
+                    std::wstring vkPath = std::wstring(exePath) + L"likhi_virtual_keyboard.exe";
+                    HINSTANCE hRes = ShellExecuteW(NULL, L"open", vkPath.c_str(), NULL, exePath, SW_SHOWNORMAL);
+                    if ((intptr_t)hRes <= 32) {
+                        ShellExecuteW(NULL, L"open", L"likhi_virtual_keyboard.exe", NULL, NULL, SW_SHOWNORMAL);
+                    }
+                } else {
+                    ShellExecuteW(NULL, L"open", L"likhi_virtual_keyboard.exe", NULL, NULL, SW_SHOWNORMAL);
+                }
+                SetWindowTextW(hLblStatus, L"⌨️ Likhi Virtual Keyboard চালু করা হয়েছে।");
+                break;
+            } else if (wmId == IDC_BTN_TEST_VOICE) {
+                // Simulate Win + H
+                INPUT inputs[4] = {};
+                inputs[0].type = INPUT_KEYBOARD;
+                inputs[0].ki.wVk = VK_LWIN;
+                inputs[1].type = INPUT_KEYBOARD;
+                inputs[1].ki.wVk = 'H';
+                inputs[2].type = INPUT_KEYBOARD;
+                inputs[2].ki.wVk = 'H';
+                inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+                inputs[3].type = INPUT_KEYBOARD;
+                inputs[3].ki.wVk = VK_LWIN;
+                inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+                SendInput(4, inputs, sizeof(INPUT));
+
+                SetWindowTextW(hLblStatus, L"🎙️ উইন্ডোজ ভয়েস টাইপিং (Win + H) সক্রিয় করা হয়েছে!");
+                break;
+            }
+
             if (wmId == IDC_BTN_SAVE) {
                 HWND hChkLikhi = GetDlgItem(hWnd, IDC_CHK_ENABLE_LIKHI);
                 HWND hChkStart = GetDlgItem(hWnd, IDC_CHK_STARTUP);
@@ -737,6 +950,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 HWND hChkPred = GetDlgItem(hWnd, IDC_CHK_PREDICTION);
                 HWND hChkEngCand = GetDlgItem(hWnd, IDC_CHK_ENG_CANDIDATE);
                 HWND hChkAuto = GetDlgItem(hWnd, IDC_CHK_AUTOCORRECT);
+                HWND hChkVoice = GetDlgItem(hWnd, IDC_CHK_ENABLE_VOICE);
 
                 g_settings.enable_likhi = (SendMessage(hChkLikhi, BM_GETCHECK, 0, 0) == BST_CHECKED);
                 g_settings.launch_startup = (SendMessage(hChkStart, BM_GETCHECK, 0, 0) == BST_CHECKED);
@@ -748,6 +962,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 g_settings.word_prediction = (SendMessage(hChkPred, BM_GETCHECK, 0, 0) == BST_CHECKED);
                 g_settings.show_eng_candidate = (SendMessage(hChkEngCand, BM_GETCHECK, 0, 0) == BST_CHECKED);
                 g_settings.auto_correct = (SendMessage(hChkAuto, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                if (hChkVoice) g_settings.enable_voice = (SendMessage(hChkVoice, BM_GETCHECK, 0, 0) == BST_CHECKED);
 
                 if (SendMessage(GetDlgItem(hWnd, IDC_RADIO_CAND3), BM_GETCHECK, 0, 0) == BST_CHECKED) g_settings.max_candidates = 3;
                 else if (SendMessage(GetDlgItem(hWnd, IDC_RADIO_CAND4), BM_GETCHECK, 0, 0) == BST_CHECKED) g_settings.max_candidates = 4;
@@ -757,7 +972,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 else if (SendMessage(GetDlgItem(hWnd, IDC_RADIO_THEME_DARK), BM_GETCHECK, 0, 0) == BST_CHECKED) g_settings.theme = 2;
                 else g_settings.theme = 0;
 
+                ApplyTheme(hWnd, ShouldUseDarkMode(g_settings.theme));
                 SaveSettings();
+                SetStartupRegistry(g_settings.launch_startup);
                 SetWindowTextW(hLblStatus, L"✅ সেটিংস সফলভাবে সংরক্ষিত হয়েছে!");
             } else if (wmId == IDC_BTN_CLOSE) {
                 PostQuitMessage(0);
@@ -972,9 +1189,32 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             } else if (wmId == IDC_BTN_RESET_DEF) {
                 g_settings = AppSettings();
                 SaveSettings();
+                SetStartupRegistry(false);
+                ApplyTheme(hWnd, ShouldUseDarkMode(g_settings.theme));
+                SendMessage(GetDlgItem(hWnd, IDC_CHK_ENABLE_LIKHI), BM_SETCHECK, g_settings.enable_likhi ? BST_CHECKED : BST_UNCHECKED, 0);
+                SendMessage(GetDlgItem(hWnd, IDC_CHK_STARTUP), BM_SETCHECK, g_settings.launch_startup ? BST_CHECKED : BST_UNCHECKED, 0);
+                SendMessage(GetDlgItem(hWnd, IDC_CHK_BANGLA_TYPING), BM_SETCHECK, g_settings.bangla_typing ? BST_CHECKED : BST_UNCHECKED, 0);
+                SendMessage(GetDlgItem(hWnd, IDC_CHK_BANGLISH), BM_SETCHECK, g_settings.banglish_recog ? BST_CHECKED : BST_UNCHECKED, 0);
+                SendMessage(GetDlgItem(hWnd, IDC_CHK_ENG_TO_BAN), BM_SETCHECK, g_settings.eng_to_bangla ? BST_CHECKED : BST_UNCHECKED, 0);
+                SendMessage(GetDlgItem(hWnd, IDC_CHK_FUZZY), BM_SETCHECK, g_settings.fuzzy_spelling ? BST_CHECKED : BST_UNCHECKED, 0);
+                SendMessage(GetDlgItem(hWnd, IDC_CHK_SUGGESTIONS), BM_SETCHECK, g_settings.show_suggestions ? BST_CHECKED : BST_UNCHECKED, 0);
+                SendMessage(GetDlgItem(hWnd, IDC_CHK_PREDICTION), BM_SETCHECK, g_settings.word_prediction ? BST_CHECKED : BST_UNCHECKED, 0);
+                SendMessage(GetDlgItem(hWnd, IDC_CHK_ENG_CANDIDATE), BM_SETCHECK, g_settings.show_eng_candidate ? BST_CHECKED : BST_UNCHECKED, 0);
+                SendMessage(GetDlgItem(hWnd, IDC_CHK_AUTOCORRECT), BM_SETCHECK, g_settings.auto_correct ? BST_CHECKED : BST_UNCHECKED, 0);
+                SendMessage(GetDlgItem(hWnd, IDC_CHK_ENABLE_VOICE), BM_SETCHECK, g_settings.enable_voice ? BST_CHECKED : BST_UNCHECKED, 0);
+                SendMessage(GetDlgItem(hWnd, IDC_RADIO_THEME_SYS), BM_SETCHECK, BST_CHECKED, 0);
+                SendMessage(GetDlgItem(hWnd, IDC_RADIO_THEME_LIGHT), BM_SETCHECK, BST_UNCHECKED, 0);
+                SendMessage(GetDlgItem(hWnd, IDC_RADIO_THEME_DARK), BM_SETCHECK, BST_UNCHECKED, 0);
                 SetWindowTextW(hLblStatus, L"🔄 ফ্যাক্টরি ডিফল্টে রিসেট করা হয়েছে।");
             } else if (wmId == IDC_BTN_CHECK_UPDATE) {
                 SetWindowTextW(hLblStatus, L"✨ আপনি Likhi-এর সর্বশেষ সংস্করণ (v1.0.0) ব্যবহার করছেন।");
+            }
+            break;
+        }
+
+        case WM_SETTINGCHANGE: {
+            if (g_settings.theme == 0) {
+                ApplyTheme(hWnd, ShouldUseDarkMode(0));
             }
             break;
         }
@@ -984,13 +1224,67 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             HWND hCtl = (HWND)lParam;
             SetBkMode(hdc, TRANSPARENT);
             
-            // Highlight credit in Royal Blue
-            if (GetDlgCtrlID(hCtl) == 0 && g_active_section == SEC_ABOUT) {
-                SetTextColor(hdc, RGB(2, 132, 199)); // Bright Sky Blue
+            if (g_current_is_dark) {
+                if (hCtl == hLblStatus) {
+                    SetTextColor(hdc, RGB(200, 210, 225));
+                    return (LRESULT)hBrushBg;
+                }
+                if (GetDlgCtrlID(hCtl) == 0 && g_active_section == SEC_ABOUT) {
+                    SetTextColor(hdc, RGB(56, 189, 248)); // Bright Sky Blue
+                } else {
+                    SetTextColor(hdc, RGB(241, 245, 249));
+                }
+                return (LRESULT)hBrushCard;
+            } else {
+                if (hCtl == hLblStatus) {
+                    SetTextColor(hdc, RGB(71, 85, 105));
+                    return (LRESULT)hBrushBg;
+                }
+                if (GetDlgCtrlID(hCtl) == 0 && g_active_section == SEC_ABOUT) {
+                    SetTextColor(hdc, RGB(2, 132, 199)); // Bright Sky Blue
+                } else {
+                    SetTextColor(hdc, RGB(30, 41, 59));
+                }
+                return (LRESULT)hBrushCard;
+            }
+        }
+
+        case WM_CTLCOLOREDIT: {
+            HDC hdc = (HDC)wParam;
+            if (g_current_is_dark) {
+                SetTextColor(hdc, RGB(241, 245, 249));
+                SetBkColor(hdc, RGB(32, 32, 36));
+                return (LRESULT)hBrushEdit;
+            } else {
+                SetTextColor(hdc, RGB(15, 23, 42));
+                SetBkColor(hdc, RGB(255, 255, 255));
+                return (LRESULT)hBrushEdit;
+            }
+        }
+
+        case WM_CTLCOLORLISTBOX: {
+            HDC hdc = (HDC)wParam;
+            if (g_current_is_dark) {
+                SetTextColor(hdc, RGB(241, 245, 249));
+                SetBkColor(hdc, RGB(32, 32, 36));
+                return (LRESULT)hBrushList;
+            } else {
+                SetTextColor(hdc, RGB(15, 23, 42));
+                SetBkColor(hdc, RGB(255, 255, 255));
+                return (LRESULT)hBrushList;
+            }
+        }
+
+        case WM_CTLCOLORBTN: {
+            HDC hdc = (HDC)wParam;
+            SetBkMode(hdc, TRANSPARENT);
+            if (g_current_is_dark) {
+                SetTextColor(hdc, RGB(241, 245, 249));
+                return (LRESULT)hBrushCard;
             } else {
                 SetTextColor(hdc, RGB(30, 41, 59));
+                return (LRESULT)hBrushCard;
             }
-            return (LRESULT)hBrushCard;
         }
 
         case WM_DESTROY:
@@ -1006,6 +1300,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (hBrushActiveNav) DeleteObject(hBrushActiveNav);
             if (hBrushHoverNav) DeleteObject(hBrushHoverNav);
             if (hBrushAccent) DeleteObject(hBrushAccent);
+            if (hBrushList) DeleteObject(hBrushList);
+            if (hBrushEdit) DeleteObject(hBrushEdit);
             PostQuitMessage(0);
             break;
 

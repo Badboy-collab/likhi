@@ -438,3 +438,14 @@ void BanglaEngine_SetAutoCorrectEnabled(BanglaEngine* engine, bool enabled) {
     if (!engine) return;
     engine->config.auto_correct_enabled = enabled;
 }
+
+void BanglaEngine_SetMaxCandidates(BanglaEngine* engine, uint32_t max_candidates) {
+    if (!engine) return;
+    if (max_candidates > MAX_CANDIDATES_COUNT) {
+        max_candidates = MAX_CANDIDATES_COUNT;
+    }
+    if (max_candidates == 0) {
+        max_candidates = 1;
+    }
+    engine->config.max_candidates = max_candidates;
+}

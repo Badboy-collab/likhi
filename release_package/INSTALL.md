@@ -1,53 +1,61 @@
-# Likhi (লিখি) — Installation & Setup Guide
+# Likhi (লিখি) — Installation & User Guide
 
 > **“বাংলা লিখুন, সহজেই।”**
 
-## 1. Quick Installation (Administrator Required)
+---
 
-1. Navigate to the `release_package` folder.
+## 1. Easy One-Click Installation (Recommended)
+
+1. Double-click **`Likhi_Setup_v1.0.0.exe`**.
+2. Follow the setup wizard instructions.
+3. You can optionally check **"Create a desktop shortcut"**.
+4. Once completed, Likhi is registered and ready to use everywhere across Windows!
+
+---
+
+## 2. Alternative Portable Installation (Batch Script)
+
+If you prefer manual or portable installation:
+1. Open the `release_package` folder.
 2. **Right-Click** on `install.bat` and select **"Run as administrator"**.
-3. The script will:
-   - Copy the 52,000+ word dictionary (`lexicon.bin`) into `%APPDATA%\PC-Bangla-Typing-App\`.
-   - Register `bangla_tsf.dll` with Windows COM and Text Services Framework (TSF).
-4. You will see:
-   ```text
-   [SUCCESS] Likhi (লিখি) registered successfully!
-   ```
+3. The script registers the 64-bit and 32-bit TSF COM servers and configures the language profile.
 
 ---
 
-## 2. Enabling & Selecting the IME in Windows
+## 3. How to Type in Bangla
 
-1. Press **`Win + Space`** on your keyboard (or click the language bar icon in the Windows taskbar).
-2. Select **"Likhi (লিখি)"**.
-3. Open any application (such as **Notepad**, **Microsoft Word**, **Google Chrome**, **Microsoft Edge**, or **VS Code**).
-4. Start typing in Roman Banglish (e.g. `ami` $\to$ `আমি`).
-
----
-
-## 3. Configuring Settings & Personal Dictionary
-
-To configure preferences:
-1. Double-click `bangla_settings.exe`.
-2. Options available:
-   - **Enable Auto-Correct**: Toggle strict auto-correction ($\ge 0.85$ confidence gate).
-   - **Show Suggestion Window**: Toggle the floating candidate window.
-   - **Number of Candidates**: Select 3, 4, or 5 candidates.
-   - **Personal Dictionary**: Add custom Roman $\to$ Bengali word pairs.
-3. Click **"Save Settings"**.
+1. Press **`Win + Space`** on your keyboard (or click the language switcher near the Windows taskbar clock).
+2. Select **"Bangla (Bangladesh) — Likhi (লিখি)"**.
+3. Open any application (e.g. **WhatsApp**, **MS Word**, **Notepad**, **Google Chrome**, **VS Code**).
+4. Start typing in phonetic English (e.g., `ami` $\to$ `আমি`, `bhalo` $\to$ `ভালো`, `bangla` $\to$ `বাংলা`).
+5. Choose suggestions using number keys `1-5` or press `Space` / `Enter`.
 
 ---
 
-## 4. Unicode Verification Diagnostic Tool
+## 4. Likhi Virtual Keyboard (অন-স্ক্রিন কীবোর্ড)
 
-If you want to verify that typed Bengali text has 100% valid Unicode codepoint sequences:
-1. Run `inspect_unicode.exe`.
-2. Paste or type any Bengali text (e.g. `বৃষ্টি`, `ব্রহ্মপুত্র`).
-3. The tool prints a detailed codepoint analysis confirming zero dangling Hasants (`U+09CD`) and intact conjunct sequences.
+Likhi comes with an interactive, acrylic glass on-screen keyboard:
+- Run **`likhi_virtual_keyboard.exe`** (or launch from Desktop / Start Menu / Settings App).
+- Click any character or conjunct with your mouse to type directly into active documents without losing focus (`WS_EX_NOACTIVATE`).
+- Toggle between **Acrylic Glass**, **Frosted (92%)**, and **Solid (100%)** modes, or switch **Dark / Light Glass**.
+- Drag the keyboard freely by clicking and moving the empty header banner area.
 
 ---
 
-## 5. Uninstallation
+## 5. Settings, Personal Dictionary & Voice Typing
 
-1. **Right-Click** on `uninstall.bat` and select **"Run as administrator"**.
-2. The script cleanly unregisters the COM server and removes the TSF input profile.
+1. Open **`bangla_settings.exe`**.
+2. Features available:
+   - **General:** Enable/Disable Likhi, toggle **"Start with Windows"**.
+   - **Typing & Banglish:** Manage phonetic recognition, loanword conversion (e.g., `office` $\to$ `অফিস`).
+   - **Suggestions & Auto-Correct:** Configure candidate count (3, 4, or 5) and auto-correct threshold.
+   - **Personal Dictionary:** Add custom words (e.g. your name or specialized terminology).
+   - **Voice Typing:** Test native Windows speech recognition with `Win + H`.
+   - **Appearance:** Instant real-time theme switching (System Default / Light Mode / Dark Mode).
+
+---
+
+## 6. Uninstallation
+
+- If installed via `Likhi_Setup_v1.0.0.exe`: Go to **Windows Settings $\to$ Installed Apps** and select **Likhi $\to$ Uninstall**.
+- If installed via batch script: Right-click `uninstall.bat` and select **"Run as administrator"**.

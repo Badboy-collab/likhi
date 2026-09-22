@@ -6,6 +6,23 @@ namespace bangla_tsf {
 
 static const wchar_t* WINDOW_CLASS_NAME = L"PC_Bangla_Candidate_Window_Class";
 
+static bool IsSystemDarkMode() {
+    DWORD val = 1;
+    DWORD size = sizeof(val);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                     L"AppsUseLightTheme", RRF_RT_REG_DWORD, NULL, &val, &size) == ERROR_SUCCESS) {
+        return (val == 0);
+    }
+    return false;
+}
+
+bool CandidateWindow::IsDarkMode() const {
+    if (theme_mode_ == 1) return false;
+    if (theme_mode_ == 2) return true;
+    return IsSystemDarkMode();
+}
+
 CandidateWindow::CandidateWindow()
     : hwnd_(nullptr),
       hinst_(nullptr),
@@ -15,6 +32,7 @@ CandidateWindow::CandidateWindow()
       hfont_number_(nullptr),
       hfont_header_(nullptr),
       hfont_hint_(nullptr),
+      theme_mode_(0),
       width_(140),
       height_(200) {
     memset(&caret_rect_, 0, sizeof(RECT));
@@ -181,9 +199,9 @@ void CandidateWindow::UpdateDimensions() {
     SelectObject(hdc, old_font);
     ReleaseDC(hwnd_, hdc);
 
-    // Dynamic width with sensible limits (150px to 340px)
-    width_ = (std::max)(150, max_content_w);
-    if (width_ > 340) width_ = 340;
+    // Dynamic width with sensible limits (195px to 360px)
+    width_ = (std::max)(195, max_content_w);
+    if (width_ > 360) width_ = 360;
 
     candidate_item_rects_.clear();
     int cur_y = HEADER_H + 4;
@@ -219,19 +237,27 @@ void CandidateWindow::ShowCandidates(const std::vector<std::wstring>& candidates
     int pos_x = caret_rect.left;
     int pos_y = caret_rect.bottom + 4;
 
-    // Keep on screen bounds
-    int screen_w = GetSystemMetrics(SM_CXSCREEN);
-    int screen_h = GetSystemMetrics(SM_CYSCREEN);
-
-    if (pos_x + width_ > screen_w) {
-        pos_x = screen_w - width_ - 10;
+    // Multi-monitor aware clamping
+    HMONITOR hMon = MonitorFromRect(&caret_rect, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    RECT work_area = { 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) };
+    if (GetMonitorInfoW(hMon, &mi)) {
+        work_area = mi.rcWork;
     }
-    if (pos_x < 10) pos_x = 10;
 
-    if (pos_y + height_ > screen_h) {
+    if (pos_x + width_ > work_area.right - 10) {
+        pos_x = work_area.right - width_ - 10;
+    }
+    if (pos_x < work_area.left + 10) {
+        pos_x = work_area.left + 10;
+    }
+
+    if (pos_y + height_ > work_area.bottom - 10) {
         pos_y = caret_rect.top - height_ - 4;
     }
-    if (pos_y < 10) pos_y = 10;
+    if (pos_y < work_area.top + 10) {
+        pos_y = work_area.top + 10;
+    }
 
     SetWindowPos(
         hwnd_, HWND_TOPMOST,
@@ -281,8 +307,38 @@ void CandidateWindow::OnPaint(HWND hWnd) {
     HBITMAP memBitmap = CreateCompatibleBitmap(hdc, client_rect.right, client_rect.bottom);
     HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, memBitmap);
 
-    // 1. Fluent background (Pure white card)
-    HBRUSH bg_brush = CreateSolidBrush(RGB(255, 255, 255));
+    bool is_dark = IsDarkMode();
+
+    // Color definitions based on theme
+    COLORREF colBg = is_dark ? RGB(32, 32, 36) : RGB(255, 255, 255);
+    COLORREF colHdrBg = is_dark ? RGB(40, 40, 46) : RGB(249, 250, 252);
+    COLORREF colDiv = is_dark ? RGB(58, 58, 66) : RGB(232, 235, 240);
+    COLORREF colInputTxt = is_dark ? RGB(240, 243, 246) : RGB(24, 28, 36);
+    COLORREF colCaret = is_dark ? RGB(96, 165, 250) : RGB(0, 103, 192);
+    COLORREF colBrand = is_dark ? RGB(140, 145, 158) : RGB(160, 166, 178);
+
+    COLORREF colSelBg = is_dark ? RGB(45, 55, 75) : RGB(236, 243, 254);
+    COLORREF colSelBorder = is_dark ? RGB(65, 85, 125) : RGB(196, 220, 252);
+    COLORREF colAccentBar = is_dark ? RGB(96, 165, 250) : RGB(0, 103, 192);
+
+    COLORREF colBadgeBgSel = is_dark ? RGB(55, 75, 110) : RGB(216, 232, 255);
+    COLORREF colBadgeBgUnsel = is_dark ? RGB(48, 48, 56) : RGB(242, 244, 247);
+    COLORREF colBadgeBorderSel = is_dark ? RGB(80, 110, 160) : RGB(180, 210, 250);
+    COLORREF colBadgeBorderUnsel = is_dark ? RGB(65, 65, 75) : RGB(228, 230, 235);
+    COLORREF colBadgeTxtSel = is_dark ? RGB(147, 197, 253) : RGB(0, 95, 184);
+    COLORREF colBadgeTxtUnsel = is_dark ? RGB(160, 165, 178) : RGB(100, 106, 118);
+
+    COLORREF colWordTxtSel = is_dark ? RGB(255, 255, 255) : RGB(10, 20, 35);
+    COLORREF colWordTxtUnsel = is_dark ? RGB(225, 229, 235) : RGB(32, 34, 38);
+
+    COLORREF colBtnBg = is_dark ? RGB(44, 44, 52) : RGB(246, 248, 250);
+    COLORREF colBtnBorder = is_dark ? RGB(65, 65, 75) : RGB(220, 224, 230);
+    COLORREF colChevron = is_dark ? RGB(180, 185, 195) : RGB(90, 95, 105);
+    COLORREF colHintTxt = is_dark ? RGB(140, 145, 158) : RGB(140, 146, 158);
+    COLORREF colOuterBorder = is_dark ? RGB(68, 72, 82) : RGB(210, 215, 222);
+
+    // 1. Fluent background (Card body)
+    HBRUSH bg_brush = CreateSolidBrush(colBg);
     FillRect(memDC, &client_rect, bg_brush);
     DeleteObject(bg_brush);
 
@@ -292,29 +348,29 @@ void CandidateWindow::OnPaint(HWND hWnd) {
 
     // 2. Header Area
     RECT header_bg = { 0, 0, client_rect.right, HEADER_H };
-    HBRUSH hdr_bg_brush = CreateSolidBrush(RGB(249, 250, 252));
+    HBRUSH hdr_bg_brush = CreateSolidBrush(colHdrBg);
     FillRect(memDC, &header_bg, hdr_bg_brush);
     DeleteObject(hdr_bg_brush);
 
     // Header divider line
-    HPEN div_pen = CreatePen(PS_SOLID, 1, RGB(232, 235, 240));
+    HPEN div_pen = CreatePen(PS_SOLID, 1, colDiv);
     HPEN old_pen = (HPEN)SelectObject(memDC, div_pen);
     MoveToEx(memDC, 0, HEADER_H, NULL);
     LineTo(memDC, client_rect.right, HEADER_H);
 
-    // Input buffer with blue cursor
+    // Input buffer with cursor
     if (!roman_input_.empty()) {
         SelectObject(memDC, hfont_header_);
-        SetTextColor(memDC, RGB(24, 28, 36));
+        SetTextColor(memDC, colInputTxt);
         RECT header_r = { 10, 2, client_rect.right - 50, HEADER_H };
         DrawTextW(memDC, roman_input_.c_str(), (int)roman_input_.size(), &header_r, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
-        // Vibrant blue cursor
+        // Vibrant cursor
         SIZE txt_sz;
         ZeroMemory(&txt_sz, sizeof(txt_sz));
         GetTextExtentPoint32W(memDC, roman_input_.c_str(), (int)roman_input_.size(), &txt_sz);
         int caret_x = 10 + txt_sz.cx + 2;
-        HPEN caret_pen = CreatePen(PS_SOLID, 2, RGB(0, 103, 192));
+        HPEN caret_pen = CreatePen(PS_SOLID, 2, colCaret);
         SelectObject(memDC, caret_pen);
         MoveToEx(memDC, caret_x, 5, NULL);
         LineTo(memDC, caret_x, HEADER_H - 5);
@@ -323,7 +379,7 @@ void CandidateWindow::OnPaint(HWND hWnd) {
 
     // App Brand badge on header right: "Likhi"
     SelectObject(memDC, hfont_hint_);
-    SetTextColor(memDC, RGB(160, 166, 178));
+    SetTextColor(memDC, colBrand);
     RECT brand_r = { client_rect.right - 48, 0, client_rect.right - 8, HEADER_H };
     DrawTextW(memDC, L"Likhi", 5, &brand_r, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 
@@ -334,8 +390,8 @@ void CandidateWindow::OnPaint(HWND hWnd) {
 
         if (is_selected) {
             // Selected item: Windows 11 Fluent Soft Blue Pill with 6px corner radius
-            HBRUSH sel_brush = CreateSolidBrush(RGB(236, 243, 254));
-            HPEN sel_pen = CreatePen(PS_SOLID, 1, RGB(196, 220, 252));
+            HBRUSH sel_brush = CreateSolidBrush(colSelBg);
+            HPEN sel_pen = CreatePen(PS_SOLID, 1, colSelBorder);
             SelectObject(memDC, sel_brush);
             SelectObject(memDC, sel_pen);
             RoundRect(memDC, item_rect.left, item_rect.top, item_rect.right, item_rect.bottom, 6, 6);
@@ -343,7 +399,7 @@ void CandidateWindow::OnPaint(HWND hWnd) {
             DeleteObject(sel_brush);
 
             // Left vertical accent bar (Windows 11 Fluent selection indicator)
-            HBRUSH bar_brush = CreateSolidBrush(RGB(0, 103, 192));
+            HBRUSH bar_brush = CreateSolidBrush(colAccentBar);
             RECT bar_r = { item_rect.left + 2, item_rect.top + 5, item_rect.left + 5, item_rect.bottom - 5 };
             FillRect(memDC, &bar_r, bar_brush);
             DeleteObject(bar_brush);
@@ -351,8 +407,8 @@ void CandidateWindow::OnPaint(HWND hWnd) {
 
         // Hotkey number badge pill: [ 1 ], [ 2 ], [ 3 ] ...
         RECT badge_r = { item_rect.left + 9, item_rect.top + 4, item_rect.left + 27, item_rect.bottom - 4 };
-        HBRUSH badge_bg = CreateSolidBrush(is_selected ? RGB(216, 232, 255) : RGB(242, 244, 247));
-        HPEN badge_border = CreatePen(PS_SOLID, 1, is_selected ? RGB(180, 210, 250) : RGB(228, 230, 235));
+        HBRUSH badge_bg = CreateSolidBrush(is_selected ? colBadgeBgSel : colBadgeBgUnsel);
+        HPEN badge_border = CreatePen(PS_SOLID, 1, is_selected ? colBadgeBorderSel : colBadgeBorderUnsel);
         SelectObject(memDC, badge_bg);
         SelectObject(memDC, badge_border);
         RoundRect(memDC, badge_r.left, badge_r.top, badge_r.right, badge_r.bottom, 4, 4);
@@ -361,13 +417,13 @@ void CandidateWindow::OnPaint(HWND hWnd) {
 
         // Hotkey number text
         SelectObject(memDC, hfont_number_);
-        SetTextColor(memDC, is_selected ? RGB(0, 95, 184) : RGB(100, 106, 118));
+        SetTextColor(memDC, is_selected ? colBadgeTxtSel : colBadgeTxtUnsel);
         std::wstring num_str = std::to_wstring(i + 1);
         DrawTextW(memDC, num_str.c_str(), (int)num_str.size(), &badge_r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
         // Bengali candidate word
         SelectObject(memDC, hfont_bengali_);
-        SetTextColor(memDC, is_selected ? RGB(10, 20, 35) : RGB(32, 34, 38));
+        SetTextColor(memDC, is_selected ? colWordTxtSel : colWordTxtUnsel);
         RECT text_r = item_rect;
         text_r.left += 34;
         text_r.right -= 8;
@@ -381,8 +437,8 @@ void CandidateWindow::OnPaint(HWND hWnd) {
     LineTo(memDC, client_rect.right, footer_top);
 
     // Footer Pagination Buttons: [ ∧ ] [ ∨ ]
-    HBRUSH btn_bg_brush = CreateSolidBrush(RGB(246, 248, 250));
-    HPEN btn_border_pen = CreatePen(PS_SOLID, 1, RGB(220, 224, 230));
+    HBRUSH btn_bg_brush = CreateSolidBrush(colBtnBg);
+    HPEN btn_border_pen = CreatePen(PS_SOLID, 1, colBtnBorder);
     SelectObject(memDC, btn_bg_brush);
     SelectObject(memDC, btn_border_pen);
     RoundRect(memDC, up_button_rect_.left, up_button_rect_.top, up_button_rect_.right, up_button_rect_.bottom, 4, 4);
@@ -390,7 +446,7 @@ void CandidateWindow::OnPaint(HWND hWnd) {
     DeleteObject(btn_border_pen);
     DeleteObject(btn_bg_brush);
 
-    HPEN chevron_pen = CreatePen(PS_SOLID, 1, RGB(90, 95, 105));
+    HPEN chevron_pen = CreatePen(PS_SOLID, 1, colChevron);
     SelectObject(memDC, chevron_pen);
 
     // Up chevron ^
@@ -411,12 +467,12 @@ void CandidateWindow::OnPaint(HWND hWnd) {
 
     // Keyboard navigation hint text on footer right
     SelectObject(memDC, hfont_hint_);
-    SetTextColor(memDC, RGB(140, 146, 158));
-    RECT hint_r = { down_button_rect_.right + 8, footer_top, client_rect.right - 8, client_rect.bottom };
-    DrawTextW(memDC, L"Tab \x21B9  Enter \x21B5", 13, &hint_r, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+    SetTextColor(memDC, colHintTxt);
+    RECT hint_r = { down_button_rect_.right + 6, footer_top, client_rect.right - 8, client_rect.bottom };
+    DrawTextW(memDC, L"Tab \x21B9  Enter \x21B5  \x2022  Voice: Win+H", -1, &hint_r, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 
-    // 5. Outer 1px Crisp Border (Windows 11 light neutral #D1D5DB)
-    HPEN border_pen = CreatePen(PS_SOLID, 1, RGB(210, 215, 222));
+    // 5. Outer 1px Crisp Border
+    HPEN border_pen = CreatePen(PS_SOLID, 1, colOuterBorder);
     SelectObject(memDC, border_pen);
     SelectObject(memDC, GetStockObject(NULL_BRUSH));
     Rectangle(memDC, client_rect.left, client_rect.top, client_rect.right, client_rect.bottom);

@@ -28,6 +28,10 @@ public:
     void SelectNext();
     void SelectPrev();
 
+    void SetThemeMode(int mode) { theme_mode_ = mode; }
+    int GetThemeMode() const { return theme_mode_; }
+    bool IsDarkMode() const;
+
     HWND GetHwnd() const { return hwnd_; }
     const RECT& GetCaretRect() const { return caret_rect_; }
 
@@ -55,6 +59,7 @@ private:
     HFONT hfont_header_;
     HFONT hfont_hint_;
 
+    int theme_mode_;
     int width_;
     int height_;
 };

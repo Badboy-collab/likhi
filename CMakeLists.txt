@@ -43,6 +43,13 @@ add_custom_command(
     COMMENT "Compiling TSF Resource"
 )
 
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/virtual_kb_rc.obj
+    COMMAND windres -i "${CMAKE_CURRENT_SOURCE_DIR}/tools/virtual_keyboard/virtual_keyboard.rc" -o "${CMAKE_CURRENT_BINARY_DIR}/virtual_kb_rc.obj"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/virtual_keyboard/virtual_keyboard.rc" "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon.ico"
+    COMMENT "Compiling Virtual Keyboard Resource"
+)
+
 # TSF Framework Source Files
 set(TSF_SOURCES
     tsf/src/dll_main.cpp
@@ -165,6 +172,20 @@ add_executable(bangla_settings WIN32
     ${CMAKE_CURRENT_BINARY_DIR}/settings_rc.obj
 )
 target_link_libraries(bangla_settings PRIVATE
+    user32
+    gdi32
+    comctl32
+    shell32
+    uxtheme
+    dwmapi
+)
+
+# Likhi Virtual Keyboard Target
+add_executable(likhi_virtual_keyboard WIN32
+    tools/virtual_keyboard/virtual_keyboard_main.cpp
+    ${CMAKE_CURRENT_BINARY_DIR}/virtual_kb_rc.obj
+)
+target_link_libraries(likhi_virtual_keyboard PRIVATE
     user32
     gdi32
     comctl32

@@ -93,6 +93,7 @@ bool CompositionManager::Initialize(HINSTANCE hInst) {
     config.lexicon_binary_path = lexicon_path_.c_str();
 
     wchar_t appdata_path[MAX_PATH];
+    int initial_theme_mode = 0;
     if (GetEnvironmentVariableW(L"APPDATA", appdata_path, MAX_PATH) > 0) {
         std::wstring dir = std::wstring(appdata_path) + L"\\PC-Bangla-Typing-App";
         CreateDirectoryW(dir.c_str(), NULL);
@@ -120,6 +121,9 @@ bool CompositionManager::Initialize(HINSTANCE hInst) {
                     if (line.find("\"max_candidates\": 3") != std::string::npos) config.max_candidates = 3;
                     if (line.find("\"max_candidates\": 4") != std::string::npos) config.max_candidates = 4;
                     if (line.find("\"max_candidates\": 5") != std::string::npos) config.max_candidates = 5;
+                    if (line.find("\"theme\": 1") != std::string::npos) initial_theme_mode = 1;
+                    if (line.find("\"theme\": 2") != std::string::npos) initial_theme_mode = 2;
+                    if (line.find("\"theme\": 0") != std::string::npos) initial_theme_mode = 0;
                 }
             }
         } else {
@@ -136,6 +140,7 @@ bool CompositionManager::Initialize(HINSTANCE hInst) {
     // 2. Initialize Candidate Window UI (if GUI instance provided)
     if (hInst) {
         candidate_window_.Initialize(hInst);
+        candidate_window_.SetThemeMode(initial_theme_mode);
         candidate_window_.SetSelectionCallback([this](size_t index) {
             OnCandidateWindowSelection(index);
         });
@@ -158,25 +163,13 @@ void CompositionManager::Shutdown() {
 
 void CompositionManager::SetAutoCorrectEnabled(bool enabled) {
     if (engine_) {
-        EngineConfig cfg;
-        BanglaEngine_GetDefaultConfig(&cfg);
-        cfg.auto_correct_enabled = enabled;
-        cfg.lexicon_binary_path = lexicon_path_.c_str();
-        cfg.user_dict_path = user_dict_path_.c_str();
-        BanglaEngine_Destroy(engine_);
-        engine_ = BanglaEngine_Create(&cfg);
+        BanglaEngine_SetAutoCorrectEnabled(engine_, enabled);
     }
 }
 
 void CompositionManager::SetMaxCandidates(uint32_t max_cands) {
     if (engine_) {
-        EngineConfig cfg;
-        BanglaEngine_GetDefaultConfig(&cfg);
-        cfg.max_candidates = max_cands;
-        cfg.lexicon_binary_path = lexicon_path_.c_str();
-        cfg.user_dict_path = user_dict_path_.c_str();
-        BanglaEngine_Destroy(engine_);
-        engine_ = BanglaEngine_Create(&cfg);
+        BanglaEngine_SetMaxCandidates(engine_, max_cands);
     }
 }
 
@@ -262,12 +255,22 @@ void CompositionManager::CheckAndReloadUserDict() {
                 if (sin.is_open()) {
                     std::string line;
                     bool auto_correct = false;
+                    uint32_t max_cands = 5;
+                    int theme_mode = candidate_window_.GetThemeMode();
                     while (std::getline(sin, line)) {
                         if (line.find("\"auto_correct\": true") != std::string::npos) auto_correct = true;
                         if (line.find("\"auto_correct\": false") != std::string::npos) auto_correct = false;
+                        if (line.find("\"max_candidates\": 3") != std::string::npos) max_cands = 3;
+                        if (line.find("\"max_candidates\": 4") != std::string::npos) max_cands = 4;
+                        if (line.find("\"max_candidates\": 5") != std::string::npos) max_cands = 5;
+                        if (line.find("\"theme\": 1") != std::string::npos) theme_mode = 1;
+                        if (line.find("\"theme\": 2") != std::string::npos) theme_mode = 2;
+                        if (line.find("\"theme\": 0") != std::string::npos) theme_mode = 0;
                     }
                     BanglaEngine_SetAutoCorrectEnabled(engine_, auto_correct);
-                    TsfLog("CheckAndReloadUserDict: updated auto_correct_enabled to %d", auto_correct ? 1 : 0);
+                    BanglaEngine_SetMaxCandidates(engine_, max_cands);
+                    candidate_window_.SetThemeMode(theme_mode);
+                    TsfLog("CheckAndReloadUserDict: updated auto_correct to %d, max_candidates to %u, theme to %d", auto_correct ? 1 : 0, max_cands, theme_mode);
                 }
             }
         }

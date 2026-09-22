@@ -76,6 +76,7 @@ bool BanglaEngine_AddUserWord(BanglaEngine* engine, const char* roman_key, const
 bool BanglaEngine_RemoveUserWord(BanglaEngine* engine, const char* roman_key, const char* bengali_word);
 bool BanglaEngine_ReloadUserDict(BanglaEngine* engine);
 void BanglaEngine_SetAutoCorrectEnabled(BanglaEngine* engine, bool enabled);
+void BanglaEngine_SetMaxCandidates(BanglaEngine* engine, uint32_t max_candidates);
 
 #ifdef __cplusplus
 }

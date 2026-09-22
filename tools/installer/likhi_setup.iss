@@ -42,6 +42,8 @@ Source: "..\..\build\bangla_tsf.dll"; DestDir: "{app}"; Flags: ignoreversion res
 Source: "..\..\build\bangla_tsf32.dll"; DestDir: "{app}"; Flags: ignoreversion restartreplace; Check: IsWin64
 ; Settings Application
 Source: "..\..\build\bangla_settings.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Virtual Keyboard
+Source: "..\..\build\likhi_virtual_keyboard.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Dictionary Binary
 Source: "..\..\engine\data\lexicon.bin"; DestDir: "{app}\data"; Flags: ignoreversion
 ; Scripts for modern language bar configuration
@@ -50,10 +52,16 @@ Source: "disable_tip.ps1"; DestDir: "{app}\tools"; Flags: ignoreversion
 ; Documentation
 Source: "README.txt"; DestDir: "{app}"; Flags: ignoreversion isreadme
 
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+
 [Icons]
 Name: "{group}\Likhi Settings"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\Likhi Virtual Keyboard"; Filename: "{app}\likhi_virtual_keyboard.exe"
 Name: "{group}\Likhi Documentation"; Filename: "{app}\README.txt"
 Name: "{group}\{cm:UninstallProgram,{#MyAppFullName}}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\Likhi Settings"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\Likhi Virtual Keyboard"; Filename: "{app}\likhi_virtual_keyboard.exe"; Tasks: desktopicon
 
 [Registry]
 ; -------------------------------------------------------------

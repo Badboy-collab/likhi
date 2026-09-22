@@ -11,14 +11,18 @@ A modern, fast, intelligent, and lightweight Bengali phonetic typing application
 
 ## Key Features
 
-- **Windows TSF IME (`bangla_tsf.dll`)**: Native in-process COM Text Service supporting all Windows applications (Notepad, MS Word, Edge, Chrome, VS Code).
-- **Sub-Millisecond Speed**: ~22 µs keystroke transliteration, 1.4 µs next-word prediction, ~3.8 ms cold startup.
+- **Windows TSF IME (`bangla_tsf.dll` & `bangla_tsf32.dll`)**: Native 64-bit and 32-bit in-process COM Text Service supporting all Windows applications (WhatsApp Desktop, Notepad, MS Word, Edge, Chrome, VS Code).
+- **Likhi Virtual Keyboard (`likhi_virtual_keyboard.exe`)**: Modern Acrylic Glass on-screen keyboard for easy mouse click typing with zero focus loss (`WS_EX_NOACTIVATE`).
+- **Voice Typing Integration**: Direct shortcut trigger (`Win + H`) and in-app voice guide for Windows native speech typing.
+- **Dynamic Dark & Light Mode**: Real-time theme synchronization across Settings and candidate suggestion window.
+- **Sub-Millisecond Speed**: ~19 µs keystroke transliteration, 1.4 µs next-word prediction, ~3.8 ms cold startup.
 - **Ultra-Lightweight Memory**: ~13.4 MB active RAM footprint.
 - **100% Bengali Unicode Integrity**: Zero broken conjuncts, zero dangling Hasants, full grapheme-aware backspacing.
 - **Smart Transliteration & Ranking**: 52,161 word lexicon, bigram context scoring, 98.08% sentence accuracy on 520 held-out gold test cases.
 - **Strict Auto-Correct Gate**: Default OFF. When enabled, requires $\ge 0.85$ confidence score.
-- **Native Settings App (`bangla_settings.exe`)**: Win32 configuration tool for user preferences and personal dictionary.
-- **100% Offline & Private**: Zero cloud dependency, zero telemetry, zero keystroke logging.
+- **Native Settings App (`bangla_settings.exe`)**: Modern Win32 tool for user preferences, custom personal dictionary, and Windows startup control.
+- **One-Click Installer (`Likhi_Setup_v1.0.0.exe`)**: Inno Setup installer with automatic registration, desktop shortcuts, and clean uninstaller.
+- **100% Offline & Private**: Zero cloud dependency, zero telemetry, zero network imports, zero keystroke logging.
 
 ---
 
