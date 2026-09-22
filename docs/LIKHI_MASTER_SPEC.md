@@ -79,3 +79,45 @@ Likhi (লিখি) is a lightweight, ultra-fast, modern Bangla typing applicat
 
 ## 4. Maintenance & Cumulative Development Rule
 Any future enhancement must pass all 6 automated test suites before deployment. No change may remove or degrade a previously approved feature.
+
+---
+
+## 5. Dual input backend (2026-09-21)
+
+TSF cannot reach every Windows host, so Likhi now has a second, explicit input
+path. Both share ONE language engine, dictionary, fuzzy matcher, personal
+dictionary and learning file - there is no second transliteration engine.
+
+```
+                 LIKHI CORE (engine/)
+                        |
+        +---------------+---------------+
+        |                               |
+   TSF backend                     Universal backend
+   tsf/bangla_tsf.dll              tools/universal/likhi_universal.exe
+   (composition, candidate         (roman letters reach the app, a word
+    strip, display attributes)      boundary replaces them with Unicode
+                                    keystrokes)
+```
+
+### 5.1 Universal Mode rules (permanent)
+- Nothing is transformed unless the focused window really has Bengali (0x0845)
+  selected, so English typing, digits and punctuation are never touched.
+- Every modifier chord, function key, navigation key and numpad key passes
+  through; at most one key per word (the boundary) is consumed.
+- `Automatic` stands down whenever `bangla_tsf.dll` is loaded in the focused
+  process, or when that cannot be determined (safe default).
+- The preview is dropped - never erased from the host - on focus/caret changes.
+- No typed text is logged. `universal.log` holds mode changes and counters only.
+- Diagnostics: `likhi_universal.exe --check` writes
+  `%APPDATA%\PC-Bangla-Typing-App\universal_check.txt`.
+
+### 5.2 Input Mode setting
+`settings.json` key `input_mode`: `automatic` (default) | `tsf_only` |
+`universal`; `universal_mode: false` pauses the universal host entirely.
+Hotkey `Ctrl+Alt+L` pauses/resumes it; the tray tooltip shows the live mode.
+
+### 5.3 Still to wire (see AGENTS.md assessment)
+Installer must ship and autostart `likhi_universal.exe`, the Settings app needs
+the Input Mode control, and the universal host should surface the same cloud
+suggestions as the TSF path.
