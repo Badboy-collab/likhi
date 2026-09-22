@@ -417,6 +417,10 @@ int main() {
               "semicolon => boundary");
         Check(ClassifyKey(0xBF, L'/', false, false, false, false, false).kind == KeyClass::kBoundary,
               "slash => boundary");
+        Check(ClassifyKey(0x41, 0x0995, false, false, false, false, false).kind == KeyClass::kOther,
+              "non-ASCII produced character => other (never a boundary)");
+        Check(ClassifyKey(0x41, 0x00E9, false, false, false, false, false).kind == KeyClass::kOther,
+              "accented character => other (never a boundary)");
         Check(ClassifyKey(0x51, L'q', true, false, false, false, false).kind == KeyClass::kLetter &&
                   ClassifyKey(0x51, L'q', true, false, false, false, false).ctrl,
               "Ctrl+Q classified as a Ctrl chord (never buffered)");

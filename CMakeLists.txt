@@ -182,6 +182,24 @@ target_include_directories(likhi_universal_core PUBLIC universal/include)
 add_executable(test_universal_typing tests/unit/test_universal_typing.cpp)
 target_link_libraries(test_universal_typing PRIVATE likhi_universal_core)
 
+# Universal Mode host (non-TSF fallback input path): tray icon + low-level
+# keyboard hook that types Bangla through Unicode keystrokes where TSF cannot
+# reach (UWP/Store apps, Java UIs, games, remote sessions).
+add_executable(likhi_universal WIN32
+    tools/universal/likhi_universal.cpp
+)
+# UNICODE/_UNICODE: IDI_APPLICATION and friends must resolve to the wide variants.
+target_compile_definitions(likhi_universal PRIVATE UNICODE _UNICODE)
+target_link_libraries(likhi_universal PRIVATE
+    likhi_universal_core
+    bangla_engine_static
+    user32
+    gdi32
+    shell32
+    advapi32
+    psapi
+)
+
 # Native Settings App Target
 add_executable(bangla_settings WIN32
     tools/settings_app/settings_main.cpp
@@ -325,6 +343,7 @@ else()
     target_link_options(test_p0_keyboard PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_key_policy PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_universal_typing PRIVATE -static -static-libgcc -static-libstdc++)
+    target_link_options(likhi_universal PRIVATE -static -static-libgcc -static-libstdc++ -municode)
     target_link_options(benchmark_perf PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(inspect_unicode PRIVATE -static -static-libgcc -static-libstdc++)
 endif()

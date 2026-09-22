@@ -73,10 +73,11 @@ KeyEvent ClassifyKey(int vk, wchar_t produced_char, bool ctrl, bool alt, bool wi
         return event;
     }
 
-    // Printable punctuation / symbols act as word boundaries. Letters are
-    // resolved from `produced_char`, so layout and Shift handling stay with the
-    // host (a Shift+digit symbol therefore arrives as kBoundary, not kDigit).
-    if (produced_char >= 0x21 && produced_char != 0x7F) {
+    // Printable ASCII punctuation / symbols act as word boundaries. Only ASCII is
+    // accepted: characters above 0x7E (a Bengali layout, an IME produced symbol,
+    // any other script) are never treated as boundaries, so the layer can never
+    // try to replace text it did not type itself.
+    if (produced_char >= 0x21 && produced_char <= 0x7E) {
         event.kind = KeyClass::kBoundary;
         return event;
     }
@@ -180,7 +181,7 @@ Decision UniversalTyping::Feed(const KeyEvent& event) {
             return Boundary(std::wstring(1, event.ch));
 
         case KeyClass::kBoundary: {
-            if (roman_.empty() || event.ch < 0x21 || event.ch == 0x7F) {
+            if (roman_.empty() || event.ch < 0x21 || event.ch > 0x7E) {
                 return decision;
             }
             // "." becomes the Bengali full stop, matching the TSF path.
