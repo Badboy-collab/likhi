@@ -219,13 +219,14 @@ target_link_libraries(bangla_settings PRIVATE
 set(SETUP_PAYLOAD_DLL      "${CMAKE_SOURCE_DIR}/release_package/bangla_tsf.dll")
 set(SETUP_PAYLOAD_LEX      "${CMAKE_SOURCE_DIR}/release_package/data/lexicon.bin")
 set(SETUP_PAYLOAD_SETTINGS "${CMAKE_SOURCE_DIR}/release_package/bangla_settings.exe")
+set(SETUP_PAYLOAD_UNIVERSAL "${CMAKE_SOURCE_DIR}/release_package/likhi_universal.exe")
 set(SETUP_RC               "${CMAKE_CURRENT_BINARY_DIR}/setup_rc.rc")
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/tools/setup/setup.rc.in" "${SETUP_RC}" @ONLY)
 
 add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/setup_rc.obj
     COMMAND windres -i "${SETUP_RC}" -o "${CMAKE_CURRENT_BINARY_DIR}/setup_rc.obj"
-    DEPENDS "${SETUP_RC}" "${SETUP_PAYLOAD_DLL}" "${SETUP_PAYLOAD_LEX}" "${SETUP_PAYLOAD_SETTINGS}" "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon.ico"
+    DEPENDS "${SETUP_RC}" "${SETUP_PAYLOAD_DLL}" "${SETUP_PAYLOAD_LEX}" "${SETUP_PAYLOAD_SETTINGS}" "${SETUP_PAYLOAD_UNIVERSAL}" "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon.ico"
     COMMENT "Compiling Installer Resources (embedded payload)"
 )
 

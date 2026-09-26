@@ -54,6 +54,10 @@ enum SectionID {
 #define IDC_BTN_SAVE          2026
 #define IDC_BTN_CLOSE         2027
 #define IDC_LBL_STATUS        2028
+// Input Mode (which backend types Bangla): automatic | tsf_only | universal
+#define IDC_RADIO_MODE_AUTO   2029
+#define IDC_RADIO_MODE_TSF    2030
+#define IDC_RADIO_MODE_UNIV   2031
 
 struct AppSettings {
     bool enable_likhi = true;
@@ -68,6 +72,8 @@ struct AppSettings {
     bool auto_correct = false;
     int max_candidates = 5;
     int theme = 0;
+    // 0 = automatic (TSF where it works, universal elsewhere), 1 = tsf_only, 2 = universal
+    int input_mode = 0;
 };
 
 static AppSettings g_settings;
@@ -136,6 +142,8 @@ void LoadSettings() {
         if (line.find("\"fuzzy_spelling\": false") != std::string::npos) g_settings.fuzzy_spelling = false;
         if (line.find("\"theme\": 1") != std::string::npos) g_settings.theme = 1;
         if (line.find("\"theme\": 2") != std::string::npos) g_settings.theme = 2;
+        if (line.find("\"input_mode\": \"tsf_only\"") != std::string::npos) g_settings.input_mode = 1;
+        if (line.find("\"input_mode\": \"universal\"") != std::string::npos) g_settings.input_mode = 2;
     }
 }
 
@@ -155,7 +163,10 @@ void SaveSettings() {
     out << "  \"show_eng_candidate\": " << (g_settings.show_eng_candidate ? "true" : "false") << ",\n";
     out << "  \"auto_correct\": " << (g_settings.auto_correct ? "true" : "false") << ",\n";
     out << "  \"max_candidates\": " << g_settings.max_candidates << ",\n";
-    out << "  \"theme\": " << g_settings.theme << "\n";
+    out << "  \"theme\": " << g_settings.theme << ",\n";
+    out << "  \"input_mode\": \""
+        << (g_settings.input_mode == 1 ? "tsf_only" : (g_settings.input_mode == 2 ? "universal" : "automatic"))
+        << "\"\n";
     out << "}\n";
 }
 
@@ -407,6 +418,32 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_section_controls[SEC_KEYBOARD].push_back(hK_Title);
             g_section_controls[SEC_KEYBOARD].push_back(hK_Desc);
 
+            // ---- Input Mode: which backend types Bangla -----------------------
+            // Automatic keeps the current behaviour (TSF first); Universal Mode
+            // also covers apps TSF cannot reach, such as WhatsApp Desktop.
+            HWND hK_ModeLbl = CreateWindowW(L"STATIC", L"ইনপুট মোড (Input Mode) — কোন অ্যাপে কীভাবে বাংলা লিখবেন:", WS_CHILD | SS_LEFT, 250, 262, 520, 24, hWnd, NULL, NULL, NULL);
+            SendMessage(hK_ModeLbl, WM_SETFONT, (WPARAM)hFontBold, TRUE);
+
+            HWND hRM1 = CreateWindowW(L"BUTTON", L"অটোমেটিক (সুপারিশকৃত) — TSF যেখানে কাজ করে সেখানে TSF, বাকিতে Universal", WS_CHILD | BS_AUTORADIOBUTTON | WS_GROUP, 250, 292, 520, 24, hWnd, (HMENU)IDC_RADIO_MODE_AUTO, NULL, NULL);
+            HWND hRM2 = CreateWindowW(L"BUTTON", L"শুধু TSF — Word, Excel, Notepad (Universal বন্ধ থাকবে)", WS_CHILD | BS_AUTORADIOBUTTON, 250, 322, 520, 24, hWnd, (HMENU)IDC_RADIO_MODE_TSF, NULL, NULL);
+            HWND hRM3 = CreateWindowW(L"BUTTON", L"Universal Mode — WhatsApp সহ সব অ্যাপে বাংলা, যেখানে TSF পৌঁছায় না", WS_CHILD | BS_AUTORADIOBUTTON, 250, 352, 520, 24, hWnd, (HMENU)IDC_RADIO_MODE_UNIV, NULL, NULL);
+            SendMessage(hRM1, WM_SETFONT, (WPARAM)hFontBody, TRUE);
+            SendMessage(hRM2, WM_SETFONT, (WPARAM)hFontBody, TRUE);
+            SendMessage(hRM3, WM_SETFONT, (WPARAM)hFontBody, TRUE);
+
+            if (g_settings.input_mode == 1) SendMessage(hRM2, BM_SETCHECK, BST_CHECKED, 0);
+            else if (g_settings.input_mode == 2) SendMessage(hRM3, BM_SETCHECK, BST_CHECKED, 0);
+            else SendMessage(hRM1, BM_SETCHECK, BST_CHECKED, 0);
+
+            HWND hK_ModeHint = CreateWindowW(L"STATIC", L"Universal Mode সক্রিয় থাকলে tray-তে Likhi আইকন দেখবেন।\nCtrl + Alt + L চেপে যেকোনো সময় pause/resume করতে পারেন। Save চাপলে সাথে সাথে কার্যকর হয়।", WS_CHILD | SS_LEFT, 250, 388, 520, 60, hWnd, NULL, NULL, NULL);
+            SendMessage(hK_ModeHint, WM_SETFONT, (WPARAM)hFontSub, TRUE);
+
+            g_section_controls[SEC_KEYBOARD].push_back(hK_ModeLbl);
+            g_section_controls[SEC_KEYBOARD].push_back(hRM1);
+            g_section_controls[SEC_KEYBOARD].push_back(hRM2);
+            g_section_controls[SEC_KEYBOARD].push_back(hRM3);
+            g_section_controls[SEC_KEYBOARD].push_back(hK_ModeHint);
+
             // ==============================================================
             // SECTION 6: APPEARANCE
             // ==============================================================
@@ -601,6 +638,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 if (SendMessage(GetDlgItem(hWnd, IDC_RADIO_THEME_LIGHT), BM_GETCHECK, 0, 0) == BST_CHECKED) g_settings.theme = 1;
                 else if (SendMessage(GetDlgItem(hWnd, IDC_RADIO_THEME_DARK), BM_GETCHECK, 0, 0) == BST_CHECKED) g_settings.theme = 2;
                 else g_settings.theme = 0;
+
+                // Input Mode. The universal host watches settings.json, so the
+                // change applies within a few seconds without a restart.
+                if (SendMessage(GetDlgItem(hWnd, IDC_RADIO_MODE_TSF), BM_GETCHECK, 0, 0) == BST_CHECKED) g_settings.input_mode = 1;
+                else if (SendMessage(GetDlgItem(hWnd, IDC_RADIO_MODE_UNIV), BM_GETCHECK, 0, 0) == BST_CHECKED) g_settings.input_mode = 2;
+                else g_settings.input_mode = 0;
 
                 SaveSettings();
                 SetWindowTextW(hLblStatus, L"✅ সেটিংস সফলভাবে সংরক্ষিত হয়েছে!");

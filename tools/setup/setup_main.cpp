@@ -35,15 +35,103 @@
 #include <string>
 #include <vector>
 #include <cstdio>
+#include <tlhelp32.h>   // process enumeration: stop a running universal host
 
 #include "bangla_tsf_clsid.h"   // CLSID/GUID/langid/name constants (single source)
 
 #define IDR_PAYLOAD_DLL      101
 #define IDR_PAYLOAD_LEX      102
 #define IDR_PAYLOAD_SETTINGS 103
+#define IDR_PAYLOAD_UNIVERSAL 104
 
 static const wchar_t* kAppName    = L"Likhi";
 static const wchar_t* kAppDisplay = L"Likhi - PC Bangla Typing App";
+
+// ---------------------------------------------------------------------------
+// Universal Mode host (likhi_universal.exe)
+// ---------------------------------------------------------------------------
+// Installed with the app, written to the machine Run key and started right
+// away, so Bangla typing also works where TSF cannot reach the application
+// (WhatsApp Desktop and other Store/UWP apps, some Java UIs, games, remote
+// sessions). Autostart is machine-wide because the install is machine-wide.
+// Uninstall stops the process and removes both the value and the file.
+// ---------------------------------------------------------------------------
+// Auto-start command and value names for the universal host.
+static const wchar_t* kUniversalRunKey   = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
+static const wchar_t* kUniversalRunValue = L"LikhiUniversalMode";
+
+// Defined below with the other helpers; declared here so the host-management
+// helpers can log in exactly the same format as every other install step.
+static void Log(const std::wstring& line);
+static void LogF(const wchar_t* fmt, ...);
+
+// Stops only our own host (by executable name), never anything else.
+static void StopUniversalHost() {
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) return;
+    PROCESSENTRY32W entry = {0};
+    entry.dwSize = sizeof(entry);
+    if (Process32FirstW(snapshot, &entry)) {
+        do {
+            if (_wcsicmp(entry.szExeFile, L"likhi_universal.exe") == 0) {
+                HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE, entry.th32ProcessID);
+                if (process) {
+                    TerminateProcess(process, 0);
+                    CloseHandle(process);
+                    LogF(L"  stopped the running universal host (pid %lu)", entry.th32ProcessID);
+                }
+            }
+        } while (Process32NextW(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+}
+
+static void WriteUniversalAutostart(const std::wstring& installDir, bool dry) {
+    std::wstring exe = installDir + L"\\likhi_universal.exe";
+    if (dry) { LogF(L"  [dry] would set autostart -> %ls", exe.c_str()); return; }
+    HKEY key = nullptr;
+    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, kUniversalRunKey, 0, nullptr, 0,
+                        KEY_SET_VALUE, nullptr, &key, nullptr) != ERROR_SUCCESS) {
+        Log(L"  [warn] cannot write the autostart key — Universal Mode will not start automatically");
+        return;
+    }
+    const std::wstring quoted = L"\"" + exe + L"\"";
+    if (RegSetValueExW(key, kUniversalRunValue, 0, REG_SZ,
+                       reinterpret_cast<const BYTE*>(quoted.c_str()),
+                       (DWORD)((quoted.size() + 1) * sizeof(wchar_t))) == ERROR_SUCCESS) {
+        Log(L"  Universal Mode will start with Windows (apps without TSF support)");
+    } else {
+        Log(L"  [warn] cannot write the autostart value");
+    }
+    RegCloseKey(key);
+}
+
+static void RemoveUniversalAutostart(bool dry) {
+    if (dry) { Log(L"  [dry] would remove the autostart value"); return; }
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, kUniversalRunKey, 0, KEY_SET_VALUE, &key) == ERROR_SUCCESS) {
+        RegDeleteValueW(key, kUniversalRunValue);
+        RegCloseKey(key);
+    }
+}
+
+static void StartUniversalHost(const std::wstring& installDir, bool dry) {
+    std::wstring exe = installDir + L"\\likhi_universal.exe";
+    if (dry) { LogF(L"  [dry] would start %ls", exe.c_str()); return; }
+    if (GetFileAttributesW(exe.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+    STARTUPINFOW si = {0};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi = {0};
+    std::wstring command = L"\"" + exe + L"\"";
+    if (CreateProcessW(exe.c_str(), command.data(), nullptr, nullptr, FALSE,
+                       CREATE_NO_WINDOW, nullptr, installDir.c_str(), &si, &pi)) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        Log(L"  Universal Mode host started");
+    } else {
+        LogF(L"  [warn] cannot start the universal host (error %lu)", GetLastError());
+    }
+}
 
 static std::wstring g_log;
 static bool         g_dry = false;
@@ -440,6 +528,7 @@ static int DoInstall() {
     if (!ExtractResource(IDR_PAYLOAD_DLL, dir + L"\\bangla_tsf.dll", wrote)) { WriteLogFile(); return 3; }
     if (!ExtractResource(IDR_PAYLOAD_LEX, dir + L"\\data\\lexicon.bin", wrote)) { WriteLogFile(); return 3; }
     if (!ExtractResource(IDR_PAYLOAD_SETTINGS, dir + L"\\bangla_settings.exe", wrote)) { WriteLogFile(); return 3; }
+    if (!ExtractResource(IDR_PAYLOAD_UNIVERSAL, dir + L"\\likhi_universal.exe", wrote)) { WriteLogFile(); return 3; }
 
     // The installer itself must live in the install dir so the uninstall entry
     // keeps working after the original download is deleted.
@@ -477,6 +566,14 @@ static int DoInstall() {
     Log(L"[4/5] shortcuts");
     CreateShortcuts(dir);
 
+    // Universal Mode host: installed above, started here and started again with
+    // Windows, so Bangla typing also works in apps TSF cannot reach (WhatsApp
+    // Desktop and other Store/UWP apps). A running older copy is stopped first,
+    // otherwise it would keep serving the previous engine.
+    StopUniversalHost();
+    WriteUniversalAutostart(dir, g_dry);
+    StartUniversalHost(dir, g_dry);
+
     // 5. Apps-list entry
     Log(L"[5/5] uninstall entry");
     WriteUninstallEntry(dir, installedSetup);
@@ -492,6 +589,8 @@ static int DoUninstall() {
     std::wstring dll = dir + L"\\bangla_tsf.dll";
 
     Log(L"[1/4] unregistering Text Service");
+    RemoveUniversalAutostart(g_dry);
+    StopUniversalHost();
     bool found = false;
     if (GetFileAttributesW(dll.c_str()) != INVALID_FILE_ATTRIBUTES) {
         CallDllExport(dll, "DllUnregisterServer", found);
@@ -515,7 +614,7 @@ static int DoUninstall() {
         std::vector<std::wstring> files = {
             dir + L"\\bangla_tsf.dll", dir + L"\\bangla_settings.exe",
             dir + L"\\data\\lexicon.bin", dir + L"\\LikhiSetup.exe",
-            dir + L"\\bangla_tsf.dll.old"
+            dir + L"\\likhi_universal.exe", dir + L"\\bangla_tsf.dll.old"
         };
         for (const auto& f : files) {
             if (!DeleteFileW(f.c_str())) {
