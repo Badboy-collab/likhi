@@ -146,6 +146,47 @@ void TestLastCheckTimeString() {
     EXPECT_TRUE(time_str.find(L"আজ") != std::wstring::npos);
 }
 
+void TestControlledUpdateAvailableScenario() {
+    std::cout << "[TEST] Controlled Update-Available Scenario (Current 1.0.0 -> Remote 1.0.1)..." << std::endl;
+
+    std::string test_payload = R"json({
+        "tag_name": "v1.0.1",
+        "name": "Likhi v1.0.1 (Windows)",
+        "body": "• New typing fixes\n• Suggestion improvements",
+        "published_at": "2026-09-27T12:00:00Z",
+        "assets": [
+            {
+                "name": "LikhiSetup.exe",
+                "size": 17829817,
+                "browser_download_url": "https://getlikhi.com/update/"
+            }
+        ]
+    })json";
+
+    ReleaseInfo info;
+    bool parsed = UpdateService::ParseReleaseJson(test_payload, info);
+    EXPECT_TRUE(parsed);
+    EXPECT_EQ(info.version, "1.0.1");
+    EXPECT_EQ(info.tag_name, "v1.0.1");
+    EXPECT_EQ(info.download_url, "https://getlikhi.com/update/");
+
+    // Authoritative Current Version is 1.0.0
+    EXPECT_EQ(UpdateService::GetCurrentVersion(), "1.0.0");
+
+    // Version Comparison: 1.0.0 < 1.0.1 -> returns -1 (Update Available)
+    int cmp = UpdateService::CompareVersions(UpdateService::GetCurrentVersion(), info.version);
+    EXPECT_EQ(cmp, -1);
+    EXPECT_TRUE(cmp < 0);
+
+    // Verify Action: [ Later ] dismissal and snooze
+    EXPECT_FALSE(UpdateService::IsVersionDismissed("1.0.1"));
+    UpdateService::DismissVersion("1.0.1");
+    EXPECT_TRUE(UpdateService::IsVersionDismissed("1.0.1"));
+
+    // Verify future version is not dismissed
+    EXPECT_FALSE(UpdateService::IsVersionDismissed("1.0.2"));
+}
+
 void TestCooldownAndThrottling() {
     std::cout << "[TEST] Throttling, Cooldown, and Dismissal Logic..." << std::endl;
 
@@ -256,6 +297,7 @@ int main() {
     TestSemVerParsingAndComparison();
     TestReleaseJsonParsing();
     TestLastCheckTimeString();
+    TestControlledUpdateAvailableScenario();
     TestCooldownAndThrottling();
     TestSha256Verification();
     TestUserDataPreservation();
