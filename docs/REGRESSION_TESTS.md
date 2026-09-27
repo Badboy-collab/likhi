@@ -8,18 +8,51 @@
 
 | Test Suite | Binary / Script Target | Test Count | Passing Requirement |
 | :--- | :--- | :--- | :--- |
-| **P0 Native Keyboard Gate** | `build/test_p0_keyboard.exe` | 74 Cases | **100% (74/74)** |
-| **Unicode Bengali Integrity** | `build/unicode_bengali_tests.exe` | 46 Cases | **100% (46/46)** |
+| **Update Service Suite** | `build/test_update_service.exe` | 39 Cases | **100% (39/39)** |
+| **P0 Native Keyboard Gate** | `build/test_key_policy.exe` | 196 Cases | **100% (196/196)** |
 | **Phonetic & Engine Unit Tests** | `build/test_runner.exe` | 220 Cases | **100% (220/220)** |
+| **Unicode Bengali Integrity** | `build/unicode_bengali_tests.exe` | 46 Cases | **100% (46/46)** |
+| **Universal Mode Safety Gate** | `build/test_universal_typing.exe` | 86 Cases | **100% (86/86)** |
 | **TSF Integration Suite** | `build/test_tsf_integration.exe` | 86 Cases | **100% (86/86)** |
 | **Real-World Live QA Runner** | `build/real_world_qa_runner.exe` | 90 Cases | **100% (90/90)** |
-| **Universal Mode Safety Gate** | `build/test_universal_typing.exe` | 86 Cases | **100% (86/86)** |
-| **520 Gold Sentences Benchmark** | `tools/benchmark_runner/benchmark_expanded.py` | 520 Sentences | **$\ge 98.0\%$ Accuracy** |
-| **Banglish Spelling Variations** | `tools/benchmark_runner/benchmark_expanded.py` | 45 Variations | **100% (45/45)** |
 
 ---
 
-## 2. P0 Keyboard Regression Catalog
+## 2. Update Connection & Continuous Improvement Regression Catalog
+
+### Version Parsing & Semantic Comparisons (`TEST-UPD-001` - `TEST-UPD-010`)
+- `TEST-UPD-001`: `1.0.0` == `v1.0.0` (Identical version identity).
+- `TEST-UPD-002`: `1.0.0` < `1.1.0` (Minor version update detected).
+- `TEST-UPD-003`: `1.0.0` < `1.0.1` (Patch version update detected).
+- `TEST-UPD-004`: `1.0.0` < `2.0.0` (Major version update detected).
+- `TEST-UPD-005`: `1.0.0` > `1.0.0-test2` (Official release takes precedence over prerelease).
+- `TEST-UPD-006`: `1.0.0-test1` < `1.0.0-test2` (Prerelease progression).
+
+### GitHub Releases JSON Parsing (`TEST-UPD-011` - `TEST-UPD-020`)
+- `TEST-UPD-011`: Successfully extracts `tag_name`, `name`, `body`, and `published_at`.
+- `TEST-UPD-012`: Identifies `LikhiSetup.exe` asset URL, file size, and SHA-256 digest.
+- `TEST-UPD-013`: Resilient against escaped JSON characters (`\r\n`, quotes).
+- `TEST-UPD-014`: Malformed or empty JSON returns `false` gracefully without crashing.
+
+### Throttling & User Control (`TEST-UPD-021` - `TEST-UPD-028`)
+- `TEST-UPD-021`: Automated startup checks are throttled to 24 hours via `update_cache.json`.
+- `TEST-UPD-022`: Manual "Check for Updates" bypasses cooldown on user demand.
+- `TEST-UPD-023`: User selecting "Later" snoozes notifications for that version for 7 days.
+- `TEST-UPD-024`: A newer release supersedes previous snoozes.
+
+### Cryptographic Digest & Security (`TEST-UPD-029` - `TEST-UPD-034`)
+- `TEST-UPD-029`: Valid SHA-256 hash match verified via Win32 CryptoAPI (`CALG_SHA_256`).
+- `TEST-UPD-030`: Tampered or mismatched file digest strictly rejected.
+- `TEST-UPD-031`: Case-insensitive hex string and `sha256:` prefix normalization.
+
+### 100% User Data Preservation Guarantee (`TEST-UPD-035` - `TEST-UPD-039`)
+- `TEST-UPD-035`: User settings in `%APPDATA%\PC-Bangla-Typing-App\settings.json` preserved intact.
+- `TEST-UPD-036`: Personal dictionary words in `user_dict.txt` preserved intact.
+- `TEST-UPD-037`: Update operations never delete or reset user learning data.
+
+---
+
+## 3. P0 Keyboard Regression Catalog
 
 ### Modifier Shortcuts (MUST NEVER Produce Bangla Characters)
 - `TEST-P0-001`: `Ctrl + V` $\to$ **Paste** (`*pfEaten = FALSE`, never produces `ভ`).
@@ -32,58 +65,6 @@
 - `TEST-P0-008`: `Ctrl + F` $\to$ **Find** (`*pfEaten = FALSE`).
 - `TEST-P0-009`: `Alt + Tab` / `Alt + F4` $\to$ **Window management** (`*pfEaten = FALSE`).
 
-### Function Keys (MUST NEVER Enter Transliteration)
+### Function Keys & Numpad
 - `TEST-P0-010`: `F1` to `F12` $\to$ Passed directly to host app (`*pfEaten = FALSE`).
-- `TEST-P0-011`: `F5` $\to$ Application refresh (`*pfEaten = FALSE`).
-
-### Numpad Numeric Keypad (MUST NEVER Produce Bangla Characters)
 - `TEST-P0-020`: `VK_NUMPAD0` to `VK_NUMPAD9` $\to$ Produces `0`..`9` (`*pfEaten = FALSE`).
-- `TEST-P0-021`: `VK_ADD`, `VK_SUBTRACT`, `VK_MULTIPLY`, `VK_DIVIDE`, `VK_DECIMAL` $\to$ Produces `+`, `-`, `*`, `/`, `.` (`*pfEaten = FALSE`).
-
-### Navigation & Cursor Editing Keys
-- `TEST-P0-030`: `Left`, `Right`, `Up`, `Down`, `Home`, `End`, `Page Up`, `Page Down` $\to$ Move cursor normally.
-- `TEST-P0-031`: `Backspace` $\to$ Grapheme-aware deletion during composition, standard deletion otherwise.
-- `TEST-P0-032`: `Delete` $\to$ Standard forward character deletion (`*pfEaten = FALSE`).
-- `TEST-P0-033`: `Tab` / `Esc` / `Enter` $\to$ Standard control behavior.
-
----
-
-## 3. Dynamic Composition & Vocabulary Regression
-
-- `TEST-COMP-001`: `ANO` $\to$ `আনো` (Active buffer).
-- `TEST-COMP-002`: `ANOY` $\to$ `আনোয়`, `ANOYA` $\to$ `আনোয়া`, `ANOYAR` $\to$ `আনোয়ার` (Unbroken buffer).
-- `TEST-VOCAB-001`: `battery` / `battary` / `batery` $\to$ `ব্যাটারি`.
-- `TEST-VOCAB-002`: `fan` $\to$ `ফ্যান`, `table` $\to$ `টেবিল`, `chair` $\to$ `চেয়ার`, `computer` $\to$ `কম্পিউটার`, `mouse` $\to$ `মাউস`, `control` $\to$ `কন্ট্রোল`, `office` $\to$ `অফিস`.
-- `TEST-ENG-001`: `office` $\to$ `অফিস | office | অফিসে` (Original English preserved).
-
----
-
-## 4. Universal Mode Regression Catalog (non-TSF fallback path)
-
-Universal Mode exists because TSF cannot reach every host (UWP/Store apps such as
-WhatsApp Desktop, some Java UIs, games, remote sessions). It buffers the roman
-letters while they travel to the application and, at a word boundary, replaces
-them with the Bengali word typed as Unicode. Because that touches real text, the
-safety rules are a permanent gate (`build/test_universal_typing.exe`):
-
-### Never transformed (whatever is buffered, whatever the mode)
-- `TEST-UNI-001`: `Ctrl+C/V/X/A/Z/Y/S/F/P` $\to$ pass-through, **zero erasures**, and the pending word survives the chord.
-- `TEST-UNI-002`: `Ctrl+Space` (IME toggle) and `Win+Space` (language switch) $\to$ pass-through.
-- `TEST-UNI-003`: `Alt+letter`, `Alt+F4` $\to$ pass-through with no erasure.
-- `TEST-UNI-004`: `F1`-`F24` $\to$ pass-through, no erasure.
-- `TEST-UNI-005`: Arrows, `Home`, `End`, `Page Up/Down`, `Insert`, `Delete`, unknown/system keys $\to$ pass-through, no erasure, preview dropped (the caret may have moved).
-- `TEST-UNI-006`: Numpad digits and operators $\to$ pass-through, never transformed.
-- `TEST-UNI-007`: Modifiers and locks alone (`Shift`, `Ctrl`, `Alt`, `Caps Lock`, `Num Lock`, `Win`, Menu) $\to$ pass-through, preview kept.
-
-### Minimal-interference composition
-- `TEST-UNI-010`: With an empty preview, space/enter/tab/digits/punctuation are native (`12.5`, IP addresses and English text stay untouched).
-- `TEST-UNI-011`: Exactly one key per word is consumed: the word boundary.
-- `TEST-UNI-012`: `Backspace`/`Esc` are never consumed; they keep native behaviour and only adjust the preview (`TEST-P0-031` parity).
-- `TEST-UNI-013`: `space` commits the word with exactly one `U+0020`; a second space is native.
-- `TEST-UNI-014`: `.` after a word becomes the Bengali full stop `।`; other punctuation/digits are kept after the word.
-- `TEST-UNI-015`: Preview overflow (32 letters) leaves the rest of that word completely alone and requests no erasure.
-- `TEST-UNI-016`: Mode off, `Reset()` and caret/focus changes always leave nothing to replace.
-- `TEST-UNI-017`: Input mode policy — `TSF Only` never uses the universal path, `Universal Only` always does, `Automatic` stands down while TSF is active for the focused application.
-
-### Same engine, one personalisation
-- `TEST-UNI-020`: Universal Mode must transliterate through the shared `BanglaEngine` (same lexicon, fuzzy matcher, personal dictionary, learning) — it must never introduce a second transliteration engine.

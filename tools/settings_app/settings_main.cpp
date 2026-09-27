@@ -7,6 +7,9 @@
 #include <sstream>
 #include <vector>
 #include <shlobj.h>
+#include <thread>
+#include "likhi_version.h"
+#include "update_service.h"
 
 #pragma comment(lib, "uxtheme.lib")
 #pragma comment(lib, "dwmapi.lib")
@@ -58,6 +61,7 @@ enum SectionID {
 #define IDC_RADIO_MODE_AUTO   2029
 #define IDC_RADIO_MODE_TSF    2030
 #define IDC_RADIO_MODE_UNIV   2031
+#define WM_UPDATE_CHECK_DONE  (WM_APP + 20)
 
 struct AppSettings {
     bool enable_likhi = true;
@@ -82,7 +86,7 @@ static SectionID g_active_section = SEC_GENERAL;
 
 static HWND g_hNavButtons[SEC_COUNT];
 static std::vector<HWND> g_section_controls[SEC_COUNT];
-static HWND hListDict, hEditRoman, hEditBangla, hLblStatus;
+static HWND hListDict, hEditRoman, hEditBangla, hLblStatus, g_hBtnUpd = NULL;
 static HFONT hFontTitle = NULL;
 static HFONT hFontHeader = NULL;
 static HFONT hFontBody = NULL;
@@ -503,6 +507,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             SendMessage(hAb_Desc, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
             HWND hBtnUpd = CreateWindowW(L"BUTTON", L"আপডেট পরীক্ষা করুন (Check Updates)", WS_CHILD | BS_PUSHBUTTON, 250, 285, 260, 34, hWnd, (HMENU)IDC_BTN_CHECK_UPDATE, NULL, NULL);
+            g_hBtnUpd = hBtnUpd;
             SendMessage(hBtnUpd, WM_SETFONT, (WPARAM)hFontBold, TRUE);
 
             g_section_controls[SEC_ABOUT].push_back(hAb_Title);
@@ -693,9 +698,55 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 SaveSettings();
                 SetWindowTextW(hLblStatus, L"🔄 ফ্যাক্টরি ডিফল্টে রিসেট করা হয়েছে।");
             } else if (wmId == IDC_BTN_CHECK_UPDATE) {
-                SetWindowTextW(hLblStatus, L"✨ আপনি Likhi-এর সর্বশেষ সংস্করণ (v1.0.0) ব্যবহার করছেন।");
+                if (g_hBtnUpd) EnableWindow(g_hBtnUpd, FALSE);
+                SetWindowTextW(hLblStatus, L"🔍 আপডেট পরীক্ষা করা হচ্ছে... (Checking for updates...)");
+                std::thread([hWnd]() {
+                    likhi::ReleaseInfo* pInfo = new likhi::ReleaseInfo();
+                    likhi::UpdateCheckResult res = likhi::UpdateService::CheckForUpdate(*pInfo, true);
+                    PostMessageW(hWnd, WM_UPDATE_CHECK_DONE, (WPARAM)res, (LPARAM)pInfo);
+                }).detach();
             }
             break;
+        }
+
+                case WM_UPDATE_CHECK_DONE: {
+            likhi::UpdateCheckResult res = (likhi::UpdateCheckResult)wParam;
+            likhi::ReleaseInfo* pInfo = (likhi::ReleaseInfo*)lParam;
+            if (g_hBtnUpd) EnableWindow(g_hBtnUpd, TRUE);
+
+            if (res == likhi::UpdateCheckResult::kUpToDate) {
+                SetWindowTextW(hLblStatus, L"✨ আপনি Likhi-এর সর্বশেষ সংস্করণ ব্যবহার করছেন।");
+                MessageBoxW(hWnd, 
+                    L"আপনি Likhi-এর সর্বশেষ সংস্করণ ব্যবহার করছেন।\n\nবর্তমান সংস্করণ: ১.০.০", 
+                    L"Likhi আপডেট", MB_OK | MB_ICONINFORMATION);
+            } else if (res == likhi::UpdateCheckResult::kUpdateAvailable && pInfo) {
+                SetWindowTextW(hLblStatus, L"🚀 Likhi-এর নতুন সংস্করণ পাওয়া গেছে!");
+                
+                std::wstring msg = L"Likhi-এর একটি নতুন সংস্করণ পাওয়া গেছে।\n\n"
+                                   L"বর্তমান সংস্করণ: " + std::wstring(likhi::kVersionWString) + L"\n"
+                                   L"নতুন সংস্করণ: " + std::wstring(pInfo->version.begin(), pInfo->version.end()) + L"\n\n";
+                if (!pInfo->release_notes.empty()) {
+                    std::wstring notes(pInfo->release_notes.begin(), pInfo->release_notes.end());
+                    if (notes.size() > 500) notes = notes.substr(0, 500) + L"...";
+                    msg += L"নতুন যা যুক্ত হয়েছে:\n" + notes + L"\n\n";
+                }
+                msg += L"আপনি কি এখন অফিসিয়াল সাইট থেকে আপডেট করতে চান? (Update Now)";
+
+                int choice = MessageBoxW(hWnd, msg.c_str(), L"UPDATE AVAILABLE — Likhi", MB_YESNO | MB_ICONINFORMATION);
+                if (choice == IDYES) {
+                    likhi::UpdateService::LaunchOfficialUpdateFlow(pInfo->update_page_url);
+                } else {
+                    likhi::UpdateService::DismissVersion(pInfo->version);
+                    SetWindowTextW(hLblStatus, L"আপডেটটি পরবর্তীতে অনুস্মারক রাখা হবে।");
+                }
+            } else if (res == likhi::UpdateCheckResult::kNetworkOffline) {
+                SetWindowTextW(hLblStatus, L"⚠️ ইন্টারনেট সংযোগ পাওয়া যায়নি। অফলাইনে Likhi স্বাভাবিক রয়েছে।");
+            } else {
+                SetWindowTextW(hLblStatus, L"ℹ️ এই মুহূর্তে আপডেট সার্ভারের সাথে সংযোগ করা যায়নি। পরে আবার চেষ্টা করুন।");
+            }
+
+            if (pInfo) delete pInfo;
+            return 0;
         }
 
         case WM_CTLCOLORSTATIC: {

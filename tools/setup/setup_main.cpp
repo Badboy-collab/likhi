@@ -37,7 +37,8 @@
 #include <cstdio>
 #include <tlhelp32.h>   // process enumeration: stop a running universal host
 
-#include "bangla_tsf_clsid.h"   // CLSID/GUID/langid/name constants (single source)
+#include "bangla_tsf_clsid.h"
+#include "likhi_version.h"   // CLSID/GUID/langid/name constants (single source)
 
 #define IDR_PAYLOAD_DLL      101
 #define IDR_PAYLOAD_LEX      102
@@ -431,7 +432,7 @@ static void WriteUninstallEntry(const std::wstring& installDir, const std::wstri
                        (DWORD)((value.size() + 1) * sizeof(wchar_t)));
     };
     set(L"DisplayName", kAppDisplay);
-    set(L"DisplayVersion", L"1.0.0");
+    set(L"DisplayVersion", likhi::kVersionWString);
     set(L"Publisher", L"Likhi");
     set(L"InstallLocation", installDir);
     set(L"DisplayIcon", installDir + L"\\bangla_settings.exe");

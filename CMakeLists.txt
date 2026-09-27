@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(PC_Bangla_Typing_App VERSION 0.1.0 LANGUAGES C CXX)
+project(PC_Bangla_Typing_App VERSION 1.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -182,6 +182,26 @@ target_include_directories(likhi_universal_core PUBLIC universal/include)
 add_executable(test_universal_typing tests/unit/test_universal_typing.cpp)
 target_link_libraries(test_universal_typing PRIVATE likhi_universal_core)
 
+# Update Service Target (WinHTTP + CryptoAPI + Semantic Versioning)
+add_library(likhi_update_service STATIC
+    engine/src/update/update_service.cpp
+)
+target_include_directories(likhi_update_service PUBLIC engine/include)
+target_link_libraries(likhi_update_service PUBLIC
+    winhttp
+    crypt32
+    shell32
+    ole32
+)
+
+# Automated Update Service Test Target
+add_executable(test_update_service
+    tests/unit/test_update_service.cpp
+)
+target_link_libraries(test_update_service PRIVATE
+    likhi_update_service
+)
+
 # Universal Mode host (non-TSF fallback input path): tray icon + low-level
 # keyboard hook that types Bangla through Unicode keystrokes where TSF cannot
 # reach (UWP/Store apps, Java UIs, games, remote sessions).
@@ -193,6 +213,7 @@ target_compile_definitions(likhi_universal PRIVATE UNICODE _UNICODE)
 target_link_libraries(likhi_universal PRIVATE
     likhi_universal_core
     bangla_engine_static
+    likhi_update_service
     user32
     gdi32
     shell32
@@ -206,6 +227,7 @@ add_executable(bangla_settings WIN32
     ${CMAKE_CURRENT_BINARY_DIR}/settings_rc.obj
 )
 target_link_libraries(bangla_settings PRIVATE
+    likhi_update_service
     user32
     gdi32
     comctl32
@@ -234,7 +256,7 @@ add_executable(likhi_setup WIN32
     tools/setup/setup_main.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/setup_rc.obj
 )
-target_include_directories(likhi_setup PRIVATE tsf/include)
+target_include_directories(likhi_setup PRIVATE tsf/include engine/include)
 target_link_libraries(likhi_setup PRIVATE
     ole32
     oleaut32
@@ -344,6 +366,7 @@ else()
     target_link_options(test_p0_keyboard PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_key_policy PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_universal_typing PRIVATE -static -static-libgcc -static-libstdc++)
+    target_link_options(test_update_service PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(likhi_universal PRIVATE -static -static-libgcc -static-libstdc++ -municode)
     target_link_options(benchmark_perf PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(inspect_unicode PRIVATE -static -static-libgcc -static-libstdc++)

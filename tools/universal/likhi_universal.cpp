@@ -48,6 +48,9 @@
 
 #include "universal_typing.h"
 #include "bangla_engine.h"
+#include <thread>
+#include "likhi_version.h"
+#include "update_service.h"
 
 using likhi::universal::ActionKind;
 using likhi::universal::ClassifyKey;
@@ -67,6 +70,10 @@ const UINT kTrayMessage = WM_APP + 1;
 const int kHotkeyToggle = 0xA1;
 const UINT_PTR kTimerReloadSettings = 1;
 const UINT kSettingsPollMs = 3000;
+const UINT_PTR kTimerBackgroundUpdateCheck = 2;
+const UINT kUpdateCheckDelayMs = 15000;
+const UINT kMsgUpdateCheckResult = WM_APP + 2;
+
 
 // --- state -------------------------------------------------------------------
 HINSTANCE g_instance = nullptr;
@@ -82,6 +89,8 @@ bool g_personal_learning = true;   // settings.json "personal_learning"
 bool g_tray_added = false;
 
 HWND g_last_foreground = nullptr;
+std::wstring g_latest_update_version;
+std::string g_latest_update_url;
 
 // --- small helpers -----------------------------------------------------------
 std::string NarrowUtf8(const std::wstring& text) {
@@ -444,6 +453,11 @@ void ShowTrayMenu() {
     AppendMenuW(menu, MF_STRING | (g_mode == InputMode::kUniversalOnly ? MF_CHECKED : 0),
                 103, L"Universal only");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    if (!g_latest_update_version.empty()) {
+        std::wstring upd_text = L"🚀 Likhi " + g_latest_update_version + L" উপলব্ধ (Update Available)...";
+        AppendMenuW(menu, MF_STRING, 106, upd_text.c_str());
+        AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    }
     AppendMenuW(menu, MF_STRING, 104, L"Likhi Settings...");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, 105, L"Exit");
@@ -476,6 +490,8 @@ void ShowTrayMenu() {
             settings = ExeDir() + L"\\..\\release_package\\bangla_settings.exe";
         }
         ShellExecuteW(nullptr, L"open", settings.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    } else if (command == 106) {
+        likhi::UpdateService::LaunchOfficialUpdateFlow(g_latest_update_url);
     } else if (command == 105) {
         DestroyWindow(g_window);
     }
@@ -483,11 +499,7 @@ void ShowTrayMenu() {
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
     switch (message) {
-        case kTrayMessage:
-            if (LOWORD(lparam) == WM_RBUTTONUP || LOWORD(lparam) == WM_CONTEXTMENU) {
-                ShowTrayMenu();
-            }
-            return 0;
+
         case WM_HOTKEY:
             if (wparam == kHotkeyToggle) {
                 g_host_enabled = !g_host_enabled;
@@ -496,11 +508,49 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
                 UpdateTray();
             }
             return 0;
+        case kTrayMessage:
+            if (LOWORD(lparam) == WM_RBUTTONUP || LOWORD(lparam) == WM_CONTEXTMENU) {
+                ShowTrayMenu();
+            } else if (LOWORD(lparam) == 0x0405 /* NIN_BALLOONUSERCLICK */) {
+                likhi::UpdateService::LaunchOfficialUpdateFlow(g_latest_update_url);
+            }
+            return 0;
+        case kMsgUpdateCheckResult: {
+            likhi::UpdateCheckResult res = static_cast<likhi::UpdateCheckResult>(wparam);
+            likhi::ReleaseInfo* pInfo = reinterpret_cast<likhi::ReleaseInfo*>(lparam);
+            if (res == likhi::UpdateCheckResult::kUpdateAvailable && pInfo) {
+                g_latest_update_version = std::wstring(pInfo->version.begin(), pInfo->version.end());
+                g_latest_update_url = pInfo->update_page_url;
+                if (g_window && g_tray_added) {
+                    NOTIFYICONDATAW nid = {0};
+                    nid.cbSize = sizeof(nid);
+                    nid.hWnd = g_window;
+                    nid.uID = 1;
+                    nid.uFlags = NIF_INFO;
+                    nid.dwInfoFlags = NIIF_INFO;
+                    wcsncpy(nid.szInfoTitle, L"Likhi (লিখি) আপডেট উপলব্ধ", 63);
+                    std::wstring balloon = L"Likhi-এর নতুন সংস্করণ (" + g_latest_update_version + L") পাওয়া গেছে। ক্লিক করে ডাউনলোড করুন।";
+                    wcsncpy(nid.szInfo, balloon.c_str(), 255);
+                    Shell_NotifyIconW(NIM_MODIFY, &nid);
+                }
+            }
+            if (pInfo) delete pInfo;
+            return 0;
+        }
         case WM_TIMER:
             if (wparam == kTimerReloadSettings) {
                 ResetIfFocusChanged();
                 LoadSettings();
                 UpdateTray();
+            } else if (wparam == kTimerBackgroundUpdateCheck) {
+                KillTimer(hwnd, kTimerBackgroundUpdateCheck);
+                if (likhi::UpdateService::ShouldCheckOnStartup()) {
+                    std::thread([hwnd]() {
+                        likhi::ReleaseInfo* pInfo = new likhi::ReleaseInfo();
+                        likhi::UpdateCheckResult res = likhi::UpdateService::CheckForUpdate(*pInfo, false);
+                        PostMessageW(hwnd, kMsgUpdateCheckResult, static_cast<WPARAM>(res), reinterpret_cast<LPARAM>(pInfo));
+                    }).detach();
+                }
             }
             return 0;
         case WM_DESTROY:
@@ -638,6 +688,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command_line, int) {
     g_tray_added = Shell_NotifyIconW(NIM_ADD, &tray) != FALSE;
     RegisterHotKey(g_window, kHotkeyToggle, MOD_CONTROL | MOD_ALT, 'L');
     SetTimer(g_window, kTimerReloadSettings, kSettingsPollMs, nullptr);
+    SetTimer(g_window, kTimerBackgroundUpdateCheck, kUpdateCheckDelayMs, nullptr);
 
     g_keyboard_hook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHookProc, instance, 0);
     g_mouse_hook = SetWindowsHookExW(WH_MOUSE_LL, MouseHookProc, instance, 0);

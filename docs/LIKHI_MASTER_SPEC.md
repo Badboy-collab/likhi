@@ -1,92 +1,34 @@
-# 📘 Likhi (লিখি) — Master Development Specification & Source of Truth
+# Likhi (লিখি) — Master Specification & Technical Reference
 
-> **“বাংলা লিখুন, সহজেই।”**
-> **Tagline**: Fast • Smart • Natural — Bangla Typing for Windows
-> **Developer**: AH Creations
-> **Version**: 1.0.0
-
----
-
-## 1. Product Overview & Vision
-Likhi (লিখি) is a lightweight, ultra-fast, modern Bangla typing application designed for Microsoft Windows. It bridges the gap between modern smartphone typing and desktop PC productivity with an independent phonetic engine, rich Banglish recognition, fuzzy spelling tolerance, smart suggestion bar, and native Windows TSF integration.
+> **"বাংলা লিখুন, সহজেই।"**  
+> Native Windows Bangla Phonetic Input Method & Universal Typing Engine  
+> Target OS: Windows 10 & Windows 11 (64-bit and 32-bit)  
+> Version: 1.0.0
 
 ---
 
-## 2. Architectural Pillars
-
-```
-+-------------------------------------------------------------+
-|              Likhi Settings Application (Win32)             |
-+-------------------------------------------------------------+
-                              |
-+-------------------------------------------------------------+
-|        Windows Text Services Framework (TSF) Layer          |
-|    (ITfTextInputProcessorEx, In-Process COM Server)         |
-+-------------------------------------------------------------+
-                              |
-+-------------------------------------------------------------+
-|              Native Keyboard Event Classifier               |
-|      (P0 Bypass for Ctrl, Alt, Win, F1-F12, Numpad, Nav)    |
-+-------------------------------------------------------------+
-                              | (Only normal characters)
-+-------------------------------------------------------------+
-|                  Dynamic Composition Engine                 |
-|             (Continuous unbroken raw buffer)                |
-+-------------------------------------------------------------+
-                              |
-+-------------------------------------------------------------+
-|              Bangla Phonetic & Ranking Engine               |
-|       - 52,412 Validated Lexicon Trie                       |
-|       - Bigram Context Model                                |
-|       - Fuzzy Banglish & Edit-Distance Matching             |
-|       - English Candidate Preservation                      |
-|       - Personal Dictionary CRUD                            |
-|       - (Gated) Personal User Learning                      |
-+-------------------------------------------------------------+
-```
+## 1. Architectural Foundation
+- **Language**: Modern C++20 with strict deterministic memory management.
+- **Subsystems**:
+  1. **Core Language Engine (`engine/`)**: Pure phonetic parser, 52,412 word Flat Binary Lexicon Trie (v2), context ranker, personal dictionary.
+  2. **Text Services Framework TIP (`tsf/`)**: Windows COM In-Process Server (`bangla_tsf.dll`).
+  3. **Universal Typing Host (`universal/` & `tools/universal/`)**: Low-level hook and Unicode injection (`likhi_universal.exe`) for Store/UWP apps.
+  4. **Configuration & Settings (`tools/settings_app/`)**: Win32 Fluent UI application (`bangla_settings.exe`).
+  5. **Standalone Installer (`tools/setup/`)**: Single-file one-click installer (`LikhiSetup.exe`).
+  6. **Update Service (`engine/src/update/`)**: Continuous improvement update connection via GitHub Releases and GetLikhi.com.
 
 ---
 
-## 3. Cumulative Feature Set
-
-### 1. P0 Native Keyboard Stability (Permanent)
-- `Ctrl+V` pastes cleanly without producing `ভ`.
-- `Ctrl+C`, `Ctrl+X`, `Ctrl+A`, `Ctrl+Z`, `Ctrl+Y`, `Ctrl+S`, `Ctrl+F` operate natively.
-- `F1`-`F12`, `Numpad (0-9, operators)`, `Arrows`, `Home`, `End`, `Delete`, `Tab`, `Esc` pass through directly to host applications.
-- Native Windows `Win + Space` language switching with exclusive `Bangla (Bangladesh)` (0x0845) registration.
-
-### 2. P1 Continuous Composition Buffer
-- Active composition buffer dynamically updates without premature splitting (`ANOYAR` $\to$ `আনোয়ার`).
-
-### 3. P2/P3/P4 Banglish & Fuzzy Spelling
-- Recognizes 52,412 modern technology, daily objects, and loanwords (`fan`, `table`, `chair`, `computer`, `mouse`, `control`, `battery`, `office`, `wifi`, `charger`).
-- Tolerates minor typos (`battary`/`batteri`/`batery` $\to$ `ব্যাটারি`).
-
-### 4. P5/P6 Suggestion Engine & English Candidate
-- Interactive multi-candidate bar with selectable numbers (`1` to `5`).
-- Exact English word is preserved in candidate list for mixed typing (`Google`, `Facebook`, `office`).
-
-### 5. P7 Personal Dictionary
-- User-defined mappings stored locally in `%APPDATA%\PC-Bangla-Typing-App\personal_dict.txt` with Add/Delete/Import/Export.
-
-### 6. P8 Personal Learning (Gated)
-- Gated until explicit user approval.
-
-### 7. P10 Settings Application
-- Modern Fluent UI with Sidebar Navigation (General, Typing, Suggestions, Banglish, Dictionary, Keyboard, Appearance, Advanced, About with AH Creations branding).
+## 2. P0 Keyboard Passthrough & Native Integrity Rules
+- `Ctrl+V` **MUST PASTE** natively without ever emitting the character `ভ`.
+- `Ctrl+C`, `Ctrl+X`, `Ctrl+Z`, `Ctrl+A`, `Ctrl+S`, `Ctrl+F` pass through unaltered.
+- Function keys `F1`–`F12` and Numpad digits/operators pass through untouched.
+- English typing is never intercepted unless Bengali (0x0845) is actively selected.
 
 ---
 
-## 4. Maintenance & Cumulative Development Rule
-Any future enhancement must pass all 6 automated test suites before deployment. No change may remove or degrade a previously approved feature.
-
----
-
-## 5. Dual input backend (2026-09-21)
-
-TSF cannot reach every Windows host, so Likhi now has a second, explicit input
-path. Both share ONE language engine, dictionary, fuzzy matcher, personal
-dictionary and learning file - there is no second transliteration engine.
+## 3. Dual Input Backend Architecture
+TSF cannot reach every Windows host, so Likhi has a second, explicit input path. Both share ONE language engine, dictionary, fuzzy matcher, personal dictionary and learning file.
 
 ```
                  LIKHI CORE (engine/)
@@ -100,24 +42,37 @@ dictionary and learning file - there is no second transliteration engine.
                                     keystrokes)
 ```
 
-### 5.1 Universal Mode rules (permanent)
-- Nothing is transformed unless the focused window really has Bengali (0x0845)
-  selected, so English typing, digits and punctuation are never touched.
-- Every modifier chord, function key, navigation key and numpad key passes
-  through; at most one key per word (the boundary) is consumed.
-- `Automatic` stands down whenever `bangla_tsf.dll` is loaded in the focused
-  process, or when that cannot be determined (safe default).
-- The preview is dropped - never erased from the host - on focus/caret changes.
+### 3.1 Universal Mode Rules
+- Nothing is transformed unless the focused window has Bengali (0x0845) selected.
+- Automatic mode stands down whenever `bangla_tsf.dll` is loaded in the focused process.
 - No typed text is logged. `universal.log` holds mode changes and counters only.
-- Diagnostics: `likhi_universal.exe --check` writes
-  `%APPDATA%\PC-Bangla-Typing-App\universal_check.txt`.
 
-### 5.2 Input Mode setting
-`settings.json` key `input_mode`: `automatic` (default) | `tsf_only` |
-`universal`; `universal_mode: false` pauses the universal host entirely.
-Hotkey `Ctrl+Alt+L` pauses/resumes it; the tray tooltip shows the live mode.
+---
 
-### 5.3 Still to wire (see AGENTS.md assessment)
-Installer must ship and autostart `likhi_universal.exe`, the Settings app needs
-the Input Mode control, and the universal host should surface the same cloud
-suggestions as the TSF path.
+## 4. Update Connection & Continuous Improvement System
+
+### 4.1 Purpose & Core Requirement
+Installed Likhi applications maintain a lightweight, privacy-conscious update connection to official releases so users receive typing improvements, bug fixes, and security patches without manual intervention.
+
+### 4.2 Architecture & Source of Truth
+- **Technical Source of Truth**: GitHub Releases API (`https://api.github.com/repos/Badboy-collab/likhi/releases/latest`).
+- **Official User-Facing Portal**: `https://getlikhi.com/update/`.
+- **In-Process IME Isolation**: `bangla_tsf.dll` never performs network update checks inside client host processes (Notepad, Word, Chrome).
+- **Background Startup Check**: `likhi_universal.exe` executes a delayed check (15 seconds after boot) throttled to once every 24 hours.
+- **Manual On-Demand Check**: `bangla_settings.exe` (About section) provides immediate user-initiated update verification.
+
+### 4.3 Offline-First Behavior
+- WinHTTP timeouts are capped at 3000ms.
+- If network is unavailable, update checks silently abort with zero UI popups, zero error dialogs, and zero impact on typing latency.
+
+### 4.4 User Control & Anti-Nagging
+- Updates are strictly voluntary: `[ Update Now ]` or `[ Later ]`.
+- Selecting `Later` snoozes reminders for that specific version for 7 days.
+
+### 4.5 100% User Data Preservation Guarantee
+- User files in `%APPDATA%\PC-Bangla-Typing-App\` (`settings.json`, `user_dict.txt`, `personal_dict.txt`, `voice_config.json`, `user_learning.db`) are **never deleted or overwritten** during updates.
+- In-place updates replace only binary files in `%ProgramFiles%\Likhi\`.
+
+### 4.6 Cryptographic Security Verification
+- Release assets are cryptographically verified against official SHA-256 digests using Win32 CryptoAPI (`CALG_SHA_256`).
+- Tampered or mismatched binaries are strictly blocked from installation.
