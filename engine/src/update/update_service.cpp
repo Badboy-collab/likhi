@@ -11,6 +11,7 @@
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
+#include <ctime>
 
 namespace likhi {
 
@@ -221,11 +222,91 @@ int UpdateService::CompareVersions(const std::string& current, const std::string
     return v_curr.Compare(v_rem);
 }
 
+void UpdateService::LogDiagnostic(const std::string& message) {
+    std::wstring dir = GetAppDataDirectory();
+    if (dir.empty()) return;
+    std::wstring log_path = dir + L"\\update.log";
+
+    // Rotate if larger than 64KB
+    WIN32_FILE_ATTRIBUTE_DATA fad = {0};
+    if (GetFileAttributesExW(log_path.c_str(), GetFileExInfoStandard, &fad)) {
+        if (fad.nFileSizeLow > 64 * 1024) {
+            DeleteFileW(log_path.c_str());
+        }
+    }
+
+    std::ofstream out(log_path.c_str(), std::ios::app);
+    if (out.is_open()) {
+        SYSTEMTIME st;
+        GetLocalTime(&st);
+        char buf[64];
+        snprintf(buf, sizeof(buf), "[%04d-%02d-%02d %02d:%02d:%02d] ",
+                 st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+        out << buf << message << "\n";
+    }
+}
+
+std::wstring UpdateService::GetLastCheckTimeString() {
+    std::wstring cache_file = GetUpdateCachePath();
+    if (cache_file.empty()) return L"এখনও পরীক্ষা করা হয়নি";
+
+    std::ifstream in(cache_file.c_str());
+    if (!in.is_open()) return L"এখনও পরীক্ষা করা হয়নি";
+
+    std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    in.close();
+
+    uint64_t last_check = 0;
+    if (!ExtractJsonNumber(content, "last_check_epoch", last_check) || last_check == 0) {
+        return L"এখনও পরীক্ষা করা হয়নি";
+    }
+
+    time_t check_time = static_cast<time_t>(last_check);
+    tm lt = {0};
+    localtime_s(&lt, &check_time);
+
+    time_t now_time = time(nullptr);
+    tm now_lt = {0};
+    localtime_s(&now_lt, &now_time);
+
+    auto to_bengali_digits = [](const std::wstring& str) -> std::wstring {
+        std::wstring res;
+        for (wchar_t c : str) {
+            if (c >= L'0' && c <= L'9') {
+                res += static_cast<wchar_t>(L'০' + (c - L'0'));
+            } else {
+                res += c;
+            }
+        }
+        return res;
+    };
+
+    wchar_t time_buf[32] = {0};
+    swprintf(time_buf, 32, L"%02d:%02d", lt.tm_hour, lt.tm_min);
+    std::wstring b_time = to_bengali_digits(time_buf);
+
+    if (lt.tm_year == now_lt.tm_year && lt.tm_yday == now_lt.tm_yday) {
+        return L"আজ " + b_time;
+    } else if (lt.tm_year == now_lt.tm_year && lt.tm_yday == now_lt.tm_yday - 1) {
+        return L"গতকাল " + b_time;
+    } else {
+        wchar_t date_buf[64] = {0};
+        swprintf(date_buf, 64, L"%02d/%02d/%04d %02d:%02d",
+                 lt.tm_mday, lt.tm_mon + 1, lt.tm_year + 1900, lt.tm_hour, lt.tm_min);
+        return to_bengali_digits(date_buf);
+    }
+}
+
 bool UpdateService::ParseReleaseJson(const std::string& json_str, ReleaseInfo& out_info) {
     if (json_str.empty()) return false;
 
+    // Find the relevant json segment. If json_str is an array [...], isolate the first object { ... }
+    std::string target_json = json_str;
+    size_t start_brace = json_str.find('{');
+    if (start_brace == std::string::npos) return false;
+
     // 1. tag_name (e.g. "v1.1.0" or "v1.0.0-test2")
-    if (!ExtractJsonString(json_str, "tag_name", out_info.tag_name)) {
+    if (!ExtractJsonString(target_json, "tag_name", out_info.tag_name, start_brace)) {
         return false;
     }
 
@@ -236,37 +317,39 @@ bool UpdateService::ParseReleaseJson(const std::string& json_str, ReleaseInfo& o
     }
 
     // 2. name (Release Title)
-    ExtractJsonString(json_str, "name", out_info.name);
+    ExtractJsonString(target_json, "name", out_info.name, start_brace);
     if (out_info.name.empty()) out_info.name = "Likhi " + out_info.tag_name;
 
     // 3. body (Release notes)
-    ExtractJsonString(json_str, "body", out_info.release_notes);
+    ExtractJsonString(target_json, "body", out_info.release_notes, start_brace);
 
     // 4. published_at
-    ExtractJsonString(json_str, "published_at", out_info.published_at);
+    ExtractJsonString(target_json, "published_at", out_info.published_at, start_brace);
 
-    // 5. Assets inspection: look for LikhiSetup.exe or any .exe asset
+    // 5. Assets inspection: look for LikhiSetup.exe or any .exe asset inside the first release
     out_info.update_page_url = kOfficialUpdateUrl;
 
-    size_t assets_pos = json_str.find("\"assets\"");
+    size_t assets_pos = target_json.find("\"assets\"", start_brace);
     if (assets_pos != std::string::npos) {
-        size_t search_pos = assets_pos;
+        // Limit search to the assets block of this release
+        size_t assets_end = target_json.find(']', assets_pos);
+        if (assets_end == std::string::npos) assets_end = target_json.size();
+        std::string assets_json = target_json.substr(assets_pos, assets_end - assets_pos);
+
+        size_t search_pos = 0;
         std::string asset_name, dl_url, digest;
         uint64_t size_bytes = 0;
         
-        while (ExtractJsonString(json_str, "name", asset_name, search_pos, &search_pos)) {
-            // Found an asset name
+        while (ExtractJsonString(assets_json, "name", asset_name, search_pos, &search_pos)) {
             if (asset_name.size() > 4 && asset_name.substr(asset_name.size() - 4) == ".exe") {
-                // Look for browser_download_url and digest near this asset
-                ExtractJsonString(json_str, "browser_download_url", dl_url, search_pos);
-                ExtractJsonString(json_str, "digest", digest, search_pos);
-                ExtractJsonNumber(json_str, "size", size_bytes, search_pos);
+                ExtractJsonString(assets_json, "browser_download_url", dl_url, search_pos);
+                ExtractJsonString(assets_json, "digest", digest, search_pos);
+                ExtractJsonNumber(assets_json, "size", size_bytes, search_pos);
 
                 out_info.download_url = dl_url;
                 out_info.sha256_hash = digest;
                 out_info.file_size = size_bytes;
 
-                // Prefer LikhiSetup.exe if there are multiple
                 if (asset_name == "LikhiSetup.exe" || asset_name.find("Likhi_Setup") != std::string::npos) {
                     break;
                 }
@@ -275,7 +358,6 @@ bool UpdateService::ParseReleaseJson(const std::string& json_str, ReleaseInfo& o
     }
 
     if (out_info.download_url.empty()) {
-        // Fallback to official update page
         out_info.download_url = kOfficialUpdateUrl;
     }
 
@@ -284,96 +366,141 @@ bool UpdateService::ParseReleaseJson(const std::string& json_str, ReleaseInfo& o
 
 UpdateCheckResult UpdateService::CheckForUpdate(ReleaseInfo& out_info, bool force_bypass_cooldown) {
     if (!force_bypass_cooldown && !ShouldCheckOnStartup()) {
+        LogDiagnostic("Startup check skipped: cooldown active");
         return UpdateCheckResult::kUpToDate;
     }
 
-    // Open WinHTTP session with custom User-Agent
+    LogDiagnostic("Starting update check (force=" + std::string(force_bypass_cooldown ? "true" : "false") + ")");
+
+    // Open WinHTTP session with automatic proxy detection
     HINTERNET h_session = WinHttpOpen(L"Likhi-Update-Checker/1.0 (Windows NT; x64)",
-                                      WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                      WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                       WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!h_session) {
+        h_session = WinHttpOpen(L"Likhi-Update-Checker/1.0 (Windows NT; x64)",
+                                WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    }
+    if (!h_session) {
+        LogDiagnostic("WinHttpOpen failed (err=" + std::to_string(GetLastError()) + ")");
         return UpdateCheckResult::kNetworkOffline;
     }
 
-    // Short timeouts so we never hang or delay startup: 3000ms each
-    DWORD timeout_ms = 3000;
+    // Explicitly configure TLS 1.2 and TLS 1.3
+    DWORD protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
+#if defined(WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3)
+    protocols |= WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
+#endif
+    WinHttpSetOption(h_session, WINHTTP_OPTION_SECURE_PROTOCOLS, &protocols, sizeof(protocols));
+
+    // Timeouts: 4000ms each
+    DWORD timeout_ms = 4000;
     WinHttpSetOption(h_session, WINHTTP_OPTION_CONNECT_TIMEOUT, &timeout_ms, sizeof(timeout_ms));
     WinHttpSetOption(h_session, WINHTTP_OPTION_SEND_TIMEOUT, &timeout_ms, sizeof(timeout_ms));
     WinHttpSetOption(h_session, WINHTTP_OPTION_RECEIVE_TIMEOUT, &timeout_ms, sizeof(timeout_ms));
 
     HINTERNET h_connect = WinHttpConnect(h_session, L"api.github.com", INTERNET_DEFAULT_HTTPS_PORT, 0);
     if (!h_connect) {
+        DWORD err = GetLastError();
+        LogDiagnostic("WinHttpConnect to api.github.com failed (err=" + std::to_string(err) + ")");
         WinHttpCloseHandle(h_session);
         return UpdateCheckResult::kNetworkOffline;
     }
 
-    HINTERNET h_request = WinHttpOpenRequest(h_connect, L"GET",
-                                            L"/repos/Badboy-collab/likhi/releases/latest",
-                                            NULL, WINHTTP_NO_REFERER,
-                                            WINHTTP_DEFAULT_ACCEPT_TYPES,
-                                            WINHTTP_FLAG_SECURE);
-    if (!h_request) {
-        WinHttpCloseHandle(h_connect);
-        WinHttpCloseHandle(h_session);
-        return UpdateCheckResult::kNetworkOffline;
-    }
+    auto fetch_url = [&](const wchar_t* path, std::string& out_body, DWORD& out_status) -> bool {
+        HINTERNET h_request = WinHttpOpenRequest(h_connect, L"GET", path,
+                                                NULL, WINHTTP_NO_REFERER,
+                                                WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                                WINHTTP_FLAG_SECURE);
+        if (!h_request) return false;
 
-    // Send request with required Accept header for GitHub API
-    const wchar_t* headers = L"Accept: application/vnd.github.v3+json\r\n";
-    BOOL sent = WinHttpSendRequest(h_request, headers, (DWORD)-1L, WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
-    if (!sent || !WinHttpReceiveResponse(h_request, NULL)) {
-        WinHttpCloseHandle(h_request);
-        WinHttpCloseHandle(h_connect);
-        WinHttpCloseHandle(h_session);
-        return UpdateCheckResult::kNetworkOffline;
-    }
+        DWORD redirect_policy = WINHTTP_OPTION_REDIRECT_POLICY_ALWAYS;
+        WinHttpSetOption(h_request, WINHTTP_OPTION_REDIRECT_POLICY, &redirect_policy, sizeof(redirect_policy));
 
-    DWORD status_code = 0;
-    DWORD status_size = sizeof(status_code);
-    WinHttpQueryHeaders(h_request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-                        WINHTTP_HEADER_NAME_BY_INDEX, &status_code, &status_size, WINHTTP_NO_HEADER_INDEX);
-
-    if (status_code != 200) {
-        WinHttpCloseHandle(h_request);
-        WinHttpCloseHandle(h_connect);
-        WinHttpCloseHandle(h_session);
-        return UpdateCheckResult::kError;
-    }
-
-    // Read response body
-    std::string response_data;
-    DWORD bytes_available = 0;
-    while (WinHttpQueryDataAvailable(h_request, &bytes_available) && bytes_available > 0) {
-        std::vector<char> buffer(bytes_available + 1, 0);
-        DWORD bytes_read = 0;
-        if (WinHttpReadData(h_request, buffer.data(), bytes_available, &bytes_read) && bytes_read > 0) {
-            response_data.append(buffer.data(), bytes_read);
-        } else {
-            break;
+        const wchar_t* headers = L"Accept: application/vnd.github.v3+json\r\nUser-Agent: Likhi-Update-Checker/1.0\r\n";
+        BOOL sent = WinHttpSendRequest(h_request, headers, (DWORD)-1L, WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
+        if (!sent || !WinHttpReceiveResponse(h_request, NULL)) {
+            WinHttpCloseHandle(h_request);
+            return false;
         }
+
+        DWORD status_code = 0;
+        DWORD status_size = sizeof(status_code);
+        WinHttpQueryHeaders(h_request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                            WINHTTP_HEADER_NAME_BY_INDEX, &status_code, &status_size, WINHTTP_NO_HEADER_INDEX);
+        out_status = status_code;
+
+        if (status_code == 200) {
+            DWORD bytes_avail = 0;
+            while (WinHttpQueryDataAvailable(h_request, &bytes_avail) && bytes_avail > 0) {
+                std::vector<char> buf(bytes_avail + 1, 0);
+                DWORD bytes_read = 0;
+                if (WinHttpReadData(h_request, buf.data(), bytes_avail, &bytes_read) && bytes_read > 0) {
+                    out_body.append(buf.data(), bytes_read);
+                } else {
+                    break;
+                }
+            }
+        }
+
+        WinHttpCloseHandle(h_request);
+        return true;
+    };
+
+    std::string response_data;
+    DWORD status_code = 0;
+
+    LogDiagnostic("Querying GitHub endpoint 1: /repos/Badboy-collab/likhi/releases/latest");
+    bool ok = fetch_url(L"/repos/Badboy-collab/likhi/releases/latest", response_data, status_code);
+    LogDiagnostic("Endpoint 1 result: ok=" + std::to_string(ok) + ", status=" + std::to_string(status_code) + ", bytes=" + std::to_string(response_data.size()));
+
+    // If /releases/latest returned 404 (due to pre-releases or untagged latest), fall back to /releases?per_page=5
+    if (!ok || status_code == 404 || status_code != 200) {
+        LogDiagnostic("Falling back to GitHub endpoint 2: /repos/Badboy-collab/likhi/releases?per_page=5");
+        response_data.clear();
+        status_code = 0;
+        ok = fetch_url(L"/repos/Badboy-collab/likhi/releases?per_page=5", response_data, status_code);
+        LogDiagnostic("Endpoint 2 result: ok=" + std::to_string(ok) + ", status=" + std::to_string(status_code) + ", bytes=" + std::to_string(response_data.size()));
     }
 
-    WinHttpCloseHandle(h_request);
     WinHttpCloseHandle(h_connect);
     WinHttpCloseHandle(h_session);
 
-    if (!ParseReleaseJson(response_data, out_info)) {
+    if (!ok) {
+        LogDiagnostic("Network request failed completely (offline / DNS / connection error)");
+        return UpdateCheckResult::kNetworkOffline;
+    }
+
+    if (status_code != 200) {
+        LogDiagnostic("HTTP status code is not 200 (status=" + std::to_string(status_code) + ")");
         return UpdateCheckResult::kError;
     }
+
+    if (!ParseReleaseJson(response_data, out_info)) {
+        LogDiagnostic("ParseReleaseJson failed on payload");
+        return UpdateCheckResult::kError;
+    }
+
+    LogDiagnostic("Parsed remote release: version=" + out_info.version + ", tag=" + out_info.tag_name + ", url=" + out_info.download_url);
 
     RecordCheckTimestamp();
 
     int cmp = CompareVersions(GetCurrentVersion(), out_info.version);
+    LogDiagnostic("Compare: current=" + GetCurrentVersion() + " vs remote=" + out_info.version + " -> cmp=" + std::to_string(cmp));
+
     if (cmp < 0) {
-        // Newer version exists!
         if (!force_bypass_cooldown && IsVersionDismissed(out_info.version)) {
-            return UpdateCheckResult::kUpToDate; // User chose "Later" recently
+            LogDiagnostic("Update " + out_info.version + " is dismissed; returning up-to-date");
+            return UpdateCheckResult::kUpToDate;
         }
+        LogDiagnostic("New update available!");
         return UpdateCheckResult::kUpdateAvailable;
     }
 
+    LogDiagnostic("Application is up to date");
     return UpdateCheckResult::kUpToDate;
 }
+
 
 bool UpdateService::LaunchOfficialUpdateFlow(const std::string& custom_url) {
     std::string url = custom_url.empty() ? kOfficialUpdateUrl : custom_url;

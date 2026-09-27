@@ -27,6 +27,7 @@ inline const char* const kOfficialUpdateUrl = "https://getlikhi.com/update/";
 inline const char* const kOfficialDownloadUrl = "https://getlikhi.com/download/";
 inline const char* const kGitHubRepoUrl = "https://github.com/Badboy-collab/likhi";
 inline const char* const kGitHubApiReleasesUrl = "https://api.github.com/repos/Badboy-collab/likhi/releases/latest";
+inline const char* const kGitHubApiAllReleasesUrl = "https://api.github.com/repos/Badboy-collab/likhi/releases?per_page=5";
 
 // ============================================================================
 // Semantic Versioning Helper

@@ -62,9 +62,16 @@ public:
     // Verifies SHA-256 hash of a file against expected hex string using Win32 CryptoAPI
     static bool VerifySha256(const std::wstring& file_path, const std::string& expected_hex);
 
+    // Returns formatted Bengali string of last check time (e.g. L"আজ ১২:৩০", L"গতকাল", L"কখনও না")
+    static std::wstring GetLastCheckTimeString();
+
+    // Internal diagnostic logger (writes to %APPDATA%\PC-Bangla-Typing-App\update.log)
+    static void LogDiagnostic(const std::string& message);
+
     // Helpers
     static std::wstring GetAppDataDirectory();
     static std::wstring GetUpdateCachePath();
 };
 
 } // namespace likhi
+

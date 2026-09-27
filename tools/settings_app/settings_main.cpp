@@ -53,10 +53,21 @@ enum SectionID {
 #define IDC_BTN_IMPORT        2022
 #define IDC_BTN_EXPORT        2023
 #define IDC_BTN_RESET_DEF     2024
-#define IDC_BTN_CHECK_UPDATE  2025
-#define IDC_BTN_SAVE          2026
-#define IDC_BTN_CLOSE         2027
-#define IDC_LBL_STATUS        2028
+#define IDC_BTN_CHECK_UPDATE    2025
+#define IDC_BTN_DOWNLOAD_UPDATE 2032
+#define IDC_BTN_OPEN_WEBSITE    2033
+#define IDC_AB_TITLE            2034
+#define IDC_AB_TAG              2035
+#define IDC_AB_CREDIT           2036
+#define IDC_AB_DESC             2037
+#define IDC_AB_UPD_TITLE        2038
+#define IDC_AB_UPD_STATUS       2039
+#define IDC_AB_UPD_TIME         2040
+#define IDC_AB_UPD_NOTES        2041
+#define IDC_AB_PRIVACY          2042
+#define IDC_BTN_SAVE            2026
+#define IDC_BTN_CLOSE           2027
+#define IDC_LBL_STATUS          2028
 // Input Mode (which backend types Bangla): automatic | tsf_only | universal
 #define IDC_RADIO_MODE_AUTO   2029
 #define IDC_RADIO_MODE_TSF    2030
@@ -87,12 +98,24 @@ static SectionID g_active_section = SEC_GENERAL;
 static HWND g_hNavButtons[SEC_COUNT];
 static std::vector<HWND> g_section_controls[SEC_COUNT];
 static HWND hListDict, hEditRoman, hEditBangla, hLblStatus, g_hBtnUpd = NULL;
+static HWND g_hAb_UpdStatus = NULL, g_hAb_UpdTime = NULL, g_hAb_UpdNotes = NULL, g_hBtnDownload = NULL;
+static std::string g_available_download_url;
+
+static std::wstring Utf8ToWide(const std::string& str) {
+    if (str.empty()) return std::wstring();
+    int len = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), nullptr, 0);
+    std::wstring out(len, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), &out[0], len);
+    return out;
+}
+
 static HFONT hFontTitle = NULL;
 static HFONT hFontHeader = NULL;
 static HFONT hFontBody = NULL;
 static HFONT hFontBold = NULL;
 static HFONT hFontSub = NULL;
 static HFONT hFontCredit = NULL;
+
 
 static HICON hAppIcon = NULL;
 
@@ -202,8 +225,18 @@ void SwitchSection(HWND hWnd, SectionID sec) {
     if (sec == SEC_DICTIONARY) {
         RefreshDictionaryList();
     }
+    if (sec == SEC_ABOUT) {
+        if (g_available_download_url.empty() && g_hBtnDownload) {
+            ShowWindow(g_hBtnDownload, SW_HIDE);
+        }
+        if (g_hAb_UpdTime) {
+            std::wstring time_text = L"শেষ পরীক্ষা: " + likhi::UpdateService::GetLastCheckTimeString();
+            SetWindowTextW(g_hAb_UpdTime, time_text.c_str());
+        }
+    }
     InvalidateRect(hWnd, NULL, TRUE);
 }
+
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
@@ -492,29 +525,63 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_section_controls[SEC_ADVANCED].push_back(hBtnReset);
 
             // ==============================================================
-            // SECTION 8: ABOUT (WITH LOGO & AH CREATIONS CREDIT)
+            // SECTION 8: ABOUT & UPDATE CONNECTION
             // ==============================================================
-            HWND hAb_Title = CreateWindowW(L"STATIC", L"Likhi (লিখি) — সংস্করণ ১.০.০", WS_CHILD | SS_LEFT, 370, 30, 400, 28, hWnd, NULL, NULL, NULL);
+            // App Header (Icon drawn beside title in WM_PAINT at 265, 28)
+            HWND hAb_Title = CreateWindowW(L"STATIC", L"Likhi (লিখি) — সংস্করণ ১.০.০", WS_CHILD | SS_LEFT, 345, 26, 435, 28, hWnd, (HMENU)IDC_AB_TITLE, NULL, NULL);
             SendMessage(hAb_Title, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
-            HWND hAb_Tag = CreateWindowW(L"STATIC", L"“Fast • Smart • Natural — Bangla Typing for Windows”", WS_CHILD | SS_LEFT, 370, 65, 400, 24, hWnd, NULL, NULL, NULL);
+            HWND hAb_Tag = CreateWindowW(L"STATIC", L"“Fast • Smart • Natural — Bangla Typing for Windows”", WS_CHILD | SS_LEFT, 345, 55, 435, 22, hWnd, (HMENU)IDC_AB_TAG, NULL, NULL);
             SendMessage(hAb_Tag, WM_SETFONT, (WPARAM)hFontBold, TRUE);
 
-            HWND hAb_Credit = CreateWindowW(L"STATIC", L"✨ Developed by AH Creations", WS_CHILD | SS_LEFT, 370, 95, 400, 26, hWnd, NULL, NULL, NULL);
+            HWND hAb_Credit = CreateWindowW(L"STATIC", L"✨ Designed & Developed by AH Creations", WS_CHILD | SS_LEFT, 345, 77, 435, 24, hWnd, (HMENU)IDC_AB_CREDIT, NULL, NULL);
             SendMessage(hAb_Credit, WM_SETFONT, (WPARAM)hFontCredit, TRUE);
 
-            HWND hAb_Desc = CreateWindowW(L"STATIC", L"• ১০০% অফলাইন ও ব্যক্তিগত (০ ট্র্যাকিং / ক্লাউডমুক্ত)\n• সম্পূর্ণ স্বাধীন ও আধুনিক C++20 ল্যাঙ্গুয়েজ ইঞ্জিন\n• লাইসেন্স: MIT License\n• ক্রিয়েটর ও ডেভেলপার: AH Creations", WS_CHILD | SS_LEFT, 250, 155, 520, 120, hWnd, NULL, NULL, NULL);
+            // Technical Specs & Guarantees
+            HWND hAb_Desc = CreateWindowW(L"STATIC", L"• ১০০% অফলাইন ও ব্যক্তিগত — ০ ডেটা ট্র্যাকিং / ক্লাউডমুক্ত সম্পূর্ণ সুরক্ষিত\n• সম্পূর্ণ স্বাধীন ও আধুনিক C++20 ল্যাঙ্গুয়েজ ইঞ্জিন + Windows TSF\n• উন্মুক্ত ও নির্ভরযোগ্য — লাইসেন্স: MIT License\n• অফিসিয়াল ওয়েবসাইট: getlikhi.com", WS_CHILD | SS_LEFT, 265, 112, 515, 82, hWnd, (HMENU)IDC_AB_DESC, NULL, NULL);
             SendMessage(hAb_Desc, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hBtnUpd = CreateWindowW(L"BUTTON", L"আপডেট পরীক্ষা করুন (Check Updates)", WS_CHILD | BS_PUSHBUTTON, 250, 285, 260, 34, hWnd, (HMENU)IDC_BTN_CHECK_UPDATE, NULL, NULL);
+            // Update Connection Card
+            HWND hAb_UpdTitle = CreateWindowW(L"STATIC", L"আপডেট কানেকশন ও সংস্করণ নিয়ন্ত্রণ (Update Connection):", WS_CHILD | SS_LEFT, 265, 204, 515, 22, hWnd, (HMENU)IDC_AB_UPD_TITLE, NULL, NULL);
+            SendMessage(hAb_UpdTitle, WM_SETFONT, (WPARAM)hFontBold, TRUE);
+
+            g_hAb_UpdStatus = CreateWindowW(L"STATIC", L"● আপডেট সার্ভারের সাথে সংযুক্ত (প্রস্তুত)", WS_CHILD | SS_LEFT, 265, 230, 515, 24, hWnd, (HMENU)IDC_AB_UPD_STATUS, NULL, NULL);
+            SendMessage(g_hAb_UpdStatus, WM_SETFONT, (WPARAM)hFontBold, TRUE);
+
+            std::wstring initial_time = L"শেষ পরীক্ষা: " + likhi::UpdateService::GetLastCheckTimeString();
+            g_hAb_UpdTime = CreateWindowW(L"STATIC", initial_time.c_str(), WS_CHILD | SS_LEFT, 265, 256, 515, 20, hWnd, (HMENU)IDC_AB_UPD_TIME, NULL, NULL);
+            SendMessage(g_hAb_UpdTime, WM_SETFONT, (WPARAM)hFontSub, TRUE);
+
+            g_hAb_UpdNotes = CreateWindowW(L"STATIC", L"Likhi আপনার টাইপিং অভিজ্ঞতায় কোনো বিঘ্ন ঘটায় না। ব্যাকগ্রাউন্ডে স্বয়ংক্রিয়ভাবে নতুন রিলিজ ও টাইপিং ইমপ্রুভমেন্ট পরীক্ষা করা হয়।", WS_CHILD | SS_LEFT, 265, 280, 515, 65, hWnd, (HMENU)IDC_AB_UPD_NOTES, NULL, NULL);
+            SendMessage(g_hAb_UpdNotes, WM_SETFONT, (WPARAM)hFontBody, TRUE);
+
+            // Action Buttons
+            HWND hBtnUpd = CreateWindowW(L"BUTTON", L"আপডেট পরীক্ষা করুন (Check Updates)", WS_CHILD | BS_PUSHBUTTON, 265, 355, 245, 36, hWnd, (HMENU)IDC_BTN_CHECK_UPDATE, NULL, NULL);
             g_hBtnUpd = hBtnUpd;
             SendMessage(hBtnUpd, WM_SETFONT, (WPARAM)hFontBold, TRUE);
+
+            g_hBtnDownload = CreateWindowW(L"BUTTON", L"ডাউনলোড ও আপডেট (Update Now)", WS_CHILD | BS_DEFPUSHBUTTON, 520, 355, 240, 36, hWnd, (HMENU)IDC_BTN_DOWNLOAD_UPDATE, NULL, NULL);
+            SendMessage(g_hBtnDownload, WM_SETFONT, (WPARAM)hFontBold, TRUE);
+            ShowWindow(g_hBtnDownload, SW_HIDE);
+
+            HWND hBtnWeb = CreateWindowW(L"BUTTON", L"🌐 getlikhi.com", WS_CHILD | BS_PUSHBUTTON, 265, 400, 150, 30, hWnd, (HMENU)IDC_BTN_OPEN_WEBSITE, NULL, NULL);
+            SendMessage(hBtnWeb, WM_SETFONT, (WPARAM)hFontBody, TRUE);
+
+            HWND hAb_Privacy = CreateWindowW(L"STATIC", L"🔒 আপডেট পরীক্ষায় কোনো ব্যক্তিগত তথ্য বা কী-স্ট্রোক প্রেরিত হয় না।", WS_CHILD | SS_LEFT, 425, 406, 355, 20, hWnd, (HMENU)IDC_AB_PRIVACY, NULL, NULL);
+            SendMessage(hAb_Privacy, WM_SETFONT, (WPARAM)hFontSub, TRUE);
 
             g_section_controls[SEC_ABOUT].push_back(hAb_Title);
             g_section_controls[SEC_ABOUT].push_back(hAb_Tag);
             g_section_controls[SEC_ABOUT].push_back(hAb_Credit);
             g_section_controls[SEC_ABOUT].push_back(hAb_Desc);
+            g_section_controls[SEC_ABOUT].push_back(hAb_UpdTitle);
+            g_section_controls[SEC_ABOUT].push_back(g_hAb_UpdStatus);
+            g_section_controls[SEC_ABOUT].push_back(g_hAb_UpdTime);
+            g_section_controls[SEC_ABOUT].push_back(g_hAb_UpdNotes);
             g_section_controls[SEC_ABOUT].push_back(hBtnUpd);
+            g_section_controls[SEC_ABOUT].push_back(g_hBtnDownload);
+            g_section_controls[SEC_ABOUT].push_back(hBtnWeb);
+            g_section_controls[SEC_ABOUT].push_back(hAb_Privacy);
 
             // ==============================================================
             // BOTTOM BAR CONTROLS
@@ -596,7 +663,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
             // 5. Draw About Logo if in About Section
             if (g_active_section == SEC_ABOUT && hAppIcon) {
-                DrawIconEx(hdc, 255, 25, hAppIcon, 96, 96, 0, NULL, DI_NORMAL);
+                DrawIconEx(hdc, 265, 28, hAppIcon, 64, 64, 0, NULL, DI_NORMAL);
             }
 
             DeleteObject(hPenDivider);
@@ -699,36 +766,57 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 SetWindowTextW(hLblStatus, L"🔄 ফ্যাক্টরি ডিফল্টে রিসেট করা হয়েছে।");
             } else if (wmId == IDC_BTN_CHECK_UPDATE) {
                 if (g_hBtnUpd) EnableWindow(g_hBtnUpd, FALSE);
+                if (g_hAb_UpdStatus) SetWindowTextW(g_hAb_UpdStatus, L"⏳ আপডেট পরীক্ষা করা হচ্ছে...");
+                if (g_hAb_UpdNotes) SetWindowTextW(g_hAb_UpdNotes, L"অফিসিয়াল রিলিজ তথ্য যাচাই করা হচ্ছে, অনুগ্রহ করে অপেক্ষা করুন...");
                 SetWindowTextW(hLblStatus, L"🔍 আপডেট পরীক্ষা করা হচ্ছে... (Checking for updates...)");
                 std::thread([hWnd]() {
                     likhi::ReleaseInfo* pInfo = new likhi::ReleaseInfo();
                     likhi::UpdateCheckResult res = likhi::UpdateService::CheckForUpdate(*pInfo, true);
                     PostMessageW(hWnd, WM_UPDATE_CHECK_DONE, (WPARAM)res, (LPARAM)pInfo);
                 }).detach();
+            } else if (wmId == IDC_BTN_DOWNLOAD_UPDATE) {
+                likhi::UpdateService::LaunchOfficialUpdateFlow(g_available_download_url);
+            } else if (wmId == IDC_BTN_OPEN_WEBSITE) {
+                likhi::UpdateService::LaunchOfficialUpdateFlow(likhi::kOfficialWebsiteUrl);
             }
             break;
         }
 
-                case WM_UPDATE_CHECK_DONE: {
+        case WM_UPDATE_CHECK_DONE: {
             likhi::UpdateCheckResult res = (likhi::UpdateCheckResult)wParam;
             likhi::ReleaseInfo* pInfo = (likhi::ReleaseInfo*)lParam;
             if (g_hBtnUpd) EnableWindow(g_hBtnUpd, TRUE);
 
+            std::wstring last_time = L"শেষ পরীক্ষা: " + likhi::UpdateService::GetLastCheckTimeString();
+            if (g_hAb_UpdTime) SetWindowTextW(g_hAb_UpdTime, last_time.c_str());
+
             if (res == likhi::UpdateCheckResult::kUpToDate) {
+                if (g_hAb_UpdStatus) SetWindowTextW(g_hAb_UpdStatus, L"✓ আপনি Likhi-এর সর্বশেষ সংস্করণ (১.০.০) ব্যবহার করছেন");
+                if (g_hAb_UpdNotes) SetWindowTextW(g_hAb_UpdNotes, L"আপনার Likhi অ্যাপ্লিকেশন সম্পূর্ণ আপ-টু-ডেট রয়েছে। কোনো নতুন আপডেট প্রয়োজন নেই।");
+                if (g_hBtnDownload) ShowWindow(g_hBtnDownload, SW_HIDE);
                 SetWindowTextW(hLblStatus, L"✨ আপনি Likhi-এর সর্বশেষ সংস্করণ ব্যবহার করছেন।");
                 MessageBoxW(hWnd, 
-                    L"আপনি Likhi-এর সর্বশেষ সংস্করণ ব্যবহার করছেন।\n\nবর্তমান সংস্করণ: ১.০.০", 
-                    L"Likhi আপডেট", MB_OK | MB_ICONINFORMATION);
+                    L"অভিনন্দন! আপনি Likhi-এর সর্বশেষ সংস্করণ ব্যবহার করছেন।\n\nবর্তমান সংস্করণ: ১.০.০", 
+                    L"Likhi আপডেট চেক", MB_OK | MB_ICONINFORMATION);
             } else if (res == likhi::UpdateCheckResult::kUpdateAvailable && pInfo) {
-                SetWindowTextW(hLblStatus, L"🚀 Likhi-এর নতুন সংস্করণ পাওয়া গেছে!");
+                std::wstring new_ver = Utf8ToWide(pInfo->version);
+                if (g_hAb_UpdStatus) SetWindowTextW(g_hAb_UpdStatus, (L"↑ নতুন সংস্করণ v" + new_ver + L" উপলব্ধ!").c_str());
                 
+                std::wstring notes = Utf8ToWide(pInfo->release_notes);
+                if (notes.size() > 180) notes = notes.substr(0, 180) + L"...";
+                if (g_hAb_UpdNotes) SetWindowTextW(g_hAb_UpdNotes, notes.empty() ? L"নতুন আপডেট ডাউনলোড ও ইনস্টল করার জন্য প্রস্তুত।" : notes.c_str());
+
+                g_available_download_url = pInfo->update_page_url;
+                if (g_hBtnDownload) ShowWindow(g_hBtnDownload, SW_SHOW);
+                SetWindowTextW(hLblStatus, L"🚀 Likhi-এর নতুন সংস্করণ পাওয়া গেছে!");
+
                 std::wstring msg = L"Likhi-এর একটি নতুন সংস্করণ পাওয়া গেছে।\n\n"
                                    L"বর্তমান সংস্করণ: " + std::wstring(likhi::kVersionWString) + L"\n"
-                                   L"নতুন সংস্করণ: " + std::wstring(pInfo->version.begin(), pInfo->version.end()) + L"\n\n";
+                                   L"নতুন সংস্করণ: " + new_ver + L"\n\n";
                 if (!pInfo->release_notes.empty()) {
-                    std::wstring notes(pInfo->release_notes.begin(), pInfo->release_notes.end());
-                    if (notes.size() > 500) notes = notes.substr(0, 500) + L"...";
-                    msg += L"নতুন যা যুক্ত হয়েছে:\n" + notes + L"\n\n";
+                    std::wstring full_notes = Utf8ToWide(pInfo->release_notes);
+                    if (full_notes.size() > 400) full_notes = full_notes.substr(0, 400) + L"...";
+                    msg += L"নতুন যা যুক্ত হয়েছে:\n" + full_notes + L"\n\n";
                 }
                 msg += L"আপনি কি এখন অফিসিয়াল সাইট থেকে আপডেট করতে চান? (Update Now)";
 
@@ -740,9 +828,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     SetWindowTextW(hLblStatus, L"আপডেটটি পরবর্তীতে অনুস্মারক রাখা হবে।");
                 }
             } else if (res == likhi::UpdateCheckResult::kNetworkOffline) {
+                if (g_hAb_UpdStatus) SetWindowTextW(g_hAb_UpdStatus, L"○ ইন্টারনেট সংযোগ পাওয়া যায়নি (অফলাইন)");
+                if (g_hAb_UpdNotes) SetWindowTextW(g_hAb_UpdNotes, L"ইন্টারনেট সংযোগ চেক করে পুনরায় চেষ্টা করুন। অফলাইনে Likhi স্বাভাবিকভাবে কাজ করছে।");
+                if (g_hBtnDownload) ShowWindow(g_hBtnDownload, SW_HIDE);
                 SetWindowTextW(hLblStatus, L"⚠️ ইন্টারনেট সংযোগ পাওয়া যায়নি। অফলাইনে Likhi স্বাভাবিক রয়েছে।");
             } else {
-                SetWindowTextW(hLblStatus, L"ℹ️ এই মুহূর্তে আপডেট সার্ভারের সাথে সংযোগ করা যায়নি। পরে আবার চেষ্টা করুন।");
+                if (g_hAb_UpdStatus) SetWindowTextW(g_hAb_UpdStatus, L"○ এখন আপডেট সার্ভারের সাথে সংযোগ করা যাচ্ছে না");
+                if (g_hAb_UpdNotes) SetWindowTextW(g_hAb_UpdNotes, L"সার্ভার এই মুহূর্তে সাড়া দিচ্ছে না। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।");
+                if (g_hBtnDownload) ShowWindow(g_hBtnDownload, SW_HIDE);
+                SetWindowTextW(hLblStatus, L"ℹ️ এই মুহূর্তে আপডেট সার্ভারের সাথে সংযোগ করা যায়নি।");
             }
 
             if (pInfo) delete pInfo;
@@ -752,11 +846,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_CTLCOLORSTATIC: {
             HDC hdc = (HDC)wParam;
             HWND hCtl = (HWND)lParam;
+            int ctlId = GetDlgCtrlID(hCtl);
             SetBkMode(hdc, TRANSPARENT);
-            
-            // Highlight credit in Royal Blue
-            if (GetDlgCtrlID(hCtl) == 0 && g_active_section == SEC_ABOUT) {
+
+            if (ctlId == IDC_AB_CREDIT) {
                 SetTextColor(hdc, RGB(2, 132, 199)); // Bright Sky Blue
+            } else if (ctlId == IDC_AB_UPD_STATUS) {
+                SetTextColor(hdc, RGB(16, 149, 74)); // Emerald Green
+            } else if (ctlId == IDC_AB_UPD_TIME || ctlId == IDC_AB_PRIVACY) {
+                SetTextColor(hdc, RGB(100, 116, 139)); // Muted slate for metadata
+            } else if (ctlId == IDC_AB_TITLE || ctlId == IDC_AB_UPD_TITLE) {
+                SetTextColor(hdc, RGB(30, 58, 138)); // Deep Royal Blue for headers
             } else {
                 SetTextColor(hdc, RGB(30, 41, 59));
             }

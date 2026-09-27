@@ -103,10 +103,47 @@ void TestReleaseJsonParsing() {
     EXPECT_EQ(info.file_size, 17825792ULL);
     EXPECT_EQ(info.update_page_url, "https://getlikhi.com/update/");
 
+    // Array-wrapped GitHub releases response (from /repos/:owner/:repo/releases)
+    std::string array_json = R"json([
+        {
+            "tag_name": "v1.0.0-test2",
+            "name": "Likhi v1.0.0 test 2 - one-click installer",
+            "body": "One-click installer. Double-click LikhiSetup.exe",
+            "published_at": "2026-09-13T11:12:15Z",
+            "assets": [
+                {
+                    "name": "LikhiSetup.exe",
+                    "size": 12484772,
+                    "digest": "sha256:48fb12cbba9eac76cb805d7eebb3093def847f6cb9e2fcd9e532606b2dc3cc0b",
+                    "browser_download_url": "https://github.com/Badboy-collab/likhi/releases/download/v1.0.0-test2/LikhiSetup.exe"
+                }
+            ]
+        }
+    ])json";
+
+    ReleaseInfo array_info;
+    bool parsed_array = UpdateService::ParseReleaseJson(array_json, array_info);
+    EXPECT_TRUE(parsed_array);
+    EXPECT_EQ(array_info.version, "1.0.0-test2");
+    EXPECT_EQ(array_info.tag_name, "v1.0.0-test2");
+    EXPECT_EQ(array_info.download_url, "https://github.com/Badboy-collab/likhi/releases/download/v1.0.0-test2/LikhiSetup.exe");
+    EXPECT_EQ(array_info.file_size, 12484772ULL);
+
     // Malformed JSON should not crash and return false
     ReleaseInfo bad_info;
     EXPECT_FALSE(UpdateService::ParseReleaseJson("", bad_info));
     EXPECT_FALSE(UpdateService::ParseReleaseJson("{ invalid json }", bad_info));
+}
+
+void TestLastCheckTimeString() {
+    std::cout << "[TEST] Last Check Time String Formatting..." << std::endl;
+
+    // Record check timestamp and verify string is not empty and contains Bengali
+    UpdateService::RecordCheckTimestamp();
+    std::wstring time_str = UpdateService::GetLastCheckTimeString();
+    EXPECT_FALSE(time_str.empty());
+    // Should say "আজ " (today)
+    EXPECT_TRUE(time_str.find(L"আজ") != std::wstring::npos);
 }
 
 void TestCooldownAndThrottling() {
@@ -218,6 +255,7 @@ int main() {
 
     TestSemVerParsingAndComparison();
     TestReleaseJsonParsing();
+    TestLastCheckTimeString();
     TestCooldownAndThrottling();
     TestSha256Verification();
     TestUserDataPreservation();
