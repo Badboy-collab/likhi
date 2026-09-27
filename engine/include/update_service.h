@@ -17,6 +17,8 @@ struct ReleaseInfo {
     std::string sha256_hash;         // SHA-256 digest if available
     uint64_t file_size = 0;          // Asset byte size
     std::string published_at;        // ISO 8601 timestamp
+    bool is_prerelease = false;      // True if GitHub marked prerelease or SemVer has prerelease suffix
+    bool is_draft = false;           // True if marked draft
 };
 
 enum class UpdateCheckResult {
@@ -54,7 +56,9 @@ public:
     static int CompareVersions(const std::string& current, const std::string& remote);
 
     // JSON Parser for GitHub Releases API payload (robust, zero-dependency)
-    static bool ParseReleaseJson(const std::string& json_str, ReleaseInfo& out_info);
+    // Handles both single release object and array of releases.
+    // When allow_prereleases is false, drafts and prereleases are strictly excluded.
+    static bool ParseReleaseJson(const std::string& json_str, ReleaseInfo& out_info, bool allow_prereleases = false);
 
     // Opens the official GetLikhi.com update page in the default system browser
     static bool LaunchOfficialUpdateFlow(const std::string& custom_url = "");
@@ -62,16 +66,9 @@ public:
     // Verifies SHA-256 hash of a file against expected hex string using Win32 CryptoAPI
     static bool VerifySha256(const std::wstring& file_path, const std::string& expected_hex);
 
-    // Returns formatted Bengali string of last check time (e.g. L"আজ ১২:৩০", L"গতকাল", L"কখনও না")
-    static std::wstring GetLastCheckTimeString();
-
-    // Internal diagnostic logger (writes to %APPDATA%\PC-Bangla-Typing-App\update.log)
-    static void LogDiagnostic(const std::string& message);
-
     // Helpers
     static std::wstring GetAppDataDirectory();
     static std::wstring GetUpdateCachePath();
 };
 
 } // namespace likhi
-

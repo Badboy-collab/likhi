@@ -35,3 +35,11 @@ tsf/src/key_event_sink_tmp.cpp
 tsf/src/key_diag.h
 tools/probe_words.cpp
 tools/probe_langid.cpp
+
+# Credentials & deployment artifacts
+.env
+*.env
+.deploy_credentials
+.deploy_manifest.json
+backups/
+logs/

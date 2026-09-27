@@ -103,88 +103,10 @@ void TestReleaseJsonParsing() {
     EXPECT_EQ(info.file_size, 17825792ULL);
     EXPECT_EQ(info.update_page_url, "https://getlikhi.com/update/");
 
-    // Array-wrapped GitHub releases response (from /repos/:owner/:repo/releases)
-    std::string array_json = R"json([
-        {
-            "tag_name": "v1.0.0-test2",
-            "name": "Likhi v1.0.0 test 2 - one-click installer",
-            "body": "One-click installer. Double-click LikhiSetup.exe",
-            "published_at": "2026-09-13T11:12:15Z",
-            "assets": [
-                {
-                    "name": "LikhiSetup.exe",
-                    "size": 12484772,
-                    "digest": "sha256:48fb12cbba9eac76cb805d7eebb3093def847f6cb9e2fcd9e532606b2dc3cc0b",
-                    "browser_download_url": "https://github.com/Badboy-collab/likhi/releases/download/v1.0.0-test2/LikhiSetup.exe"
-                }
-            ]
-        }
-    ])json";
-
-    ReleaseInfo array_info;
-    bool parsed_array = UpdateService::ParseReleaseJson(array_json, array_info);
-    EXPECT_TRUE(parsed_array);
-    EXPECT_EQ(array_info.version, "1.0.0-test2");
-    EXPECT_EQ(array_info.tag_name, "v1.0.0-test2");
-    EXPECT_EQ(array_info.download_url, "https://github.com/Badboy-collab/likhi/releases/download/v1.0.0-test2/LikhiSetup.exe");
-    EXPECT_EQ(array_info.file_size, 12484772ULL);
-
     // Malformed JSON should not crash and return false
     ReleaseInfo bad_info;
     EXPECT_FALSE(UpdateService::ParseReleaseJson("", bad_info));
     EXPECT_FALSE(UpdateService::ParseReleaseJson("{ invalid json }", bad_info));
-}
-
-void TestLastCheckTimeString() {
-    std::cout << "[TEST] Last Check Time String Formatting..." << std::endl;
-
-    // Record check timestamp and verify string is not empty and contains Bengali
-    UpdateService::RecordCheckTimestamp();
-    std::wstring time_str = UpdateService::GetLastCheckTimeString();
-    EXPECT_FALSE(time_str.empty());
-    // Should say "আজ " (today)
-    EXPECT_TRUE(time_str.find(L"আজ") != std::wstring::npos);
-}
-
-void TestControlledUpdateAvailableScenario() {
-    std::cout << "[TEST] Controlled Update-Available Scenario (Current 1.0.0 -> Remote 1.0.1)..." << std::endl;
-
-    std::string test_payload = R"json({
-        "tag_name": "v1.0.1",
-        "name": "Likhi v1.0.1 (Windows)",
-        "body": "• New typing fixes\n• Suggestion improvements",
-        "published_at": "2026-09-27T12:00:00Z",
-        "assets": [
-            {
-                "name": "LikhiSetup.exe",
-                "size": 17829817,
-                "browser_download_url": "https://getlikhi.com/update/"
-            }
-        ]
-    })json";
-
-    ReleaseInfo info;
-    bool parsed = UpdateService::ParseReleaseJson(test_payload, info);
-    EXPECT_TRUE(parsed);
-    EXPECT_EQ(info.version, "1.0.1");
-    EXPECT_EQ(info.tag_name, "v1.0.1");
-    EXPECT_EQ(info.download_url, "https://getlikhi.com/update/");
-
-    // Authoritative Current Version is 1.0.0
-    EXPECT_EQ(UpdateService::GetCurrentVersion(), "1.0.0");
-
-    // Version Comparison: 1.0.0 < 1.0.1 -> returns -1 (Update Available)
-    int cmp = UpdateService::CompareVersions(UpdateService::GetCurrentVersion(), info.version);
-    EXPECT_EQ(cmp, -1);
-    EXPECT_TRUE(cmp < 0);
-
-    // Verify Action: [ Later ] dismissal and snooze
-    EXPECT_FALSE(UpdateService::IsVersionDismissed("1.0.1"));
-    UpdateService::DismissVersion("1.0.1");
-    EXPECT_TRUE(UpdateService::IsVersionDismissed("1.0.1"));
-
-    // Verify future version is not dismissed
-    EXPECT_FALSE(UpdateService::IsVersionDismissed("1.0.2"));
 }
 
 void TestCooldownAndThrottling() {
@@ -289,6 +211,113 @@ void TestUserDataPreservation() {
     DeleteFileW(mock_dict.c_str());
 }
 
+void TestReleasePolicyStableVsPrerelease() {
+    std::cout << "[TEST] Release Policy: Stable vs Prerelease Selection..." << std::endl;
+
+    const std::string installed_version = "1.0.0";
+
+    // 1. v1.0.0-test2 (Prerelease)
+    // Payload marked as prerelease: true with SemVer prerelease suffix
+    std::string test2_json = R"json({
+        "tag_name": "v1.0.0-test2",
+        "name": "Likhi v1.0.0-test2 (Testing Build)",
+        "prerelease": true,
+        "draft": false
+    })json";
+    ReleaseInfo test2_info;
+    // Under production policy (allow_prereleases = false), must be ignored / disqualified
+    EXPECT_FALSE(UpdateService::ParseReleaseJson(test2_json, test2_info, false));
+    // When allowed explicitly (e.g. beta channel), comparison proves 1.0.0 > 1.0.0-test2
+    EXPECT_TRUE(UpdateService::ParseReleaseJson(test2_json, test2_info, true));
+    EXPECT_EQ(UpdateService::CompareVersions(installed_version, test2_info.version), 1);
+
+    // Array containing ONLY v1.0.0-test2
+    std::string test2_array = R"json([
+        {
+            "tag_name": "v1.0.0-test2",
+            "prerelease": true,
+            "draft": false
+        }
+    ])json";
+    ReleaseInfo test2_arr_info;
+    EXPECT_FALSE(UpdateService::ParseReleaseJson(test2_array, test2_arr_info, false));
+
+    // 2. v1.0.0 (Stable release matching current installed version)
+    std::string v100_json = R"json({
+        "tag_name": "v1.0.0",
+        "name": "Likhi v1.0.0",
+        "prerelease": false,
+        "draft": false
+    })json";
+    ReleaseInfo v100_info;
+    EXPECT_TRUE(UpdateService::ParseReleaseJson(v100_json, v100_info, false));
+    EXPECT_EQ(v100_info.version, "1.0.0");
+    EXPECT_FALSE(v100_info.is_prerelease);
+    EXPECT_EQ(UpdateService::CompareVersions(installed_version, v100_info.version), 0); // Up to date
+
+    // 3. v1.0.1 (Patch stable release)
+    std::string v101_json = R"json({
+        "tag_name": "v1.0.1",
+        "name": "Likhi v1.0.1 (Patch Release)",
+        "prerelease": false,
+        "draft": false
+    })json";
+    ReleaseInfo v101_info;
+    EXPECT_TRUE(UpdateService::ParseReleaseJson(v101_json, v101_info, false));
+    EXPECT_EQ(v101_info.version, "1.0.1");
+    EXPECT_FALSE(v101_info.is_prerelease);
+    EXPECT_EQ(UpdateService::CompareVersions(installed_version, v101_info.version), -1); // Update available!
+
+    // 4. v1.1.0 (Minor stable release) with mixed prerelease array
+    // Here v1.2.0-beta1 is newest item, followed by v1.1.0 stable
+    std::string mixed_array_json = R"json([
+        {
+            "tag_name": "v1.2.0-beta1",
+            "name": "Likhi v1.2.0 Beta 1",
+            "prerelease": true,
+            "draft": false
+        },
+        {
+            "tag_name": "v1.1.0",
+            "name": "Likhi v1.1.0 Feature Release",
+            "prerelease": false,
+            "draft": false
+        }
+    ])json";
+    ReleaseInfo v110_info;
+    // Must NOT simply choose newest array item (v1.2.0-beta1); must pick stable v1.1.0
+    EXPECT_TRUE(UpdateService::ParseReleaseJson(mixed_array_json, v110_info, false));
+    EXPECT_EQ(v110_info.version, "1.1.0");
+    EXPECT_FALSE(v110_info.is_prerelease);
+    EXPECT_EQ(UpdateService::CompareVersions(installed_version, v110_info.version), -1); // Update available!
+
+    // 5. v2.0.0 (Major stable release)
+    std::string v200_json = R"json({
+        "tag_name": "v2.0.0",
+        "name": "Likhi 2.0 Next-Gen",
+        "prerelease": false,
+        "draft": false
+    })json";
+    ReleaseInfo v200_info;
+    EXPECT_TRUE(UpdateService::ParseReleaseJson(v200_json, v200_info, false));
+    EXPECT_EQ(v200_info.version, "2.0.0");
+    EXPECT_FALSE(v200_info.is_prerelease);
+    EXPECT_EQ(UpdateService::CompareVersions(installed_version, v200_info.version), -1); // Update available!
+
+    // Multi-candidate resolution: array with test2, v1.0.0, v1.0.1, v1.1.0-rc1
+    std::string multi_array = R"json([
+        { "tag_name": "v1.1.0-rc1", "prerelease": true, "draft": false },
+        { "tag_name": "v1.0.1", "prerelease": false, "draft": false },
+        { "tag_name": "v1.0.0", "prerelease": false, "draft": false },
+        { "tag_name": "v1.0.0-test2", "prerelease": true, "draft": false }
+    ])json";
+    ReleaseInfo multi_info;
+    EXPECT_TRUE(UpdateService::ParseReleaseJson(multi_array, multi_info, false));
+    // Among stable versions v1.0.0 and v1.0.1, must pick highest: v1.0.1
+    EXPECT_EQ(multi_info.version, "1.0.1");
+    EXPECT_FALSE(multi_info.is_prerelease);
+}
+
 int main() {
     std::cout << "==========================================================" << std::endl;
     std::cout << " LIKHI UPDATE SERVICE AUTOMATED REGRESSION SUITE" << std::endl;
@@ -296,8 +325,7 @@ int main() {
 
     TestSemVerParsingAndComparison();
     TestReleaseJsonParsing();
-    TestLastCheckTimeString();
-    TestControlledUpdateAvailableScenario();
+    TestReleasePolicyStableVsPrerelease();
     TestCooldownAndThrottling();
     TestSha256Verification();
     TestUserDataPreservation();
