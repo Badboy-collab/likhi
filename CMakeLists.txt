@@ -16,6 +16,7 @@ include_directories(
 set(ENGINE_SOURCES
     engine/src/unicode/bangla_unicode.cpp
     engine/src/transliteration/phonetic_parser.cpp
+    engine/src/transliteration/fuzzy_normalizer.cpp
     engine/src/dictionary/lexicon_trie.cpp
     engine/src/ranking/context_ranker.cpp
     engine/src/personal_dict/personal_dictionary.cpp

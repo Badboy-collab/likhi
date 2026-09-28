@@ -294,6 +294,57 @@ void UpdateService::RecordCheckTimestamp() {
     }
 }
 
+std::wstring UpdateService::GetLastCheckTimeString() {
+    std::wstring cache_file = GetUpdateCachePath();
+    if (cache_file.empty()) return L"এখনও পরীক্ষা করা হয়নি";
+
+    std::ifstream in(cache_file.c_str());
+    if (!in.is_open()) return L"এখনও পরীক্ষা করা হয়নি";
+
+    std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    in.close();
+
+    uint64_t last_check = 0;
+    if (!ExtractJsonNumber(content, "last_check_epoch", last_check) || last_check == 0) {
+        return L"এখনও পরীক্ষা করা হয়নি";
+    }
+
+    time_t check_time = static_cast<time_t>(last_check);
+    tm lt = {0};
+    localtime_s(&lt, &check_time);
+
+    time_t now_time = time(nullptr);
+    tm now_lt = {0};
+    localtime_s(&now_lt, &now_time);
+
+    auto to_bengali_digits = [](const std::wstring& str) -> std::wstring {
+        std::wstring res;
+        for (wchar_t c : str) {
+            if (c >= L'0' && c <= L'9') {
+                res += static_cast<wchar_t>(L'০' + (c - L'0'));
+            } else {
+                res += c;
+            }
+        }
+        return res;
+    };
+
+    wchar_t time_buf[32] = {0};
+    swprintf(time_buf, 32, L"%02d:%02d", lt.tm_hour, lt.tm_min);
+    std::wstring b_time = to_bengali_digits(time_buf);
+
+    if (lt.tm_year == now_lt.tm_year && lt.tm_yday == now_lt.tm_yday) {
+        return L"আজ " + b_time;
+    } else if (lt.tm_year == now_lt.tm_year && lt.tm_yday == now_lt.tm_yday - 1) {
+        return L"গতকাল " + b_time;
+    } else {
+        wchar_t date_buf[64] = {0};
+        swprintf(date_buf, 64, L"%02d/%02d/%04d %02d:%02d",
+                 lt.tm_mday, lt.tm_mon + 1, lt.tm_year + 1900, lt.tm_hour, lt.tm_min);
+        return to_bengali_digits(date_buf);
+    }
+}
+
 void UpdateService::DismissVersion(const std::string& version) {
     std::wstring cache_file = GetUpdateCachePath();
     if (cache_file.empty()) return;

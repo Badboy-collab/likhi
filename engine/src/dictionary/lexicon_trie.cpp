@@ -1,5 +1,6 @@
-#include "lexicon_trie.h"
+﻿#include "lexicon_trie.h"
 #include "../unicode/bangla_unicode.h"
+#include "../transliteration/fuzzy_normalizer.h"
 #include <fstream>
 #include <algorithm>
 #include <iostream>
@@ -147,6 +148,43 @@ std::vector<LexiconEntry> LexiconTrie::SearchRoman(const std::string& roman_pref
     }
     return results;
 }
+
+std::vector<LexiconEntry> LexiconTrie::SearchRomanFuzzy(const std::string& roman_input,
+                                                          const FuzzyNormalizer& normalizer,
+                                                          size_t max_results) const {
+    // 1. Start with exact results
+    std::vector<LexiconEntry> results = SearchRoman(roman_input, max_results);
+    if (results.size() >= max_results) return results;
+
+    // 2. Try normalizer variants (index 0 = lowercase original, already done)
+    auto variants = normalizer.Normalize(roman_input);
+    std::vector<std::string> seen_bengali;
+    for (const auto& r : results) seen_bengali.push_back(r.bengali_word);
+
+    for (size_t vi = 1; vi < variants.size() && results.size() < max_results; ++vi) {
+        const std::string& variant = variants[vi];
+        if (variant == roman_input) continue;
+        auto variant_results = SearchRoman(variant, max_results);
+        for (auto& vr : variant_results) {
+            if (results.size() >= max_results) break;
+            bool already_seen = false;
+            for (const auto& bw : seen_bengali) {
+                if (bw == vr.bengali_word) { already_seen = true; break; }
+            }
+            if (!already_seen) {
+                results.push_back(vr);
+                seen_bengali.push_back(vr.bengali_word);
+            }
+        }
+    }
+
+    std::stable_sort(results.begin(), results.end(), [](const LexiconEntry& a, const LexiconEntry& b) {
+        return a.frequency > b.frequency;
+    });
+    if (results.size() > max_results) results.resize(max_results);
+    return results;
+}
+
 
 bool LexiconTrie::SaveToFile(const std::string& binary_path) const {
     // Serialization is handled by build_lexicon.py tool

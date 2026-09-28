@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <string_view>
+#include "../transliteration/fuzzy_normalizer.h"
 
 namespace bangla {
 
@@ -37,6 +38,11 @@ public:
     const LexiconEntry* Find(const std::string& bengali_word) const;
     std::vector<LexiconEntry> SearchPrefix(const std::string& prefix, size_t max_results = 10) const;
     std::vector<LexiconEntry> SearchRoman(const std::string& roman_prefix, size_t max_results = 10) const;
+    // Like SearchRoman but also tries normalized variants via FuzzyNormalizer.
+    // Returned entries may have roman_key != roman_prefix (fuzzy match).
+    std::vector<LexiconEntry> SearchRomanFuzzy(const std::string& roman_input,
+                                                const FuzzyNormalizer& normalizer,
+                                                size_t max_results = 10) const;
 
     bool LoadFromFile(const std::string& binary_path);
     bool SaveToFile(const std::string& binary_path) const;
