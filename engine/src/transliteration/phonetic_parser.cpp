@@ -389,8 +389,13 @@ void PhoneticParser::ExpandState(const std::string& roman, const ParseState& sta
             break;
         case 'o': case 'O':
             if (!state.in_consonant) {
-                append_vowel(VOWEL_A, 0, 1, 0.0f);
-                append_vowel(VOWEL_O, KAR_O, 1, 0.02f);
+                if (state.bengali.empty()) {
+                    append_vowel(VOWEL_A, 0, 1, 0.0f);
+                    append_vowel(VOWEL_O, KAR_O, 1, 0.02f);
+                } else {
+                    append_vowel(VOWEL_O, KAR_O, 1, 0.0f);
+                    append_vowel(VOWEL_A, 0, 1, 0.03f);
+                }
             } else {
                 append_vowel(VOWEL_O, KAR_O, 1, 0.0f);
                 append_vowel(VOWEL_A, 0, 1, 0.01f);

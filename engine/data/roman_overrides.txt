@@ -871,5 +871,6 @@ lenguage	ল্যাঙ্গুয়েজ
 google	গুগল
 likhi	লিখি
 peleo	পেলেও
+geleo	গেলেও
 aro	আরও
 external	এক্সটার্নাল
