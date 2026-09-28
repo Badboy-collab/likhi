@@ -93,6 +93,8 @@ CandidateWindow::CandidateWindow()
       hfont_score_(nullptr),
       width_(250),
       height_(42),
+      last_width_(0),
+      last_height_(0),
       voice_state_(VoiceState::Off) {
     memset(&caret_rect_, 0, sizeof(RECT));
 }
@@ -260,9 +262,14 @@ void CandidateWindow::ShowCandidates(const std::vector<std::wstring>& candidates
     if (pos_y < work.top)            pos_y = work.top + 8;
 
     // Rounded corners so the popup looks like the reference suggestion box.
-    HRGN region = CreateRoundRectRgn(0, 0, width_ + 1, height_ + 1,
-                                     kCornerR * 2, kCornerR * 2);
-    if (region) SetWindowRgn(hwnd_, region, TRUE);  // window owns the region now
+    // Only rebuild window region when geometry actually changes to prevent non-client redraw flicker.
+    if (width_ != last_width_ || height_ != last_height_) {
+        HRGN region = CreateRoundRectRgn(0, 0, width_ + 1, height_ + 1,
+                                         kCornerR * 2, kCornerR * 2);
+        if (region) SetWindowRgn(hwnd_, region, TRUE);  // window owns the region now
+        last_width_ = width_;
+        last_height_ = height_;
+    }
 
     SetWindowPos(
         hwnd_, HWND_TOPMOST,
@@ -271,7 +278,7 @@ void CandidateWindow::ShowCandidates(const std::vector<std::wstring>& candidates
     );
 
     is_visible_ = true;
-    InvalidateRect(hwnd_, NULL, TRUE);
+    InvalidateRect(hwnd_, NULL, FALSE);
 }
 
 void CandidateWindow::Hide() {
@@ -280,6 +287,8 @@ void CandidateWindow::Hide() {
         is_visible_ = false;
         candidates_.clear();
         candidate_item_rects_.clear();
+        last_width_ = 0;
+        last_height_ = 0;
     }
 }
 
@@ -509,6 +518,8 @@ LRESULT CALLBACK CandidateWindow::WndProc(HWND hWnd, UINT message, WPARAM wParam
 
     if (pThis) {
         switch (message) {
+            case WM_ERASEBKGND:
+                return 1;  // handled: suppress background erase to eliminate typing flicker
             case WM_PAINT:
                 pThis->OnPaint(hWnd);
                 return 0;

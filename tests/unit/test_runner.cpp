@@ -451,6 +451,80 @@ int main() {
         std::cout << "  [RESULT] " << suite8_passed << " passed, " << suite8_failed << " failed.\n";
     }
 
+    // =========================================================================
+    // SUITE 9: EXPANDED CONVERSATIONAL BIGRAM PREDICTIONS
+    // =========================================================================
+    std::cout << "\n--- Suite 9: Expanded Conversational Bigram Predictions ---\n";
+    {
+        BanglaEngine_ResetContext(engine);
+        BanglaEngine_CommitWord(engine, "কী");
+        CandidateList p1;
+        BanglaEngine_GetNextWordPredictions(engine, &p1);
+        bool found_khobor = false;
+        for (uint32_t i = 0; i < p1.count; i++) {
+            if (std::string(p1.candidates[i].bengali_text) == "খবর") { found_khobor = true; break; }
+        }
+        ASSERT_TRUE(found_khobor, "Prediction after 'কী' contains 'খবর'");
+
+        BanglaEngine_ResetContext(engine);
+        BanglaEngine_CommitWord(engine, "শুভ");
+        CandidateList p2;
+        BanglaEngine_GetNextWordPredictions(engine, &p2);
+        bool found_sokal = false, found_bday = false;
+        for (uint32_t i = 0; i < p2.count; i++) {
+            if (std::string(p2.candidates[i].bengali_text) == "সকাল") found_sokal = true;
+            if (std::string(p2.candidates[i].bengali_text) == "জন্মদিন") found_bday = true;
+        }
+        ASSERT_TRUE(found_sokal || found_bday, "Prediction after 'শুভ' contains 'সকাল' or 'জন্মদিন'");
+
+        BanglaEngine_ResetContext(engine);
+        BanglaEngine_CommitWord(engine, "ধন্যবাদ");
+        CandidateList p3;
+        BanglaEngine_GetNextWordPredictions(engine, &p3);
+        bool found_bhai = false;
+        for (uint32_t i = 0; i < p3.count; i++) {
+            if (std::string(p3.candidates[i].bengali_text) == "ভাই") found_bhai = true;
+        }
+        ASSERT_TRUE(found_bhai, "Prediction after 'ধন্যবাদ' contains 'ভাই'");
+    }
+
+    // =========================================================================
+    // SUITE 10: MIXED BANGLA + ENGLISH TYPING RETENTION
+    // =========================================================================
+    std::cout << "\n--- Suite 10: Mixed Bangla + English Typing Retention ---\n";
+    {
+        BanglaEngine_SetComposition(engine, "wifi");
+        CandidateList c_wifi;
+        BanglaEngine_GetCandidates(engine, &c_wifi);
+        bool has_raw_eng = false;
+        for (uint32_t i = 0; i < c_wifi.count; i++) {
+            if (std::string(c_wifi.candidates[i].bengali_text) == "wifi") { has_raw_eng = true; break; }
+        }
+        ASSERT_TRUE(has_raw_eng, "Mixed typing: exact English candidate 'wifi' preserved in candidate list");
+    }
+
+    // =========================================================================
+    // SUITE 11: TEACH MODE & PERSONAL LEARNING ISOLATION
+    // =========================================================================
+    std::cout << "\n--- Suite 11: Teach Mode & Personal Learning Isolation ---\n";
+    {
+        // Add an explicit user word
+        BanglaEngine_AddUserWord(engine, "mycustomword", "আমারশব্দ");
+        // Add a learned word
+        BanglaEngine_LearnWord(engine, "learnedkey", "শেখাফল");
+
+        // Clear only learned data
+        size_t cleared = BanglaEngine_ClearLearnedData(engine);
+        ASSERT_TRUE(cleared >= 1, "ClearLearnedData removed auto-learned entries");
+
+        // Explicit user word must still exist!
+        CandidateList list_custom;
+        BanglaEngine_SetComposition(engine, "mycustomword");
+        BanglaEngine_GetCandidates(engine, &list_custom);
+        ASSERT_TRUE(list_custom.count > 0 && std::string(list_custom.candidates[0].bengali_text) == "আমারশব্দ",
+                    "Teach Mode: Explicit personal dictionary word preserved after clearing learned data");
+    }
+
     BanglaEngine_Destroy(engine);
 
     std::cout << "\n=========================================================\n";

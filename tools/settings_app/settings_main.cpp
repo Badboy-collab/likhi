@@ -72,6 +72,9 @@ enum SectionID {
 #define IDC_RADIO_MODE_AUTO   2029
 #define IDC_RADIO_MODE_TSF    2030
 #define IDC_RADIO_MODE_UNIV   2031
+#define IDC_CHK_ONLINE_SUG    2032
+#define IDC_CHK_PERS_LEARN    2033
+#define IDC_BTN_RESET_LEARN   2034
 #define WM_UPDATE_CHECK_DONE  (WM_APP + 20)
 
 struct AppSettings {
@@ -85,6 +88,8 @@ struct AppSettings {
     bool word_prediction = true;
     bool show_eng_candidate = true;
     bool auto_correct = false;
+    bool online_suggestions = false; // Hybrid suggestion enhancement (privacy-first, optional)
+    bool personal_learning = true;   // Personal learning from user selections
     int max_candidates = 5;
     int theme = 0;
     // 0 = automatic (TSF where it works, universal elsewhere), 1 = tsf_only, 2 = universal
@@ -167,6 +172,10 @@ void LoadSettings() {
         if (line.find("\"word_prediction\": false") != std::string::npos) g_settings.word_prediction = false;
         if (line.find("\"show_eng_candidate\": false") != std::string::npos) g_settings.show_eng_candidate = false;
         if (line.find("\"fuzzy_spelling\": false") != std::string::npos) g_settings.fuzzy_spelling = false;
+        if (line.find("\"online_suggestions\": true") != std::string::npos) g_settings.online_suggestions = true;
+        if (line.find("\"online_suggestions\": false") != std::string::npos) g_settings.online_suggestions = false;
+        if (line.find("\"personal_learning\": false") != std::string::npos) g_settings.personal_learning = false;
+        if (line.find("\"personal_learning\": true") != std::string::npos) g_settings.personal_learning = true;
         if (line.find("\"theme\": 1") != std::string::npos) g_settings.theme = 1;
         if (line.find("\"theme\": 2") != std::string::npos) g_settings.theme = 2;
         if (line.find("\"input_mode\": \"tsf_only\"") != std::string::npos) g_settings.input_mode = 1;
@@ -189,6 +198,8 @@ void SaveSettings() {
     out << "  \"word_prediction\": " << (g_settings.word_prediction ? "true" : "false") << ",\n";
     out << "  \"show_eng_candidate\": " << (g_settings.show_eng_candidate ? "true" : "false") << ",\n";
     out << "  \"auto_correct\": " << (g_settings.auto_correct ? "true" : "false") << ",\n";
+    out << "  \"online_suggestions\": " << (g_settings.online_suggestions ? "true" : "false") << ",\n";
+    out << "  \"personal_learning\": " << (g_settings.personal_learning ? "true" : "false") << ",\n";
     out << "  \"max_candidates\": " << g_settings.max_candidates << ",\n";
     out << "  \"theme\": " << g_settings.theme << ",\n";
     out << "  \"input_mode\": \""
@@ -342,31 +353,36 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             HWND hS_Title = CreateWindowW(L"STATIC", L"স্মার্ট সাজেশন ও শব্দ অনুমান", WS_CHILD | SS_LEFT, 250, 30, 520, 28, hWnd, NULL, NULL, NULL);
             SendMessage(hS_Title, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
-            HWND hChkSug = CreateWindowW(L"BUTTON", L"টাইপ করার সময় সাজেশন বার প্রদর্শন করুন", WS_CHILD | BS_AUTOCHECKBOX, 250, 75, 520, 24, hWnd, (HMENU)IDC_CHK_SUGGESTIONS, NULL, NULL);
+            HWND hChkSug = CreateWindowW(L"BUTTON", L"টাইপ করার সময় সাজেশন বার প্রদর্শন করুন", WS_CHILD | BS_AUTOCHECKBOX, 250, 66, 520, 24, hWnd, (HMENU)IDC_CHK_SUGGESTIONS, NULL, NULL);
             SendMessage(hChkSug, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkSug, BM_SETCHECK, g_settings.show_suggestions ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hChkPred = CreateWindowW(L"BUTTON", L"প্রাসঙ্গিক পরবর্তী শব্দ অনুমান (Contextual Prediction)", WS_CHILD | BS_AUTOCHECKBOX, 250, 110, 520, 24, hWnd, (HMENU)IDC_CHK_PREDICTION, NULL, NULL);
+            HWND hChkPred = CreateWindowW(L"BUTTON", L"প্রাসঙ্গিক পরবর্তী শব্দ অনুমান (Contextual Prediction)", WS_CHILD | BS_AUTOCHECKBOX, 250, 94, 520, 24, hWnd, (HMENU)IDC_CHK_PREDICTION, NULL, NULL);
             SendMessage(hChkPred, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkPred, BM_SETCHECK, g_settings.word_prediction ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hChkEngCand = CreateWindowW(L"BUTTON", L"সাজেশন বারে আসল ইংরেজি রূপ বিকল্প হিসেবে রাখুন (Original English)", WS_CHILD | BS_AUTOCHECKBOX, 250, 145, 520, 24, hWnd, (HMENU)IDC_CHK_ENG_CANDIDATE, NULL, NULL);
+            HWND hChkEngCand = CreateWindowW(L"BUTTON", L"সাজেশন বারে আসল ইংরেজি রূপ বিকল্প হিসেবে রাখুন (Original English)", WS_CHILD | BS_AUTOCHECKBOX, 250, 122, 520, 24, hWnd, (HMENU)IDC_CHK_ENG_CANDIDATE, NULL, NULL);
             SendMessage(hChkEngCand, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkEngCand, BM_SETCHECK, g_settings.show_eng_candidate ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hChkAuto = CreateWindowW(L"BUTTON", L"অটো-কারেক্ট চালু করুন (Auto Correct)", WS_CHILD | BS_AUTOCHECKBOX, 250, 185, 520, 24, hWnd, (HMENU)IDC_CHK_AUTOCORRECT, NULL, NULL);
+            HWND hChkAuto = CreateWindowW(L"BUTTON", L"অটো-কারেক্ট চালু করুন (Auto Correct)", WS_CHILD | BS_AUTOCHECKBOX, 250, 150, 520, 24, hWnd, (HMENU)IDC_CHK_AUTOCORRECT, NULL, NULL);
             SendMessage(hChkAuto, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkAuto, BM_SETCHECK, g_settings.auto_correct ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hS_Expl = CreateWindowW(L"STATIC", L"💡 Auto Correct বন্ধ থাকলে Likhi শুধু সাজেশন দেখাবে, নিজে থেকে আপনার লেখা পরিবর্তন করবে না।", WS_CHILD | SS_LEFT, 250, 215, 520, 36, hWnd, NULL, NULL, NULL);
-            SendMessage(hS_Expl, WM_SETFONT, (WPARAM)hFontSub, TRUE);
+            HWND hChkOnline = CreateWindowW(L"BUTTON", L"অনলাইন সাজেশন সহায়তা (Online Suggestions — ক্লাউড ব্যাকআপ)", WS_CHILD | BS_AUTOCHECKBOX, 250, 178, 520, 24, hWnd, (HMENU)IDC_CHK_ONLINE_SUG, NULL, NULL);
+            SendMessage(hChkOnline, WM_SETFONT, (WPARAM)hFontBody, TRUE);
+            SendMessage(hChkOnline, BM_SETCHECK, g_settings.online_suggestions ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hS_CandLbl = CreateWindowW(L"STATIC", L"প্রস্তাবিত শব্দের সংখ্যা:", WS_CHILD | SS_LEFT, 250, 265, 150, 24, hWnd, NULL, NULL, NULL);
+            HWND hChkLearn = CreateWindowW(L"BUTTON", L"ব্যক্তিগত পছন্দ মনে রাখুন (Personal Learning — পছন্দের বানান শীর্ষে আসবে)", WS_CHILD | BS_AUTOCHECKBOX, 250, 206, 520, 24, hWnd, (HMENU)IDC_CHK_PERS_LEARN, NULL, NULL);
+            SendMessage(hChkLearn, WM_SETFONT, (WPARAM)hFontBody, TRUE);
+            SendMessage(hChkLearn, BM_SETCHECK, g_settings.personal_learning ? BST_CHECKED : BST_UNCHECKED, 0);
+
+            HWND hS_CandLbl = CreateWindowW(L"STATIC", L"প্রস্তাবিত শব্দের সংখ্যা:", WS_CHILD | SS_LEFT, 250, 238, 150, 24, hWnd, NULL, NULL, NULL);
             SendMessage(hS_CandLbl, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hR3 = CreateWindowW(L"BUTTON", L"3", WS_CHILD | BS_AUTORADIOBUTTON | WS_GROUP, 400, 265, 45, 24, hWnd, (HMENU)IDC_RADIO_CAND3, NULL, NULL);
-            HWND hR4 = CreateWindowW(L"BUTTON", L"4", WS_CHILD | BS_AUTORADIOBUTTON, 455, 265, 45, 24, hWnd, (HMENU)IDC_RADIO_CAND4, NULL, NULL);
-            HWND hR5 = CreateWindowW(L"BUTTON", L"5", WS_CHILD | BS_AUTORADIOBUTTON, 510, 265, 45, 24, hWnd, (HMENU)IDC_RADIO_CAND5, NULL, NULL);
+            HWND hR3 = CreateWindowW(L"BUTTON", L"3", WS_CHILD | BS_AUTORADIOBUTTON | WS_GROUP, 400, 238, 45, 24, hWnd, (HMENU)IDC_RADIO_CAND3, NULL, NULL);
+            HWND hR4 = CreateWindowW(L"BUTTON", L"4", WS_CHILD | BS_AUTORADIOBUTTON, 455, 238, 45, 24, hWnd, (HMENU)IDC_RADIO_CAND4, NULL, NULL);
+            HWND hR5 = CreateWindowW(L"BUTTON", L"5", WS_CHILD | BS_AUTORADIOBUTTON, 510, 238, 45, 24, hWnd, (HMENU)IDC_RADIO_CAND5, NULL, NULL);
 
             SendMessage(hR3, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hR4, WM_SETFONT, (WPARAM)hFontBody, TRUE);
@@ -376,16 +392,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             else if (g_settings.max_candidates == 4) SendMessage(hR4, BM_SETCHECK, BST_CHECKED, 0);
             else SendMessage(hR5, BM_SETCHECK, BST_CHECKED, 0);
 
+            HWND hBtnResetLearn = CreateWindowW(L"BUTTON", L"শেখা অভ্যাস রিসেট করুন (Reset Learned Habits)", WS_CHILD | BS_PUSHBUTTON, 250, 272, 300, 30, hWnd, (HMENU)IDC_BTN_RESET_LEARN, NULL, NULL);
+            SendMessage(hBtnResetLearn, WM_SETFONT, (WPARAM)hFontBold, TRUE);
+
+            HWND hS_Expl = CreateWindowW(L"STATIC", L"💡 গোপনীয়তা গ্যারান্টি: Likhi শতভাগ অফলাইন-ফার্স্ট। পাসওয়ার্ড বা স্পর্শকাতর তথ্য কখনো ইন্টারনেটে যায় না।", WS_CHILD | SS_LEFT, 250, 312, 520, 36, hWnd, NULL, NULL, NULL);
+            SendMessage(hS_Expl, WM_SETFONT, (WPARAM)hFontSub, TRUE);
+
             g_section_controls[SEC_SUGGESTIONS].push_back(hS_Title);
             g_section_controls[SEC_SUGGESTIONS].push_back(hChkSug);
             g_section_controls[SEC_SUGGESTIONS].push_back(hChkPred);
             g_section_controls[SEC_SUGGESTIONS].push_back(hChkEngCand);
             g_section_controls[SEC_SUGGESTIONS].push_back(hChkAuto);
-            g_section_controls[SEC_SUGGESTIONS].push_back(hS_Expl);
+            g_section_controls[SEC_SUGGESTIONS].push_back(hChkOnline);
+            g_section_controls[SEC_SUGGESTIONS].push_back(hChkLearn);
             g_section_controls[SEC_SUGGESTIONS].push_back(hS_CandLbl);
             g_section_controls[SEC_SUGGESTIONS].push_back(hR3);
             g_section_controls[SEC_SUGGESTIONS].push_back(hR4);
             g_section_controls[SEC_SUGGESTIONS].push_back(hR5);
+            g_section_controls[SEC_SUGGESTIONS].push_back(hBtnResetLearn);
+            g_section_controls[SEC_SUGGESTIONS].push_back(hS_Expl);
 
             // ==============================================================
             // SECTION 3: BANGLISH
@@ -514,7 +539,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             HWND hAdv_Title = CreateWindowW(L"STATIC", L"উন্নত সেটিংস ও ডায়াগনস্টিকস", WS_CHILD | SS_LEFT, 250, 30, 520, 28, hWnd, NULL, NULL, NULL);
             SendMessage(hAdv_Title, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
-            HWND hAdv_Desc = CreateWindowW(L"STATIC", L"• মেমোরি পদচিহ্ন: ~১৩.১ MB (অত্যন্ত হালকা)\n• টাইপিং লেটেন্সি: ~৪০ মাইক্রোসেকেন্ড / কীস্ট্রোক\n• ডিকশনারি এন্ট্রি: ৫২,৪১২টি ভ্যালিডেটেড শব্দ\n• আর্কিটেকচার: নেটিভ C++20 + Windows TSF", WS_CHILD | SS_LEFT, 250, 75, 520, 120, hWnd, NULL, NULL, NULL);
+            HWND hAdv_Desc = CreateWindowW(L"STATIC", L"• মেমোরি পদচিহ্ন: ~১৩.১ MB (অত্যন্ত হালকা)\n• টাইপিং লেটেন্সি: ~৪০ মাইক্রোসেকেন্ড / কীস্ট্রোক\n• ডিকশনারি এন্ট্রি: ৮০,২৮৯টি ভ্যালিডেটেড শব্দ (Verified Full Lexicon)\n• আর্কিটেকচার: হাইব্রিড ইন্টেলিজেন্স + নেটিভ C++20 + Windows TSF + Universal Mode", WS_CHILD | SS_LEFT, 250, 75, 520, 120, hWnd, NULL, NULL, NULL);
             SendMessage(hAdv_Desc, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
             HWND hBtnReset = CreateWindowW(L"BUTTON", L"ফ্যাক্টরি রিসেট করুন (Reset to Defaults)", WS_CHILD | BS_PUSHBUTTON, 250, 210, 280, 36, hWnd, (HMENU)IDC_BTN_RESET_DEF, NULL, NULL);
@@ -702,6 +727,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 g_settings.word_prediction = (SendMessage(hChkPred, BM_GETCHECK, 0, 0) == BST_CHECKED);
                 g_settings.show_eng_candidate = (SendMessage(hChkEngCand, BM_GETCHECK, 0, 0) == BST_CHECKED);
                 g_settings.auto_correct = (SendMessage(hChkAuto, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                g_settings.online_suggestions = (SendMessage(GetDlgItem(hWnd, IDC_CHK_ONLINE_SUG), BM_GETCHECK, 0, 0) == BST_CHECKED);
+                g_settings.personal_learning = (SendMessage(GetDlgItem(hWnd, IDC_CHK_PERS_LEARN), BM_GETCHECK, 0, 0) == BST_CHECKED);
 
                 if (SendMessage(GetDlgItem(hWnd, IDC_RADIO_CAND3), BM_GETCHECK, 0, 0) == BST_CHECKED) g_settings.max_candidates = 3;
                 else if (SendMessage(GetDlgItem(hWnd, IDC_RADIO_CAND4), BM_GETCHECK, 0, 0) == BST_CHECKED) g_settings.max_candidates = 4;
@@ -719,6 +746,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
                 SaveSettings();
                 SetWindowTextW(hLblStatus, L"✅ সেটিংস সফলভাবে সংরক্ষিত হয়েছে!");
+            } else if (wmId == IDC_BTN_RESET_LEARN) {
+                std::wstring dir = GetConfigDirectory();
+                std::wstring db_file = dir + L"\\user_learning.db";
+                std::wstring bg_file = dir + L"\\user_bigrams.tsv";
+                DeleteFileW(db_file.c_str());
+                DeleteFileW(bg_file.c_str());
+                SetWindowTextW(hLblStatus, L"🧹 শেখা অভ্যাস রিসেট করা হয়েছে (অভিধান অক্ষত রয়েছে)।");
+                MessageBoxW(hWnd, L"ব্যক্তিগত শেখা অভ্যাস সফলভাবে রিসেট করা হয়েছে।\n\nআপনার নিজস্ব কাস্টম শব্দভাণ্ডার (Personal Dictionary) সম্পূর্ণ নিরাপদ ও অক্ষত রয়েছে।", L"Likhi Personal Learning", MB_OK | MB_ICONINFORMATION);
             } else if (wmId == IDC_BTN_CLOSE) {
                 PostQuitMessage(0);
             } else if (wmId == IDC_BTN_ADD_WORD) {

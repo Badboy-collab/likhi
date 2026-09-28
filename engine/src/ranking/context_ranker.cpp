@@ -134,6 +134,46 @@ void ContextRanker::LoadDefaultBigrams() {
     AddBigram("খুব", "সুন্দর", 9000);
     AddBigram("খুব", "ভালো", 9000);
     AddBigram("খুব", "দ্রুত", 8500);
+
+    // Modern Conversational & Communicative Bigrams
+    AddBigram("কী", "খবর", 9200);
+    AddBigram("কী", "করছ", 8800);
+    AddBigram("কী", "হয়েছে", 8800);
+    AddBigram("শুভ", "সকাল", 9200);
+    AddBigram("শুভ", "রাত্রি", 9000);
+    AddBigram("শুভ", "জন্মদিন", 9500);
+    AddBigram("শুভ", "কামনা", 8800);
+    AddBigram("ধন্যবাদ", "ভাই", 9000);
+    AddBigram("ধন্যবাদ", "আপনাকে", 9200);
+    AddBigram("ধন্যবাদ", "তোমাকে", 8800);
+    AddBigram("কোথায়", "যাবে", 8500);
+    AddBigram("কোথায়", "আছো", 8800);
+    AddBigram("কোথায়", "আছেন", 8600);
+    AddBigram("কালকে", "আসব", 8500);
+    AddBigram("কালকে", "যাব", 8500);
+    AddBigram("কালকে", "দেখা", 8200);
+    AddBigram("দেখা", "হবে", 9200);
+    AddBigram("কথা", "বলব", 8800);
+    AddBigram("মনে", "হয়", 9200);
+    AddBigram("মনে", "পড়ে", 8500);
+    AddBigram("সাহায্য", "চাই", 8500);
+    AddBigram("সাহায্য", "করব", 8500);
+    AddBigram("চেষ্টা", "করব", 9000);
+    AddBigram("দেখতে", "পাচ্ছি", 8800);
+    AddBigram("শুনতে", "পাচ্ছি", 8500);
+    AddBigram("বলতে", "পারি", 8500);
+    AddBigram("দেরি", "হবে", 8500);
+    AddBigram("সময়", "মতো", 8500);
+    AddBigram("তাড়াতাড়ি", "আসো", 8500);
+    AddBigram("একটু", "অপেক্ষা", 8500);
+    AddBigram("অপেক্ষা", "করুন", 8800);
+    AddBigram("অপেক্ষা", "করো", 8500);
+    AddBigram("ভালো", "থাকবেন", 9000);
+    AddBigram("ভালো", "থেকো", 8800);
+    AddBigram("মোবাইল", "নাম্বার", 8500);
+    AddBigram("কম্পিউটার", "চালু", 8000);
+    AddBigram("ইন্টারনেট", "সংযোগ", 8500);
+    AddBigram("ভিডিও", "কল", 8500);
 }
 
 float ContextRanker::ComputeBigramProb(const std::string& prev_word, const std::string& cur_word) const {
