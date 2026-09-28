@@ -2,6 +2,7 @@
 #include "unicode/bangla_unicode.h"
 #include "transliteration/phonetic_parser.h"
 #include "transliteration/fuzzy_normalizer.h"
+#include "transliteration/bangla_morphology.h"
 #include "dictionary/lexicon_trie.h"
 #include "ranking/context_ranker.h"
 #include "personal_dict/personal_dictionary.h"
@@ -330,6 +331,77 @@ void BanglaEngine_GetCandidates(BanglaEngine* engine, CandidateList* out_list) {
         }
     }
 
+    // 1d. Banglish Morphology layer:
+    //     Handles hyphenated stems (e.g. Google-er -> গুগলের, pele-o -> পেলেও,
+    //     Likhi-ke -> লিখিকে, office-e -> অফিসে, desh-ke -> দেশকে, manush-er -> মানুষের)
+    //     and compound forms (e.g. geleo -> গেলেও, korleo -> করলেও).
+    std::vector<std::string> morphology_overrides;
+    {
+        std::string morph_stem, morph_suffix;
+        bool is_morph = bangla::BanglaMorphology::DecomposeHyphenatedToken(engine->composition, morph_stem, morph_suffix);
+        if (!is_morph) {
+            is_morph = bangla::BanglaMorphology::DecomposeCompoundToken(engine->composition, morph_stem, morph_suffix);
+        }
+
+        if (is_morph && !morph_stem.empty() && !morph_suffix.empty()) {
+            std::string lower_stem = morph_stem;
+            std::transform(lower_stem.begin(), lower_stem.end(), lower_stem.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+            std::vector<std::string> stem_bengali_candidates;
+
+            // 1. Exact roman matches in lexicon for stem (e.g. google -> গুগল, office -> অফিস, desh -> দেশ, manush -> মানুষ)
+            auto exact_stem_matches = engine->lexicon.SearchRoman(lower_stem, 5);
+            for (const auto& em : exact_stem_matches) {
+                if (std::find(stem_bengali_candidates.begin(), stem_bengali_candidates.end(), em.bengali_word) == stem_bengali_candidates.end()) {
+                    stem_bengali_candidates.push_back(em.bengali_word);
+                }
+            }
+
+            // Also check raw-case stem
+            if (lower_stem != morph_stem) {
+                auto raw_stem_matches = engine->lexicon.SearchRoman(morph_stem, 5);
+                for (const auto& rm : raw_stem_matches) {
+                    if (std::find(stem_bengali_candidates.begin(), stem_bengali_candidates.end(), rm.bengali_word) == stem_bengali_candidates.end()) {
+                        stem_bengali_candidates.push_back(rm.bengali_word);
+                    }
+                }
+            }
+
+            // 2. Fuzzy matches for stem
+            auto fuzzy_stem = engine->lexicon.SearchRomanFuzzy(morph_stem, engine->fuzzy_normalizer, 3);
+            for (const auto& fm : fuzzy_stem) {
+                if (std::find(stem_bengali_candidates.begin(), stem_bengali_candidates.end(), fm.bengali_word) == stem_bengali_candidates.end()) {
+                    stem_bengali_candidates.push_back(fm.bengali_word);
+                }
+            }
+
+            // 3. Phonetic parse of stem
+            auto parsed_stem = engine->phonetic_parser.Parse(morph_stem, 3);
+            for (const auto& ps : parsed_stem) {
+                if (std::find(stem_bengali_candidates.begin(), stem_bengali_candidates.end(), ps.text) == stem_bengali_candidates.end()) {
+                    stem_bengali_candidates.push_back(ps.text);
+                }
+            }
+
+            // Attach suffix to each stem candidate
+            for (const auto& bstem : stem_bengali_candidates) {
+                std::string affixed = bangla::BanglaMorphology::AttachSuffix(bstem, morph_suffix);
+                if (affixed.empty()) continue;
+
+                if (std::find(morphology_overrides.begin(), morphology_overrides.end(), affixed) == morphology_overrides.end()) {
+                    morphology_overrides.push_back(affixed);
+                }
+
+                bangla::PhoneticCandidate mpc;
+                mpc.text = affixed;
+                mpc.score = 0.98f;
+                mpc.rule_path = "morphology";
+                phonetic_cands.push_back(mpc);
+            }
+        }
+    }
+
     // 2. Identify preceding committed word for context
     std::string prev_word = engine->sentence_history.empty() ? "" : engine->sentence_history.back();
 
@@ -478,6 +550,14 @@ void BanglaEngine_GetCandidates(BanglaEngine* engine, CandidateList* out_list) {
     std::transform(lower_composition.begin(), lower_composition.end(), lower_composition.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     std::vector<std::string> override_texts;
+
+    // Prioritize morphology overrides first (Google-er -> গুগলের, pele-o -> পেলেও, etc.)
+    for (const auto& mo : morphology_overrides) {
+        if (std::find(override_texts.begin(), override_texts.end(), mo) == override_texts.end()) {
+            override_texts.push_back(mo);
+        }
+    }
+
     if (!lower_composition.empty()) {
         auto exact = engine->lexicon.SearchRoman(lower_composition, 8);
         for (const auto& rm : exact) {

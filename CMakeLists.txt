@@ -17,6 +17,8 @@ set(ENGINE_SOURCES
     engine/src/unicode/bangla_unicode.cpp
     engine/src/transliteration/phonetic_parser.cpp
     engine/src/transliteration/fuzzy_normalizer.cpp
+    engine/src/transliteration/bangla_morphology.cpp
+    engine/src/hybrid/hybrid_brain.cpp
     engine/src/dictionary/lexicon_trie.cpp
     engine/src/ranking/context_ranker.cpp
     engine/src/personal_dict/personal_dictionary.cpp
@@ -119,6 +121,18 @@ target_link_libraries(unicode_bengali_tests PRIVATE bangla_engine_static)
 # Personal Learning Engine Test Target (usage ranking + file persistence)
 add_executable(test_learning tests/unit/test_learning.cpp)
 target_link_libraries(test_learning PRIVATE bangla_engine_static)
+
+# Morphology Regression Test Target (Release Blocker 1)
+add_executable(test_morphology tests/unit/test_morphology.cpp)
+target_link_libraries(test_morphology PRIVATE bangla_engine_static)
+
+# Hybrid Suggestion Intelligence Test Target
+add_executable(test_hybrid_brain tests/unit/test_hybrid_brain.cpp)
+target_link_libraries(test_hybrid_brain PRIVATE bangla_engine_static)
+
+# Suggestion Popup Quality Acceptance Suite
+add_executable(test_popup_quality tests/test_popup_quality.cpp)
+target_link_libraries(test_popup_quality PRIVATE bangla_engine_static)
 
 # TSF Integration Test Target
 add_executable(test_tsf_integration
@@ -354,6 +368,9 @@ else()
     target_compile_options(bangla_settings PRIVATE -Wall -Wextra)
     target_compile_options(benchmark_perf PRIVATE -Wall -Wextra -O3)
     target_compile_options(inspect_unicode PRIVATE -Wall -Wextra)
+    target_compile_options(test_morphology PRIVATE -Wall -Wextra)
+    target_compile_options(test_hybrid_brain PRIVATE -Wall -Wextra)
+    target_compile_options(test_popup_quality PRIVATE -Wall -Wextra)
 
     # Static linking for standalone DLL and EXEs without MinGW DLL runtime requirements
     target_link_options(bangla_tsf PRIVATE -static -static-libgcc -static-libstdc++)
@@ -363,6 +380,9 @@ else()
     target_link_options(test_runner PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(unicode_bengali_tests PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_learning PRIVATE -static -static-libgcc -static-libstdc++)
+    target_link_options(test_morphology PRIVATE -static -static-libgcc -static-libstdc++)
+    target_link_options(test_hybrid_brain PRIVATE -static -static-libgcc -static-libstdc++)
+    target_link_options(test_popup_quality PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_tsf_integration PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_p0_keyboard PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_key_policy PRIVATE -static -static-libgcc -static-libstdc++)
