@@ -1,6 +1,7 @@
 #include "../include/bangla_engine.h"
 #include "unicode/bangla_unicode.h"
 #include "transliteration/phonetic_parser.h"
+#include "transliteration/fuzzy_normalizer.h"
 #include "dictionary/lexicon_trie.h"
 #include "ranking/context_ranker.h"
 #include "personal_dict/personal_dictionary.h"
@@ -66,6 +67,7 @@ struct BanglaEngine {
     bangla::LexiconTrie lexicon;
     bangla::ContextRanker context_ranker;
     bangla::PersonalDictionary personal_dict;
+    bangla::FuzzyNormalizer fuzzy_normalizer;
 
     // EngineConfig only stores raw const char* pointers; whoever passed the
     // paths may free them right after Create() returns (the CompositionManager
@@ -262,6 +264,71 @@ void BanglaEngine_GetCandidates(BanglaEngine* engine, CandidateList* out_list) {
 
     // 1. Generate phonetic candidates via beam search
     std::vector<bangla::PhoneticCandidate> phonetic_cands = engine->phonetic_parser.Parse(engine->composition, 8);
+
+    // 1b. Beam pre-filter: in production (large lexicon), drop phonetic candidates
+    //     that are not real words IF we have at least one real-word match from the
+    //     lexicon. This prevents raw beam garbage (e.g. ঢেটেটো, তাকয়া) from
+    //     appearing in the suggestion bar above correct spellings.
+    //     Short tokens (≤3 Unicode codepoints) are exempt — they may be particles.
+    if (engine->trust_filter_enabled_ && !phonetic_cands.empty()) {
+        bool any_lexicon_match = false;
+        for (const auto& pc : phonetic_cands) {
+            if (engine->lexicon.Find(pc.text)) { any_lexicon_match = true; break; }
+        }
+        // Also check fuzzy roman search for at least one match
+        if (!any_lexicon_match) {
+            auto fuzzy_matches = engine->lexicon.SearchRomanFuzzy(engine->composition,
+                                                                    engine->fuzzy_normalizer, 2);
+            if (!fuzzy_matches.empty()) any_lexicon_match = true;
+        }
+        if (any_lexicon_match) {
+            std::vector<bangla::PhoneticCandidate> filtered;
+            filtered.reserve(phonetic_cands.size());
+            for (const auto& pc : phonetic_cands) {
+                // Count Unicode codepoints (rough estimate for Bengali UTF-8)
+                size_t cp_estimate = 0;
+                for (size_t bi = 0; bi < pc.text.size(); ) {
+                    unsigned char c = static_cast<unsigned char>(pc.text[bi]);
+                    if (c < 0x80) { cp_estimate++; bi++; }
+                    else if ((c & 0xE0) == 0xC0) { cp_estimate++; bi += 2; }
+                    else if ((c & 0xF0) == 0xE0) { cp_estimate++; bi += 3; }
+                    else { cp_estimate++; bi += 4; }
+                }
+                bool is_short = cp_estimate <= 3;   // particles exempt
+                bool in_lexicon = engine->lexicon.Find(pc.text) != nullptr;
+                if (in_lexicon || is_short) {
+                    filtered.push_back(pc);
+                }
+            }
+            if (!filtered.empty()) {
+                phonetic_cands = std::move(filtered);
+            }
+            // else: all beam candidates were non-words — keep them as fallback
+        }
+    }
+
+    // 1c. Fuzzy roman search: add lexicon matches for normalized variants
+    //     (e.g. battary → battery → ব্যাটারি, somossa → somossha → সমস্যা)
+    {
+        auto fuzzy_matches = engine->lexicon.SearchRomanFuzzy(engine->composition,
+                                                               engine->fuzzy_normalizer, 5);
+        for (const auto& fm : fuzzy_matches) {
+            // Only add if not already present in phonetic_cands
+            bool already_present = false;
+            for (const auto& pc : phonetic_cands) {
+                if (pc.text == fm.bengali_word) { already_present = true; break; }
+            }
+            if (!already_present) {
+                bangla::PhoneticCandidate fpc;
+                fpc.text = fm.bengali_word;
+                // Give fuzzy matches a high phonetic score — they come from the
+                // curated override dictionary so are presumed correct
+                fpc.score = 0.90f;
+                fpc.rule_path = "fuzzy_roman";
+                phonetic_cands.push_back(fpc);
+            }
+        }
+    }
 
     // 2. Identify preceding committed word for context
     std::string prev_word = engine->sentence_history.empty() ? "" : engine->sentence_history.back();
@@ -495,17 +562,76 @@ bool BanglaEngine_TransliterateSentence(BanglaEngine* engine, const char* roman_
             else trailing_punct = std::string(1, p) + trailing_punct;
         }
 
-        // Enclitic agglutination check
-        if (token == "e" && !committed.empty()) {
-            std::string prev = committed.back();
-            if (prev == "অফিস") {
-                committed.back() = "অফিসে" + trailing_punct;
+        // Enclitic agglutination check (generalized):
+        // If the current token is a standalone suffix particle and the previous
+        // committed word is a real Bengali word, try to append the suffix.
+        // Bengali locative suffix -এ/ে: token "e" after a word ending in consonant
+        // Bengali genitive suffix -র: token "r" after a word ending in vowel-kar
+        // Bengali topic marker -টা/টি: handled by the lexicon via direct lookup
+        if (!committed.empty() && committed.back().size() >= 3) {
+            // Get the last UTF-8 codepoint of the previous committed word
+            // (strip any trailing_punct that was already appended)
+            std::string prev_word_clean = committed.back();
+            // Remove trailing punctuation strings we appended earlier
+            while (!prev_word_clean.empty() &&
+                   (prev_word_clean.back() == ' ' ||
+                    static_cast<unsigned char>(prev_word_clean.back()) < 0x80)) {
+                // ASCII punctuation at end — strip one char at a time
+                unsigned char last = static_cast<unsigned char>(prev_word_clean.back());
+                if (last >= 0x80) break;
+                prev_word_clean.pop_back();
+            }
+
+            // Get last 3 bytes (= last Bengali codepoint for most Bengali chars)
+            std::string last3;
+            if (prev_word_clean.size() >= 3) {
+                last3 = prev_word_clean.substr(prev_word_clean.size() - 3);
+            }
+            // Bengali consonants end a word in a specific range of codepoints.
+            // The hasant (্ = 0xE0 0xA7 0x8D) or a consonant followed by hasant
+            // indicates a word ending in a consonant cluster. We use a simpler
+            // heuristic: if the last codepoint is NOT a kar/matras vowel sign
+            // (কার range: 0x09BE–0x09CC, UTF-8: 0xE0 0xA6 0xBE to 0xE0 0xA7 0x8C),
+            // the word can take the locative ে (KAR_E = 0x09CB, UTF-8: E0 A7 8B).
+            // Matras/kar codepoints in UTF-8 (3 bytes: E0 A6/A7 xx):
+            // আ-কার (0x09BE) = E0 A6 BE
+            // ি (0x09BF) = E0 A6 BF   ী (0x09C0) = E0 A7 80
+            // ু (0x09C1) = E0 A7 81   ূ (0x09C2) = E0 A7 82
+            // ে (0x09CB) = E0 A7 8B   ৈ (0x09CC) = E0 A7 8C (oi-kar)
+            // ো (0x09CB preceded by আ-কার combination → two chars)
+            // Hasant ্ (0x09CD) = E0 A7 8D
+
+            bool ends_in_kar = false;
+            if (last3.size() == 3) {
+                unsigned char b0 = static_cast<unsigned char>(last3[0]);
+                unsigned char b1 = static_cast<unsigned char>(last3[1]);
+                unsigned char b2 = static_cast<unsigned char>(last3[2]);
+                if (b0 == 0xE0) {
+                    // Check kar range: A6 BE–BF, A7 80–8C
+                    if (b1 == 0xA6 && (b2 == 0xBE || b2 == 0xBF)) ends_in_kar = true;
+                    if (b1 == 0xA7 && b2 >= 0x80 && b2 <= 0x8C) ends_in_kar = true;
+                }
+            }
+
+            if (token == "e" && !ends_in_kar) {
+                // Append locative ে
+                const std::string e_kar = "\xE0\xA7\x87"; // ে
+                committed.back() = prev_word_clean + e_kar + trailing_punct;
                 continue;
-            } else if (prev == "দেশ") {
-                committed.back() = "দেশে" + trailing_punct;
+            } else if (token == "r" && ends_in_kar) {
+                // Append genitive র (after vowel-ending words)
+                const std::string ra = "\xE0\xA6\xB0"; // র
+                committed.back() = prev_word_clean + ra + trailing_punct;
                 continue;
-            } else if (prev == "কাজ") {
-                committed.back() = "কাজে" + trailing_punct;
+            } else if (token == "te" && !ends_in_kar) {
+                // Append instrumental তে
+                const std::string te = "\xE0\xA6\xA4\xE0\xA7\x87"; // তে
+                committed.back() = prev_word_clean + te + trailing_punct;
+                continue;
+            } else if (token == "ke" && !ends_in_kar) {
+                // Append accusative কে
+                const std::string ke = "\xE0\xA6\x95\xE0\xA7\x87"; // কে
+                committed.back() = prev_word_clean + ke + trailing_punct;
                 continue;
             }
         }

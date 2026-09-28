@@ -49,6 +49,7 @@ public:
 
     // Updates cache timestamp and dismissed version
     static void RecordCheckTimestamp();
+    static std::wstring GetLastCheckTimeString();
     static void DismissVersion(const std::string& version);
     static bool IsVersionDismissed(const std::string& version);
 

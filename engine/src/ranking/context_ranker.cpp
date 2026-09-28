@@ -227,15 +227,15 @@ std::vector<ScoredCandidate> ContextRanker::RankCandidates(
             sc.category_flags |= CANDIDATE_FLAG_CONTEXTUAL;
         }
 
-        float lexicon_presence_bonus = (sc.unigram_score > 0.0f) ? 0.15f : 0.0f;
-        float score = (0.35f * sc.phonetic_score) +
-                      (0.35f * sc.unigram_score) +
+        float lexicon_presence_bonus = (sc.unigram_score > 0.0f) ? 0.20f : 0.0f;
+        float score = (0.25f * sc.phonetic_score) +
+                      (0.45f * sc.unigram_score) +
                       (0.15f * sc.bigram_score) +
                       (0.15f * sc.personal_score) +
                       lexicon_presence_bonus;
 
         if (has_dictionary_match && sc.unigram_score <= 0.0f && sc.personal_score <= 0.0f) {
-            score *= 0.40f;
+            score *= 0.10f;  // strong suppression: beam-search non-words almost disappear
         }
 
         sc.final_score = std::min(1.0f, score);    }

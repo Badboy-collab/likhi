@@ -722,3 +722,116 @@ sakkho	সাক্ষ্য
 sakhkho	সাক্ষ্য
 shakkho	সাক্ষ্য
 shakkho	সাক্ষ্য
+
+# ============================================================
+# SUGGESTION QUALITY OVERHAUL — v2 additions (2026-09-28)
+# All entries required by user acceptance test cases + fuzzy
+# spelling variants that are too common to leave unresolved.
+# ============================================================
+
+# --- somossha/samsya variants (all -> সমস্যা) ---
+somossha	সমস্যা
+shomossa	সমস্যা
+shomossha	সমস্যা
+shomosya	সমস্যা
+shomoshya	সমস্যা
+somosya	সমস্যা
+somoshya	সমস্যা
+
+# --- পরিবর্তন (change) ---
+poriborton	পরিবর্তন
+poribarton	পরিবর্তন
+poribertan	পরিবর্তন
+poribortan	পরিবর্তন
+paribartan	পরিবর্তন
+poribortono	পরিবর্তন
+
+# --- আনোয়ার (name: Anwar) ---
+anwar	আনোয়ার
+anoyar	আনোয়ার
+anowar	আনোয়ার
+anuar	আনোয়ার
+anuwar	আনোয়ার
+
+# --- ব্যাটারি fuzzy spellings ---
+battary	ব্যাটারি
+batery	ব্যাটারি
+batari	ব্যাটারি
+battari	ব্যাটারি
+batteri	ব্যাটারি
+batarry	ব্যাটারি
+
+# --- ফ্যান (fan) ---
+fan	ফ্যান
+phan	ফ্যান
+fyan	ফ্যান
+
+# --- টেবিল (table) ---
+table	টেবিল
+tebil	টেবিল
+tabil	টেবিল
+teble	টেবিল
+
+# --- চেয়ার (chair) ---
+chair	চেয়ার
+cheyar	চেয়ার
+chear	চেয়ার
+cheyear	চেয়ার
+
+# --- কন্ট্রোল (control) ---
+control	কন্ট্রোল
+kontrol	কন্ট্রোল
+conrol	কন্ট্রোল
+kontrole	কন্ট্রোল
+
+# --- মাউস (mouse) reinforcement ---
+maus	মাউস
+maush	মাউস
+
+# --- পরিষ্কার (clean) ---
+porishkar	পরিষ্কার
+poriskar	পরিষ্কার
+porizkar	পরিষ্কার
+parishkar	পরিষ্কার
+porishkaar	পরিষ্কার
+
+# --- কম্পিউটার fuzzy ---
+compyuter	কম্পিউটার
+computar	কম্পিউটার
+compyutar	কম্পিউটার
+kompiutar	কম্পিউটার
+
+# --- ইন্টারনেট fuzzy ---
+intarnet	ইন্টারনেট
+internit	ইন্টারনেট
+intenet	ইন্টারনেট
+enternet	ইন্টারনেট
+
+# --- অফিস fuzzy ---
+ofis	অফিস
+ofice	অফিস
+ophis	অফিস
+
+# --- Common Bangla words reinforcement ---
+khusi	খুশি
+khushi	খুশি
+asha	আশা
+biggyan	বিজ্ঞান
+biggaan	বিজ্ঞান
+shongit	সংগীত
+sangit	সংগীত
+sobuj	সবুজ
+shobuj	সবুজ
+manish	মানুষ
+manosh	মানুষ
+
+# --- English loanwords in Bangla chat ---
+tension	টেনশন
+tenshon	টেনশন
+stress	স্ট্রেস
+challenge	চ্যালেঞ্জ
+career	ক্যারিয়ার
+freelance	ফ্রিল্যান্স
+investment	ইনভেস্টমেন্ট
+
+# --- END of v2 overrides ---

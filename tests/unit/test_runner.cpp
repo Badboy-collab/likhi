@@ -209,7 +209,7 @@ int main() {
         {"she ekhon shob bujhte parbe", "সে এখন সব বুঝতে পারবে", "conversational context"},
         {"bangladesh amar jonmobhumi", "বাংলাদেশ আমার জন্মভূমি", "statement context"},
         {"amader shwastho shocheton hote hobe", "আমাদের স্বাস্থ্য সচেতন হতে হবে", "health context"},
-        {"biggan o projukti amader desh ke notun rup dicche", "বিজ্ঞান ও প্রযুক্তি আমাদের দেশ কে নতুন রূপ দিচ্ছে", "tech context"},
+        {"biggan o projukti amader desh ke notun rup dicche", "বিজ্ঞান ও প্রযুক্তি আমাদের দেশকে নতুন রূপ দিচ্ছে", "tech context"},
         {"shob shikkhok o chhatro eksathe porikkha dicche", "সব শিক্ষক ও ছাত্র একসাথে পরীক্ষা দিচ্ছে", "education context"}
     };
 
@@ -346,6 +346,110 @@ int main() {
         ASSERT_EQUAL(top_text, sc.expected, sc.description);
     }
     std::cout << "  [PASS] All difficult linguistic stress test cases verified.\n";
+
+    // =========================================================================
+    // TEST SUITE 8: Suggestion Quality Regression (2026-09-28)
+    // Verifies ALL user-specified test cases + fuzzy spelling variants.
+    // Top-1 accuracy: correct word must be the #1 suggestion.
+    // Top-3 accuracy (marked *): correct word must be in top 3.
+    // =========================================================================
+    std::cout << "\n=== [TEST SUITE 8] Suggestion Quality Regression (Top-1 + Top-3) ===\n";
+
+    struct QualityCase {
+        std::string input;
+        std::string expected;
+        bool top3_acceptable;  // true = only require top-3, not top-1
+        std::string description;
+    };
+
+    // Helper lambda: check if expected appears in top-3
+    auto check_quality = [&](const QualityCase& qc) -> bool {
+        BanglaEngine_SetComposition(engine, qc.input.c_str());
+        CandidateList list;
+        BanglaEngine_GetCandidates(engine, &list);
+
+        // Top-1 check
+        if (list.count > 0 && list.candidates[0].bengali_text == qc.expected) {
+            return true;
+        }
+
+        // Top-3 check (only if acceptable)
+        if (qc.top3_acceptable) {
+            uint32_t check_limit = (list.count < 3) ? list.count : 3;
+            for (uint32_t i = 0; i < check_limit; i++) {
+                if (list.candidates[i].bengali_text == qc.expected) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    std::vector<QualityCase> quality_cases = {
+        // === Core user-specified test cases ===
+        {"ami",         "\xe0\xa6\x86\xe0\xa6\xae\xe0\xa6\xbf",         false, "ami -> আমি (top-1)"},
+        {"tumi",        "\xe0\xa6\xa4\xe0\xa7\x81\xe0\xa6\xae\xe0\xa6\xbf",   false, "tumi -> তুমি (top-1)"},
+        {"computer",    "\xe0\xa6\x95\xe0\xa6\xae\xe0\xa7\x8d\xe0\xa6\xaa\xe0\xa6\xbf\xe0\xa6\x89\xe0\xa6\x9f\xe0\xa6\xbe\xe0\xa6\xb0", false, "computer -> কম্পিউটার (top-1)"},
+        {"battery",     "\xe0\xa6\xac\xe0\xa7\x8d\xe0\xa6\xaf\xe0\xa6\xbe\xe0\xa6\x9f\xe0\xa6\xbe\xe0\xa6\xb0\xe0\xa6\xbf",   false, "battery -> ব্যাটারি (top-1)"},
+        {"office",      "\xe0\xa6\x85\xe0\xa6\xab\xe0\xa6\xbf\xe0\xa6\xb8",   false, "office -> অফিস (top-1)"},
+        {"bangla",      "\xe0\xa6\xac\xe0\xa6\xbe\xe0\xa6\x82\xe0\xa6\xb2\xe0\xa6\xbe",   false, "bangla -> বাংলা (top-1)"},
+
+        // === Fuzzy spelling variants ===
+        {"battary",     "\xe0\xa6\xac\xe0\xa7\x8d\xe0\xa6\xaf\xe0\xa6\xbe\xe0\xa6\x9f\xe0\xa6\xbe\xe0\xa6\xb0\xe0\xa6\xbf",   true,  "battary -> ব্যাটারি (fuzzy, top-3)"},
+        {"batery",      "\xe0\xa6\xac\xe0\xa7\x8d\xe0\xa6\xaf\xe0\xa6\xbe\xe0\xa6\x9f\xe0\xa6\xbe\xe0\xa6\xb0\xe0\xa6\xbf",   true,  "batery -> ব্যাটারি (fuzzy, top-3)"},
+
+        // সমস্যা
+        {"somossa",     "\xe0\xa6\xb8\xe0\xa6\xae\xe0\xa6\xb8\xe0\xa7\x8d\xe0\xa6\xaf\xe0\xa6\xbe",   true,  "somossa -> সমস্যা (top-3)"},
+        {"somossha",    "\xe0\xa6\xb8\xe0\xa6\xae\xe0\xa6\xb8\xe0\xa7\x8d\xe0\xa6\xaf\xe0\xa6\xbe",   true,  "somossha -> সমস্যা (top-3)"},
+        {"shomossa",    "\xe0\xa6\xb8\xe0\xa6\xae\xe0\xa6\xb8\xe0\xa7\x8d\xe0\xa6\xaf\xe0\xa6\xbe",   true,  "shomossa -> সমস্যা (top-3)"},
+
+        // পরিবর্তন
+        {"poriborton",  "\xe0\xa6\xaa\xe0\xa6\xb0\xe0\xa6\xbf\xe0\xa6\xac\xe0\xa6\xb0\xe0\xa7\x8d\xe0\xa6\xa4\xe0\xa6\xa8", true,  "poriborton -> পরিবর্তন (top-3)"},
+
+        // আনোয়ার
+        {"anwar",       "\xe0\xa6\x86\xe0\xa6\xa8\xe0\xa7\x8b\xe0\xa6\xaf\xe0\xa6\xbc\xe0\xa6\xbe\xe0\xa6\xb0", true,  "anwar -> আনোয়ার (top-3)"},
+        {"anoyar",      "\xe0\xa6\x86\xe0\xa6\xa8\xe0\xa7\x8b\xe0\xa6\xaf\xe0\xa6\xbc\xe0\xa6\xbe\xe0\xa6\xb0", true,  "anoyar -> আনোয়ার (top-3)"},
+
+        // ফ্যান, টেবিল, চেয়ার, কন্ট্রোল, মাউস
+        {"fan",         "\xe0\xa6\xab\xe0\xa7\x8d\xe0\xa6\xaf\xe0\xa6\xbe\xe0\xa6\xa8",   true,  "fan -> ফ্যান (top-3)"},
+        {"table",       "\xe0\xa6\x9f\xe0\xa7\x87\xe0\xa6\xac\xe0\xa6\xbf\xe0\xa6\xb2",   true,  "table -> টেবিল (top-3)"},
+        {"chair",       "\xe0\xa6\x9a\xe0\xa7\x87\xe0\xa6\xaf\xe0\xa6\xbc\xe0\xa6\xbe\xe0\xa6\xb0", true,  "chair -> চেয়ার (top-3)"},
+        {"control",     "\xe0\xa6\x95\xe0\xa6\xa8\xe0\xa7\x8d\xe0\xa6\x9f\xe0\xa7\x8d\xe0\xa6\xb0\xe0\xa7\x8b\xe0\xa6\xb2", true, "control -> কন্ট্রোল (top-3)"},
+        {"mouse",       "\xe0\xa6\xae\xe0\xa6\xbe\xe0\xa6\x89\xe0\xa6\xb8",   true,  "mouse -> মাউস (top-3)"},
+
+        // পরিষ্কার
+        {"porishkar",   "\xe0\xa6\xaa\xe0\xa6\xb0\xe0\xa6\xbf\xe0\xa6\xb7\xe0\xa7\x8d\xe0\xa6\x95\xe0\xa6\xbe\xe0\xa6\xb0", true,  "porishkar -> পরিষ্কার (top-3)"},
+    };
+
+    int suite8_passed = 0;
+    int suite8_failed = 0;
+    for (const auto& qc : quality_cases) {
+        bool ok = check_quality(qc);
+        if (ok) {
+            suite8_passed++;
+            g_passed++;
+        } else {
+            suite8_failed++;
+            g_failed++;
+            // Get actual top-3 for failure display
+            BanglaEngine_SetComposition(engine, qc.input.c_str());
+            CandidateList list;
+            BanglaEngine_GetCandidates(engine, &list);
+            std::cout << "  [FAIL] " << qc.description << "\n";
+            std::cout << "         Expected: " << qc.expected << "\n";
+            std::cout << "         Got top-" << list.count << ": ";
+            for (uint32_t i = 0; i < list.count && i < 3; i++) {
+                std::cout << "[" << list.candidates[i].bengali_text << "] ";
+            }
+            std::cout << "\n";
+        }
+    }
+
+    if (suite8_failed == 0) {
+        std::cout << "  [PASS] All " << suite8_passed << " suggestion quality cases verified.\n";
+    } else {
+        std::cout << "  [RESULT] " << suite8_passed << " passed, " << suite8_failed << " failed.\n";
+    }
 
     BanglaEngine_Destroy(engine);
 

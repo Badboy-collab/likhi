@@ -15,6 +15,8 @@ import ssl
 import hashlib
 import json
 import time
+import uuid
+import io
 import datetime
 import argparse
 import subprocess
@@ -51,6 +53,12 @@ HEALTH_CHECK_URLS = [
     "https://getlikhi.com/blog/",
     "https://getlikhi.com/download/",
 ]
+
+# Canonical site + public path of this theme, used to prove that the FTP account
+# we deploy to is really the folder the live site serves.
+CANONICAL_SITE = "https://getlikhi.com"
+PUBLIC_THEME_PREFIX = "/wp-content/themes/likhi/"
+PROBE_UA = "Likhi-Deployment-Verifier/1.0 (+https://getlikhi.com/)"
 
 def load_env_config():
     """Load configuration from website/.env, repo .env, or OS environment variables."""
@@ -265,6 +273,67 @@ def upload_local_file(ftp, local_full_path, full_remote_path):
     with open(local_full_path, "rb") as f:
         ftp.storbinary(f"STOR {fname}", f)
 
+def check_live_target_identity(ftp):
+    """Prove the FTP target is the theme folder the live site actually serves.
+
+    A jailed FTP account can point at a copy of the theme that no web server
+    serves (that is exactly what happened when this account's home directory was
+    another domain's theme folder): every deploy reported success while the live
+    site never changed. We upload a throwaway probe, fetch it over HTTPS from the
+    canonical site, and fail loudly when it is not visible.
+
+    Returns (ok, detail_message).
+    """
+    token = "likhi-target-probe-%s.txt" % uuid.uuid4().hex[:12]
+    url = CANONICAL_SITE + PUBLIC_THEME_PREFIX + token
+    body_seen = None
+    try:
+        ftp.storbinary(f"STOR {token}", io.BytesIO(b"likhi-target-probe"))
+        time.sleep(2)  # let the web server pick the new file up
+        req = urllib.request.Request(url, headers={"User-Agent": PROBE_UA, "Cache-Control": "no-cache"})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            body_seen = resp.read()
+    except Exception as exc:
+        body_seen = None
+        detail = f"probe not reachable ({exc})"
+    else:
+        detail = "probe served by the canonical site" if body_seen.strip() == b"likhi-target-probe" else "probe content mismatch"
+    finally:
+        try:
+            ftp.delete("/" + token)
+        except Exception:
+            pass
+
+    return body_seen is not None and body_seen.strip() == b"likhi-target-probe", f"{url} -> {detail}"
+
+
+def verify_live_content(local_files, candidates):
+    """Fetch deployed, web-readable files back over HTTPS and compare bytes.
+
+    The HTTP health check only proves the site answers with 200, which stays true
+    even when nothing was deployed. This compares real content.
+    """
+    checked = {}
+    for rel_path in candidates:
+        if not rel_path.endswith((".css", ".js", ".png", ".jpg", ".svg", ".txt")):
+            continue
+        local_path = os.path.join(THEME_DIR, rel_path)
+        url = CANONICAL_SITE + PUBLIC_THEME_PREFIX + rel_path
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": PROBE_UA, "Cache-Control": "no-cache"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                live_bytes = resp.read()
+        except Exception as exc:
+            checked[rel_path] = f"unreachable ({exc})"
+            continue
+        with open(local_path, "rb") as fh:
+            local_bytes = fh.read()
+        checked[rel_path] = "match" if live_bytes == local_bytes else f"MISMATCH (live={len(live_bytes)}B local={len(local_bytes)}B)"
+        if checked[rel_path] == "match":
+            break  # one confirmed file is enough to prove the target
+    return checked
+
+
 def perform_health_checks():
     """Hits live website URLs and asserts HTTP 200."""
     results = {}
@@ -355,6 +424,7 @@ def main():
     parser.add_argument("--all", action="store_true", help="Force deployment of all theme files regardless of manifest")
     parser.add_argument("--file", type=str, default=None, help="Deploy a single specific theme file (e.g. style.css)")
     parser.add_argument("--rollback", action="store_true", help="Roll back replaced files from the latest snapshot")
+    parser.add_argument("--skip-target-check", action="store_true", help="Skip the live-target identity probe (not recommended)")
     args = parser.parse_args()
 
     print("======================================================================")
@@ -427,6 +497,24 @@ def main():
     except Exception as e:
         print(f"\n[CONNECTION ERROR] Failed to connect/authenticate to {config['host']}:{config['port']}: {e}")
         sys.exit(1)
+
+    # 5b. Prove the FTP target is the folder the live site serves. Without this,
+    # a mis-pointed FTP account produces silent no-op deployments that still
+    # report SUCCESS.
+    if args.skip_target_check:
+        print("\n[WARN] Live target identity check skipped (--skip-target-check).")
+    else:
+        print("\nVerifying that this FTP account writes to the live theme folder...")
+        target_ok, target_detail = check_live_target_identity(ftp)
+        if not target_ok:
+            print("  [FAIL] FTP target is NOT the theme folder served by", CANONICAL_SITE)
+            print(f"         {target_detail}")
+            print("\n  The FTP account in website/.env is chrooted to a folder the live site")
+            print("  does not serve (for example another domain's theme directory). Point")
+            print("  the account's directory at this site's theme folder, or set the")
+            print("  canonical site in CANONICAL_SITE, then re-run. Nothing was uploaded.")
+            sys.exit(1)
+        print(f"  [OK] {target_detail}")
 
     # 6. Remote Backup Snapshot Creation
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
@@ -507,6 +595,21 @@ def main():
             print(f"  [FAIL] {url} -> HTTP {status}")
             http_failed = True
 
+    # 9b. Content verification: fetch a deployed file back and compare bytes.
+    print("\nVerifying deployed content is actually served by the live site...")
+    content_checks = verify_live_content(local_files, uploaded_files)
+    content_failed = False
+    if not content_checks:
+        print("  [WARN] No web-readable file was uploaded, content check skipped.")
+    for rel_path, result in content_checks.items():
+        if result == "match":
+            print(f"  [OK] {rel_path}: live bytes match local bytes")
+        else:
+            print(f"  [FAIL] {rel_path}: {result}")
+            content_failed = True
+    if content_failed:
+        http_failed = True
+
     if http_failed:
         print("\n[WARNING] Live HTTP verification returned non-200 status code!")
 
@@ -544,6 +647,8 @@ DEPLOYED:
 
 VERIFIED:
 - remote files      : {len(uploaded_files)} files confirmed on server with identical byte size
+- live target       : {'verified: FTP account writes to the theme folder served by ' + CANONICAL_SITE if not args.skip_target_check else 'identity probe skipped'}
+- content check     : {', '.join(f'{k} {v}' for k, v in content_checks.items()) or 'n/a'}
 - HTTP verification : {', '.join([f"{u.replace('https://getlikhi.com', '') or '/'} ({s})" for u, s in http_checks.items()])}
 - relevant pages    : Homepage, /blog/, /download/ responsive and returning HTTP 200
 
