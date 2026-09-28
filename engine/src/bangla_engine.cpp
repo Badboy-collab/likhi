@@ -488,31 +488,71 @@ void BanglaEngine_GetCandidates(BanglaEngine* engine, CandidateList* out_list) {
         }
     }
 
-    // 6. Populate output list: overrides first, then remaining ranked candidates.
+    // 6. Populate output list with strict Quality > Quantity filtering:
+    //    - Overrides and personal dict habits first
+    //    - Canonicalize Bengali Unicode (U+09F0 -> U+09B0, decomposed nuktas, etc.)
+    //    - Deduplicate identical and visually equivalent candidates
+    //    - Suppress non-dictionary beam junk (score < 0.12) when high-quality candidates exist
+    //    - Preserve original English token cleanly at the end if slot permits
     out_list->count = 0;
-    float override_score = 1.0f;
     const uint32_t max_out = static_cast<uint32_t>(engine->config.max_candidates);
-    for (const auto& ov_text : override_texts) {
-        if (out_list->count >= max_out) break;
-        strncpy(out_list->candidates[out_list->count].bengali_text, ov_text.c_str(), sizeof(out_list->candidates[out_list->count].bengali_text) - 1);
-        strncpy(out_list->candidates[out_list->count].roman_origin, engine->composition.c_str(), sizeof(out_list->candidates[out_list->count].roman_origin) - 1);
-        out_list->candidates[out_list->count].score = override_score;
-        out_list->candidates[out_list->count].category_flags = CANDIDATE_FLAG_PRIMARY | CANDIDATE_FLAG_EXACT_MATCH;
-        out_list->candidates[out_list->count].auto_correct_recommended =
-            (engine->config.auto_correct_enabled && override_score >= engine->config.auto_correct_threshold - 1e-4f);
+    std::vector<std::string> emitted_canonical;
+
+    bool has_high_quality = !override_texts.empty();
+    if (!has_high_quality) {
+        for (const auto& sc : ranked) {
+            if (sc.final_score >= 0.20f && sc.bengali_text != engine->composition) {
+                has_high_quality = true;
+                break;
+            }
+        }
+    }
+
+    auto add_candidate = [&](const std::string& text, const std::string& roman, float score, uint32_t flags, bool auto_corr) {
+        if (out_list->count >= max_out) return;
+        std::string canon = bangla::UnicodeUtils::CanonicalizeBengali(text);
+        if (std::find(emitted_canonical.begin(), emitted_canonical.end(), canon) != emitted_canonical.end()) {
+            return; // Skip duplicate / near-duplicate
+        }
+        strncpy(out_list->candidates[out_list->count].bengali_text, canon.c_str(), sizeof(out_list->candidates[out_list->count].bengali_text) - 1);
+        strncpy(out_list->candidates[out_list->count].roman_origin, roman.c_str(), sizeof(out_list->candidates[out_list->count].roman_origin) - 1);
+        out_list->candidates[out_list->count].score = score;
+        out_list->candidates[out_list->count].category_flags = flags;
+        out_list->candidates[out_list->count].auto_correct_recommended = auto_corr;
         out_list->count++;
+        emitted_canonical.push_back(canon);
+    };
+
+    // 6a. Emit curated overrides first
+    float override_score = 1.0f;
+    for (const auto& ov_text : override_texts) {
+        add_candidate(ov_text, engine->composition, override_score,
+                      CANDIDATE_FLAG_PRIMARY | CANDIDATE_FLAG_EXACT_MATCH,
+                      engine->config.auto_correct_enabled && override_score >= engine->config.auto_correct_threshold - 1e-4f);
         override_score -= 0.001f;
     }
+
+    // 6b. Emit ranked candidates (skipping raw English for now; dropping low-quality non-words)
     for (uint32_t i = 0; i < static_cast<uint32_t>(ranked.size()) && out_list->count < max_out; i++) {
-        if (std::find(override_texts.begin(), override_texts.end(), ranked[i].bengali_text) != override_texts.end()) {
-            continue; // already emitted as an override
+        const auto& sc = ranked[i];
+        if (sc.bengali_text == engine->composition) {
+            continue; // English raw word handled at end
         }
-        strncpy(out_list->candidates[out_list->count].bengali_text, ranked[i].bengali_text.c_str(), sizeof(out_list->candidates[out_list->count].bengali_text) - 1);
-        strncpy(out_list->candidates[out_list->count].roman_origin, ranked[i].roman_origin.c_str(), sizeof(out_list->candidates[out_list->count].roman_origin) - 1);
-        out_list->candidates[out_list->count].score = ranked[i].final_score;
-        out_list->candidates[out_list->count].category_flags = ranked[i].category_flags;
-        out_list->candidates[out_list->count].auto_correct_recommended = ranked[i].auto_correct_recommended;
-        out_list->count++;
+        // If high quality words exist, reject 0.10x-suppressed non-words (e.g. সোমোস্সা, ঔতপুত, স্চ্রিন্শোত)
+        if (has_high_quality && sc.final_score < 0.12f) {
+            continue;
+        }
+        add_candidate(sc.bengali_text, sc.roman_origin, sc.final_score, sc.category_flags, sc.auto_correct_recommended);
+    }
+
+    // 6c. Append raw English candidate cleanly at the end if slot available
+    if (out_list->count < max_out && !engine->composition.empty()) {
+        for (const auto& sc : ranked) {
+            if (sc.bengali_text == engine->composition) {
+                add_candidate(sc.bengali_text, sc.roman_origin, sc.final_score, sc.category_flags, false);
+                break;
+            }
+        }
     }
 }
 

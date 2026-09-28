@@ -114,6 +114,7 @@ public:
     static std::string BackspaceGrapheme(const std::string& utf8_text);
     static bool IsValidBengaliSequence(const std::string& utf8_text);
     static bool HasDanglingHasant(const std::string& utf8_text);
+    static std::string CanonicalizeBengali(const std::string& utf8_text);
 };
 
 } // namespace bangla

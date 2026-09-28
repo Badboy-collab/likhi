@@ -166,6 +166,12 @@ static const WordMap kWordMaps[] = {
     {"betar",      "better"},
     // powered
     {"powerd",     "powered"},
+    // suggestion
+    {"suggession", "suggestion"},
+    {"sajeshon",   "suggestion"},
+    {"sajeson",    "suggestion"},
+    // windows
+    {"window",     "windows"},
     // tension
     {"tenshon",   "tension"},
     // challenge
