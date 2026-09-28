@@ -245,4 +245,38 @@ bool UnicodeUtils::HasDanglingHasant(const std::string& utf8_text) {
     return !u32.empty() && u32.back() == HASANT;
 }
 
+std::string UnicodeUtils::CanonicalizeBengali(const std::string& utf8_text) {
+    if (utf8_text.empty()) return utf8_text;
+    std::u32string u32 = Utf8ToUtf32(utf8_text);
+    std::u32string canonical;
+    canonical.reserve(u32.size());
+
+    for (size_t i = 0; i < u32.size(); ++i) {
+        char32_t cp = u32[i];
+
+        // 1. Assamese Ra (0x09F0) -> Bengali Ra (0x09B0)
+        if (cp == 0x09F0) cp = 0x09B0;
+
+        // 2. Assamese Wa (0x09F1) -> Bengali Ba (0x09AC)
+        if (cp == 0x09F1) cp = 0x09AC;
+
+        // 3. Composite Kar E + Kar AA (0x09C7 + 0x09BE) -> Kar O (0x09CB)
+        if (cp == 0x09C7 && i + 1 < u32.size() && u32[i + 1] == 0x09BE) {
+            canonical.push_back(0x09CB);
+            i++;
+            continue;
+        }
+
+        // 4. Composite Kar E + Kar AU (0x09C7 + 0x09D7) -> Kar OU (0x09CC)
+        if (cp == 0x09C7 && i + 1 < u32.size() && u32[i + 1] == 0x09D7) {
+            canonical.push_back(0x09CC);
+            i++;
+            continue;
+        }
+
+        canonical.push_back(cp);
+    }
+    return Utf32ToUtf8(canonical);
+}
+
 } // namespace bangla
