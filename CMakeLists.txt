@@ -134,6 +134,10 @@ target_link_libraries(test_hybrid_brain PRIVATE bangla_engine_static)
 add_executable(test_popup_quality tests/test_popup_quality.cpp)
 target_link_libraries(test_popup_quality PRIVATE bangla_engine_static)
 
+# Final Acceptance Verification Runner (38-test acceptance suite)
+add_executable(acceptance_verification_runner tools/acceptance_verification_runner.cpp)
+target_link_libraries(acceptance_verification_runner PRIVATE bangla_engine_static)
+
 # TSF Integration Test Target
 add_executable(test_tsf_integration
     tests/tsf_integration/test_tsf_integration.cpp
@@ -371,6 +375,7 @@ else()
     target_compile_options(test_morphology PRIVATE -Wall -Wextra)
     target_compile_options(test_hybrid_brain PRIVATE -Wall -Wextra)
     target_compile_options(test_popup_quality PRIVATE -Wall -Wextra)
+    target_compile_options(acceptance_verification_runner PRIVATE -Wall -Wextra)
 
     # Static linking for standalone DLL and EXEs without MinGW DLL runtime requirements
     target_link_options(bangla_tsf PRIVATE -static -static-libgcc -static-libstdc++)
@@ -383,6 +388,7 @@ else()
     target_link_options(test_morphology PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_hybrid_brain PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_popup_quality PRIVATE -static -static-libgcc -static-libstdc++)
+    target_link_options(acceptance_verification_runner PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_tsf_integration PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_p0_keyboard PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_options(test_key_policy PRIVATE -static -static-libgcc -static-libstdc++)

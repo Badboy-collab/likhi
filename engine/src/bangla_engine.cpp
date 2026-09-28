@@ -376,28 +376,46 @@ void BanglaEngine_GetCandidates(BanglaEngine* engine, CandidateList* out_list) {
                 }
             }
 
-            // 3. Phonetic parse of stem
-            auto parsed_stem = engine->phonetic_parser.Parse(morph_stem, 3);
-            for (const auto& ps : parsed_stem) {
-                if (std::find(stem_bengali_candidates.begin(), stem_bengali_candidates.end(), ps.text) == stem_bengali_candidates.end()) {
-                    stem_bengali_candidates.push_back(ps.text);
+            // 3. Phonetic parse of stem only if no dictionary match was found
+            if (stem_bengali_candidates.empty()) {
+                auto parsed_stem = engine->phonetic_parser.Parse(morph_stem, 1);
+                for (const auto& ps : parsed_stem) {
+                    if (std::find(stem_bengali_candidates.begin(), stem_bengali_candidates.end(), ps.text) == stem_bengali_candidates.end()) {
+                        stem_bengali_candidates.push_back(ps.text);
+                    }
                 }
             }
 
-            // Attach suffix to each stem candidate
+            // Attach suffix to each verified stem candidate (Quality > Quantity)
             for (const auto& bstem : stem_bengali_candidates) {
                 std::string affixed = bangla::BanglaMorphology::AttachSuffix(bstem, morph_suffix);
                 if (affixed.empty()) continue;
 
                 if (std::find(morphology_overrides.begin(), morphology_overrides.end(), affixed) == morphology_overrides.end()) {
                     morphology_overrides.push_back(affixed);
+                    if (morphology_overrides.size() >= 2) break; // Limit to top 2 high-quality variants
                 }
+            }
 
-                bangla::PhoneticCandidate mpc;
-                mpc.text = affixed;
-                mpc.score = 0.98f;
-                mpc.rule_path = "morphology";
-                phonetic_cands.push_back(mpc);
+            // When morphology decomposition is successful, prune raw hyphenated
+            // beam artifacts (e.g. গুগ্লে-এর, লিখি-কে) from phonetic_cands
+            if (!morphology_overrides.empty()) {
+                std::vector<bangla::PhoneticCandidate> clean_pc;
+                clean_pc.reserve(phonetic_cands.size() + morphology_overrides.size());
+                for (const auto& mo : morphology_overrides) {
+                    bangla::PhoneticCandidate mpc;
+                    mpc.text = mo;
+                    mpc.score = 0.99f;
+                    mpc.rule_path = "morphology";
+                    clean_pc.push_back(mpc);
+                }
+                for (const auto& pc : phonetic_cands) {
+                    // Suppress any candidate containing literal hyphen
+                    if (pc.text.find('-') == std::string::npos) {
+                        clean_pc.push_back(pc);
+                    }
+                }
+                phonetic_cands = std::move(clean_pc);
             }
         }
     }
