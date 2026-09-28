@@ -835,3 +835,24 @@ freelance	ফ্রিল্যান্স
 investment	ইনভেস্টমেন্ট
 
 # --- END of v2 overrides ---
+
+# --- Real-world loanwords & screenshot fixes (2026-09-28) ---
+screenshot	স্ক্রিনশট
+screenshot	স্ক্রিনশোট
+skrinshot	স্ক্রিনশট
+screen	স্ক্রিন
+output	আউটপুট
+outpot	আউটপুট
+input	ইনপুট
+brain	ব্রেন
+brain	ব্রেইন
+bren	ব্রেন
+better	বেটার
+betor	বেটার
+betar	বেটার
+bhetor	ভেতর
+powerd	পাওয়ার্ড
+powered	পাওয়ার্ড
+memory	মেমোরি
+memori	মেমোরি
+memorite	মেমোরিতে
