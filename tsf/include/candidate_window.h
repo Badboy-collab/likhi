@@ -81,6 +81,8 @@ private:
 
     int width_;
     int height_;
+    int last_width_;
+    int last_height_;
 
     // Voice (microphone) state. Declared last so the constructor's init list
     // order matches the declaration order.
