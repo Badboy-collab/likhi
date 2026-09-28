@@ -20,8 +20,8 @@ IDR_PAYLOAD_UNIVERSAL RCDATA "@SETUP_PAYLOAD_UNIVERSAL@"
 IDI_LIKHI ICON "@CMAKE_SOURCE_DIR@/assets/icon.ico"
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,0,0,0
- PRODUCTVERSION 1,0,0,0
+ FILEVERSION 1,0,1,0
+ PRODUCTVERSION 1,0,1,0
  FILEFLAGSMASK 0x3fL
  FILEFLAGS 0x0L
  FILEOS VOS_NT_WINDOWS32
@@ -34,11 +34,11 @@ BEGIN
     BEGIN
       VALUE "CompanyName", "Likhi\0"
       VALUE "FileDescription", "Likhi - one-click installer\0"
-      VALUE "FileVersion", "1.0.0.0\0"
+      VALUE "FileVersion", "1.0.1.0\0"
       VALUE "InternalName", "likhi_setup\0"
       VALUE "OriginalFilename", "LikhiSetup.exe\0"
       VALUE "ProductName", "Likhi - PC Bangla Typing App\0"
-      VALUE "ProductVersion", "1.0.0\0"
+      VALUE "ProductVersion", "1.0.1\0"
     END
   END
   BLOCK "VarFileInfo"

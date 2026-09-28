@@ -12,10 +12,10 @@ namespace likhi {
 // ============================================================================
 constexpr int kVersionMajor = 1;
 constexpr int kVersionMinor = 0;
-constexpr int kVersionPatch = 0;
+constexpr int kVersionPatch = 1;
 
-inline const char* const kVersionString = "1.0.0";
-inline const wchar_t* const kVersionWString = L"1.0.0";
+inline const char* const kVersionString = "1.0.1";
+inline const wchar_t* const kVersionWString = L"1.0.1";
 
 inline const char* const kAppName = "Likhi";
 inline const wchar_t* const kAppNameW = L"Likhi";
@@ -27,7 +27,6 @@ inline const char* const kOfficialUpdateUrl = "https://getlikhi.com/update/";
 inline const char* const kOfficialDownloadUrl = "https://getlikhi.com/download/";
 inline const char* const kGitHubRepoUrl = "https://github.com/Badboy-collab/likhi";
 inline const char* const kGitHubApiReleasesUrl = "https://api.github.com/repos/Badboy-collab/likhi/releases/latest";
-inline const char* const kGitHubApiAllReleasesUrl = "https://api.github.com/repos/Badboy-collab/likhi/releases?per_page=5";
 
 // ============================================================================
 // Semantic Versioning Helper

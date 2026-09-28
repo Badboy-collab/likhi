@@ -67,6 +67,9 @@ void TestSemVerParsingAndComparison() {
 
     // UpdateService::CompareVersions static helper
     EXPECT_EQ(UpdateService::CompareVersions("1.0.0", "1.0.0"), 0);
+    EXPECT_EQ(UpdateService::CompareVersions("1.0.0", "1.0.1"), -1);
+    EXPECT_EQ(UpdateService::CompareVersions("1.0.1", "1.0.1"), 0);
+    EXPECT_EQ(UpdateService::CompareVersions("1.0.1", "1.0.0"), 1);
     EXPECT_EQ(UpdateService::CompareVersions("1.0.0", "v1.1.0"), -1);
     EXPECT_EQ(UpdateService::CompareVersions("1.2.0", "1.1.0"), 1);
 }

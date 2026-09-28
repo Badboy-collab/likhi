@@ -62,7 +62,7 @@ powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = 
 echo [4/4] Registering with Windows Installed Apps...
 set REG_KEY=HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Likhi
 reg add "%REG_KEY%" /v "DisplayName" /d "Likhi (Likhi) - PC Bangla Typing App" /f >nul 2>&1
-reg add "%REG_KEY%" /v "DisplayVersion" /d "1.0.0" /f >nul 2>&1
+reg add "%REG_KEY%" /v "DisplayVersion" /d "1.0.1" /f >nul 2>&1
 reg add "%REG_KEY%" /v "Publisher" /d "Likhi" /f >nul 2>&1
 reg add "%REG_KEY%" /v "UninstallString" /d "\"%SCRIPT_DIR%uninstall.bat\"" /f >nul 2>&1
 reg add "%REG_KEY%" /v "InstallLocation" /d "\"%SCRIPT_DIR%\"" /f >nul 2>&1
