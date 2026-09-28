@@ -154,6 +154,18 @@ static const WordMap kWordMaps[] = {
     {"ofis",      "office"},
     {"ofice",     "office"},
     {"ophis",     "office"},
+    // screenshot
+    {"skrinshot",  "screenshot"},
+    {"skrinshat",  "screenshot"},
+    // output
+    {"outpot",     "output"},
+    // brain
+    {"bren",       "brain"},
+    // better / betor
+    {"betor",      "better"},
+    {"betar",      "better"},
+    // powered
+    {"powerd",     "powered"},
     // tension
     {"tenshon",   "tension"},
     // challenge
