@@ -1,0 +1,14 @@
+﻿{
+  "version": "1.0.1",
+  "release_date": "2026-09-28",
+  "download_url": "https://getlikhi.com/downloads/LikhiSetup.exe",
+  "sha256": "2082cbf776ac4ce429913738b4c523491dfd56a3e8d1f41ebe445b091eee30b8",
+  "file_size": 18074041,
+  "changelog": [
+    "Improved context-aware candidate ranking for conversational phrases",
+    "Eliminated candidate popup flicker during rapid typing",
+    "Added confirmation dialog before resetting personal learning data",
+    "Corrected privacy wording for online suggestions",
+    "Maintained full 80,289-word lexicon"
+  ]
+}

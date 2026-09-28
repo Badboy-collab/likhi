@@ -12,10 +12,10 @@ namespace likhi {
 // ============================================================================
 constexpr int kVersionMajor = 1;
 constexpr int kVersionMinor = 0;
-constexpr int kVersionPatch = 0;
+constexpr int kVersionPatch = 1;
 
-inline const char* const kVersionString = "1.0.0";
-inline const wchar_t* const kVersionWString = L"1.0.0";
+inline const char* const kVersionString = "1.0.1";
+inline const wchar_t* const kVersionWString = L"1.0.1";
 
 inline const char* const kAppName = "Likhi";
 inline const wchar_t* const kAppNameW = L"Likhi";

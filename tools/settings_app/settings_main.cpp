@@ -336,7 +336,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             SendMessage(hChkAuto, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkAuto, BM_SETCHECK, g_settings.auto_correct ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hChkOnline = CreateWindowW(L"BUTTON", L"অনলাইন সাজেশন সহায়তা (Online Suggestions — ক্লাউড ব্যাকআপ)", WS_CHILD | BS_AUTOCHECKBOX, 250, 178, 520, 24, hWnd, (HMENU)IDC_CHK_ONLINE_SUG, NULL, NULL);
+            HWND hChkOnline = CreateWindowW(L"BUTTON", L"অনলাইন সাজেশন সহায়তা — ঐচ্ছিক ও প্রাইভেসি-ফার্স্ট", WS_CHILD | BS_AUTOCHECKBOX, 250, 178, 520, 24, hWnd, (HMENU)IDC_CHK_ONLINE_SUG, NULL, NULL);
             SendMessage(hChkOnline, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkOnline, BM_SETCHECK, g_settings.online_suggestions ? BST_CHECKED : BST_UNCHECKED, 0);
 
@@ -519,7 +519,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // ==============================================================
             // SECTION 8: ABOUT (WITH LOGO & AH CREATIONS CREDIT)
             // ==============================================================
-            HWND hAb_Title = CreateWindowW(L"STATIC", L"Likhi (লিখি) — সংস্করণ ১.০.০", WS_CHILD | SS_LEFT, 370, 30, 400, 28, hWnd, NULL, NULL, NULL);
+            HWND hAb_Title = CreateWindowW(L"STATIC", L"Likhi (লিখি) — সংস্করণ ১.০.১", WS_CHILD | SS_LEFT, 370, 30, 400, 28, hWnd, NULL, NULL, NULL);
             SendMessage(hAb_Title, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
             HWND hAb_Tag = CreateWindowW(L"STATIC", L"“Fast • Smart • Natural — Bangla Typing for Windows”", WS_CHILD | SS_LEFT, 370, 65, 400, 24, hWnd, NULL, NULL, NULL);
@@ -680,13 +680,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 SaveSettings();
                 SetWindowTextW(hLblStatus, L"✅ সেটিংস সফলভাবে সংরক্ষিত হয়েছে!");
             } else if (wmId == IDC_BTN_RESET_LEARN) {
-                std::wstring dir = GetConfigDirectory();
-                std::wstring db_file = dir + L"\\user_learning.db";
-                std::wstring bg_file = dir + L"\\user_bigrams.tsv";
-                DeleteFileW(db_file.c_str());
-                DeleteFileW(bg_file.c_str());
-                SetWindowTextW(hLblStatus, L"🧹 শেখা অভ্যাস রিসেট করা হয়েছে (অভিধান অক্ষত রয়েছে)।");
-                MessageBoxW(hWnd, L"ব্যক্তিগত শেখা অভ্যাস সফলভাবে রিসেট করা হয়েছে।\n\nআপনার নিজস্ব কাস্টম শব্দভাণ্ডার (Personal Dictionary) সম্পূর্ণ নিরাপদ ও অক্ষত রয়েছে।", L"Likhi Personal Learning", MB_OK | MB_ICONINFORMATION);
+                int confirm = MessageBoxW(hWnd,
+                    L"আপনি কি নিশ্চিত যে আপনি টাইপিং থেকে স্বয়ংক্রিয়ভাবে শেখা অভ্যাসসমূহ রিসেট করতে চান?\n\n(আপনার নিজস্ব কাস্টম শব্দভাণ্ডার/Personal Dictionary সম্পূর্ণ নিরাপদ ও অক্ষত থাকবে।)",
+                    L"শেখা অভ্যাস রিসেট নিশ্চিতকরণ — Likhi", MB_YESNO | MB_ICONQUESTION);
+                if (confirm == IDYES) {
+                    std::wstring dir = GetConfigDirectory();
+                    std::wstring db_file = dir + L"\\user_learning.db";
+                    std::wstring bg_file = dir + L"\\user_bigrams.tsv";
+                    DeleteFileW(db_file.c_str());
+                    DeleteFileW(bg_file.c_str());
+                    SetWindowTextW(hLblStatus, L"🧹 শেখা অভ্যাস রিসেট করা হয়েছে (অভিধান অক্ষত রয়েছে)।");
+                    MessageBoxW(hWnd, L"ব্যক্তিগত শেখা অভ্যাস সফলভাবে রিসেট করা হয়েছে।\n\nআপনার নিজস্ব কাস্টম শব্দভাণ্ডার সম্পূর্ণ অক্ষত রয়েছে।", L"Likhi Personal Learning", MB_OK | MB_ICONINFORMATION);
+                }
             } else if (wmId == IDC_BTN_CLOSE) {
                 PostQuitMessage(0);
             } else if (wmId == IDC_BTN_ADD_WORD) {
@@ -752,7 +757,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (res == likhi::UpdateCheckResult::kUpToDate) {
                 SetWindowTextW(hLblStatus, L"✨ আপনি Likhi-এর সর্বশেষ সংস্করণ ব্যবহার করছেন।");
                 MessageBoxW(hWnd, 
-                    L"আপনি Likhi-এর সর্বশেষ সংস্করণ ব্যবহার করছেন।\n\nবর্তমান সংস্করণ: ১.০.০", 
+                    L"আপনি Likhi-এর সর্বশেষ সংস্করণ ব্যবহার করছেন।\n\nবর্তমান সংস্করণ: ১.০.১", 
                     L"Likhi আপডেট", MB_OK | MB_ICONINFORMATION);
             } else if (res == likhi::UpdateCheckResult::kUpdateAvailable && pInfo) {
                 SetWindowTextW(hLblStatus, L"🚀 Likhi-এর নতুন সংস্করণ পাওয়া গেছে!");
