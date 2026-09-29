@@ -321,6 +321,62 @@ void TestReleasePolicyStableVsPrerelease() {
     EXPECT_FALSE(multi_info.is_prerelease);
 }
 
+void TestVersionJsonParsing() {
+    std::cout << "[TEST] Official cPanel version.json Parsing..." << std::endl;
+
+    std::string version_json = R"json({
+        "version": "1.0.1",
+        "release_date": "2026-09-28",
+        "download_url": "https://getlikhi.com/downloads/LikhiSetup.exe",
+        "sha256": "dd31916316bf5c190359575fb69e2a01c73473a04df762d6edd7ce3c411d9399",
+        "file_size": 18096764,
+        "changelog": [
+            "Improved context-aware candidate ranking for conversational phrases",
+            "Eliminated candidate popup flicker during rapid typing",
+            "Added confirmation dialog before resetting personal learning data"
+        ]
+    })json";
+
+    ReleaseInfo info;
+    bool parsed = UpdateService::ParseReleaseJson(version_json, info, false);
+    EXPECT_TRUE(parsed);
+    EXPECT_EQ(info.version, "1.0.1");
+    EXPECT_EQ(info.tag_name, "v1.0.1");
+    EXPECT_EQ(info.download_url, "https://getlikhi.com/downloads/LikhiSetup.exe");
+    EXPECT_EQ(info.sha256_hash, "dd31916316bf5c190359575fb69e2a01c73473a04df762d6edd7ce3c411d9399");
+    EXPECT_EQ(info.file_size, 18096764ULL);
+    EXPECT_EQ(info.published_at, "2026-09-28");
+    EXPECT_FALSE(info.is_prerelease);
+    EXPECT_FALSE(info.is_draft);
+    EXPECT_TRUE(info.release_notes.find("Improved context-aware candidate ranking") != std::string::npos);
+    EXPECT_TRUE(info.release_notes.find("Eliminated candidate popup flicker") != std::string::npos);
+}
+
+void TestDownloadInstallerGating() {
+    std::cout << "[TEST] DownloadInstaller Integrity Gating..." << std::endl;
+
+    std::wstring dest_path = UpdateService::GetDefaultInstallerDownloadPath();
+    EXPECT_FALSE(dest_path.empty());
+
+    // 1. Mismatched SHA-256 test: mock bad download
+    // Write fake data to a temp file, try to verify against real hash
+    wchar_t temp_dir[MAX_PATH];
+    GetTempPathW(MAX_PATH, temp_dir);
+    std::wstring fake_installer = std::wstring(temp_dir) + L"likhi_fake_installer.exe";
+
+    std::ofstream out(fake_installer.c_str(), std::ios::binary);
+    out << "Corrupted installer bytes simulation";
+    out.close();
+
+    // VerifySha256 MUST fail for corrupt bytes
+    EXPECT_FALSE(UpdateService::VerifySha256(fake_installer, "2082cbf776ac4ce429913738b4c523491dfd56a3e8d1f41ebe445b091eee30b8"));
+    DeleteFileW(fake_installer.c_str());
+
+    // 2. LaunchInstaller validation: empty or nonexistent file must return false
+    EXPECT_FALSE(UpdateService::LaunchInstaller(L""));
+    EXPECT_FALSE(UpdateService::LaunchInstaller(L"C:\\nonexistent\\installer.exe"));
+}
+
 int main() {
     std::cout << "==========================================================" << std::endl;
     std::cout << " LIKHI UPDATE SERVICE AUTOMATED REGRESSION SUITE" << std::endl;
@@ -328,9 +384,11 @@ int main() {
 
     TestSemVerParsingAndComparison();
     TestReleaseJsonParsing();
+    TestVersionJsonParsing();
     TestReleasePolicyStableVsPrerelease();
     TestCooldownAndThrottling();
     TestSha256Verification();
+    TestDownloadInstallerGating();
     TestUserDataPreservation();
 
     std::cout << "==========================================================" << std::endl;

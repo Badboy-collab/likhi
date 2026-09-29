@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <functional>
+#include <atomic>
 #include "likhi_version.h"
 
 namespace likhi {
@@ -28,6 +30,16 @@ enum class UpdateCheckResult {
     kError
 };
 
+enum class DownloadResult {
+    kSuccess,
+    kNetworkError,
+    kHashMismatch,
+    kCancelled,
+    kDiskError
+};
+
+using DownloadProgressCallback = std::function<void(uint64_t downloaded_bytes, uint64_t total_bytes)>;
+
 class UpdateService {
 public:
     // Cooldown duration for automated startup checks (24 hours in seconds)
@@ -40,7 +52,7 @@ public:
     static std::string GetCurrentVersion();
     static std::wstring GetCurrentVersionW();
 
-    // Check for updates online (calls GitHub API via WinHTTP)
+    // Check for updates online (checks official cPanel version.json first, falls back to GitHub API)
     // If force_bypass_cooldown is true, ignores 24-hour cache limit (used for manual Check Updates button)
     static UpdateCheckResult CheckForUpdate(ReleaseInfo& out_info, bool force_bypass_cooldown = false);
 
@@ -56,8 +68,8 @@ public:
     // Version comparison: returns -1 if current < remote, 0 if equal, 1 if current > remote
     static int CompareVersions(const std::string& current, const std::string& remote);
 
-    // JSON Parser for GitHub Releases API payload (robust, zero-dependency)
-    // Handles both single release object and array of releases.
+    // JSON Parser for release payloads (handles both cPanel version.json and GitHub Releases API payload)
+    // Handles single release object and array of releases.
     // When allow_prereleases is false, drafts and prereleases are strictly excluded.
     static bool ParseReleaseJson(const std::string& json_str, ReleaseInfo& out_info, bool allow_prereleases = false);
 
@@ -66,6 +78,23 @@ public:
 
     // Verifies SHA-256 hash of a file against expected hex string using Win32 CryptoAPI
     static bool VerifySha256(const std::wstring& file_path, const std::string& expected_hex);
+
+    // Downloads installer with streaming chunks and verifies SHA-256 integrity
+    // If checksum mismatch occurs, deletes the corrupted file and returns kHashMismatch.
+    static DownloadResult DownloadInstaller(
+        const std::string& download_url,
+        const std::string& fallback_url,
+        const std::wstring& dest_path,
+        const std::string& expected_sha256,
+        uint64_t expected_size,
+        DownloadProgressCallback progress_cb = nullptr,
+        const std::atomic<bool>* cancel_flag = nullptr);
+
+    // Launches the installer safely
+    static bool LaunchInstaller(const std::wstring& installer_path, bool silent = false);
+
+    // Returns default temp download path: %TEMP%\Likhi_Update\LikhiSetup.exe
+    static std::wstring GetDefaultInstallerDownloadPath();
 
     // Helpers
     static std::wstring GetAppDataDirectory();
