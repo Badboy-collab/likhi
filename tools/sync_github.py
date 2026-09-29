@@ -26,6 +26,7 @@ RELEASE_NAME = 'Likhi v1.0.1 - One-Click Installer (Windows)'
 RELEASE_BODY = """## Likhi v1.0.1 Release (Windows)
 
 ### Highlights & Fixes:
+- **Silent Update & User Control**: Added auto-update check toggle in Settings and silenced background update notifications so user typing is never interrupted.
 - **Settings & Dashboard UI Polish**: Eliminated Bengali typography clipping (WS_CLIPCHILDREN, increased diacritic padding), added modern fluent styled buttons, and fixed dark border artifacts.
 - **In-App Auto-Update Pipeline**: Fully integrated download and installation flow directly in Settings app with live progress, CryptoAPI SHA-256 integrity verification, and silent/interactive update launch.
 - **Conversational Bigrams**: Enhanced context-aware candidate ranking for everyday conversational phrases.
@@ -36,13 +37,13 @@ RELEASE_BODY = """## Likhi v1.0.1 Release (Windows)
 
 ### Verification:
 - **File**: `LikhiSetup.exe`
-- **Size**: 18,106,203 bytes
-- **SHA-256**: `ae8913540602ef52d7481a6cd86a85028ca2745f78c0e5a2df54e4248e0ba329`
+- **Size**: 18,101,595 bytes
+- **SHA-256**: `9858a32bc7fdcc6112d317362da824cb3a6ddd20356fc9a8e424fe09b8dacf13`
 - **Regression Tests**: 983 / 983 Passing (100%)
 """
 ASSET_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'release_package', 'LikhiSetup.exe')
-EXPECTED_SIZE = 18106203
-EXPECTED_SHA256 = 'ae8913540602ef52d7481a6cd86a85028ca2745f78c0e5a2df54e4248e0ba329'
+EXPECTED_SIZE = 18101595
+EXPECTED_SHA256 = '9858a32bc7fdcc6112d317362da824cb3a6ddd20356fc9a8e424fe09b8dacf13'
 
 def compute_sha256(path):
     h = hashlib.sha256()

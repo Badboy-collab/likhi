@@ -2,9 +2,10 @@
   "version": "1.0.1",
   "release_date": "2026-09-28",
   "download_url": "https://getlikhi.com/downloads/LikhiSetup.exe",
-  "sha256": "ae8913540602ef52d7481a6cd86a85028ca2745f78c0e5a2df54e4248e0ba329",
-  "file_size": 18106203,
+  "sha256": "9858a32bc7fdcc6112d317362da824cb3a6ddd20356fc9a8e424fe09b8dacf13",
+  "file_size": 18101595,
   "changelog": [
+    "Added auto-update check toggle and silenced background update notifications to prevent typing interruptions",
     "Refactored Settings & Dashboard UI: eliminated text clipping, improved Bengali typography padding, and added modern owner-drawn controls",
     "Improved context-aware candidate ranking for conversational phrases",
     "Eliminated candidate popup flicker during rapid typing",

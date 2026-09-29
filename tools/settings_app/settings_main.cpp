@@ -76,6 +76,7 @@ enum SectionID {
 #define IDC_CHK_ONLINE_SUG    2032
 #define IDC_CHK_PERS_LEARN    2033
 #define IDC_BTN_RESET_LEARN   2034
+#define IDC_CHK_AUTO_UPDATE   2035
 #define WM_UPDATE_CHECK_DONE    (WM_APP + 20)
 #define WM_UPDATE_PROGRESS      (WM_APP + 21)
 #define WM_UPDATE_DOWNLOAD_DONE (WM_APP + 22)
@@ -83,6 +84,7 @@ enum SectionID {
 struct AppSettings {
     bool enable_likhi = true;
     bool launch_startup = false;
+    bool auto_check_update = false; // Disabled by default so app never nags or shows popups
     bool bangla_typing = true;
     bool banglish_recog = true;
     bool eng_to_bangla = true;
@@ -159,6 +161,8 @@ void LoadSettings() {
         if (line.find("\"max_candidates\": 4") != std::string::npos) g_settings.max_candidates = 4;
         if (line.find("\"max_candidates\": 5") != std::string::npos) g_settings.max_candidates = 5;
         if (line.find("\"launch_startup\": true") != std::string::npos) g_settings.launch_startup = true;
+        if (line.find("\"auto_check_update\": true") != std::string::npos) g_settings.auto_check_update = true;
+        if (line.find("\"auto_check_update\": false") != std::string::npos) g_settings.auto_check_update = false;
         if (line.find("\"eng_to_bangla\": false") != std::string::npos) g_settings.eng_to_bangla = false;
         if (line.find("\"word_prediction\": false") != std::string::npos) g_settings.word_prediction = false;
         if (line.find("\"show_eng_candidate\": false") != std::string::npos) g_settings.show_eng_candidate = false;
@@ -181,6 +185,7 @@ void SaveSettings() {
     out << "{\n";
     out << "  \"enable_likhi\": " << (g_settings.enable_likhi ? "true" : "false") << ",\n";
     out << "  \"launch_startup\": " << (g_settings.launch_startup ? "true" : "false") << ",\n";
+    out << "  \"auto_check_update\": " << (g_settings.auto_check_update ? "true" : "false") << ",\n";
     out << "  \"bangla_typing\": " << (g_settings.bangla_typing ? "true" : "false") << ",\n";
     out << "  \"banglish_recog\": " << (g_settings.banglish_recog ? "true" : "false") << ",\n";
     out << "  \"eng_to_bangla\": " << (g_settings.eng_to_bangla ? "true" : "false") << ",\n";
@@ -368,13 +373,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             SendMessage(hChkStart, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkStart, BM_SETCHECK, g_settings.launch_startup ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hG_LangCard = CreateWindowW(L"STATIC", L"📌 ডিফল্ট ইনপুট প্রোফাইল: বাংলা (বাংলাদেশ) — 0x0845\n\nকীবোর্ডে Win + Space চাপলে Likhi স্বয়ংক্রিয়ভাবে একটি মাত্র ক্লিন প্রোফাইল হিসেবে সক্রিয় থাকে।", WS_CHILD | SS_LEFT, 265, 205, 510, 90, hWnd, NULL, NULL, NULL);
+            HWND hChkAutoUpd = CreateWindowW(L"BUTTON", L"স্বয়ংক্রিয়ভাবে নতুন আপডেট পরীক্ষা করুন (Auto Check for Updates)", WS_CHILD | BS_AUTOCHECKBOX, 265, 195, 510, 28, hWnd, (HMENU)IDC_CHK_AUTO_UPDATE, NULL, NULL);
+            SendMessage(hChkAutoUpd, WM_SETFONT, (WPARAM)hFontBody, TRUE);
+            SendMessage(hChkAutoUpd, BM_SETCHECK, g_settings.auto_check_update ? BST_CHECKED : BST_UNCHECKED, 0);
+
+            HWND hG_LangCard = CreateWindowW(L"STATIC", L"📌 ডিফল্ট ইনপুট প্রোফাইল: বাংলা (বাংলাদেশ) — 0x0845\n\nকীবোর্ডে Win + Space চাপলে Likhi স্বয়ংক্রিয়ভাবে একটি মাত্র ক্লিন প্রোফাইল হিসেবে সক্রিয় থাকে।", WS_CHILD | SS_LEFT, 265, 245, 510, 90, hWnd, NULL, NULL, NULL);
             SendMessage(hG_LangCard, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
             g_section_controls[SEC_GENERAL].push_back(hG_Title);
             g_section_controls[SEC_GENERAL].push_back(hG_Status);
             g_section_controls[SEC_GENERAL].push_back(hChkLikhi);
             g_section_controls[SEC_GENERAL].push_back(hChkStart);
+            g_section_controls[SEC_GENERAL].push_back(hChkAutoUpd);
             g_section_controls[SEC_GENERAL].push_back(hG_LangCard);
 
             // ==============================================================
@@ -753,6 +763,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (wmId == IDC_BTN_SAVE) {
                 HWND hChkLikhi = GetDlgItem(hWnd, IDC_CHK_ENABLE_LIKHI);
                 HWND hChkStart = GetDlgItem(hWnd, IDC_CHK_STARTUP);
+                HWND hChkAutoUpd = GetDlgItem(hWnd, IDC_CHK_AUTO_UPDATE);
                 HWND hChkBng = GetDlgItem(hWnd, IDC_CHK_BANGLA_TYPING);
                 HWND hChkBngl = GetDlgItem(hWnd, IDC_CHK_BANGLISH);
                 HWND hChkE2B = GetDlgItem(hWnd, IDC_CHK_ENG_TO_BAN);
@@ -764,6 +775,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
                 g_settings.enable_likhi = (SendMessage(hChkLikhi, BM_GETCHECK, 0, 0) == BST_CHECKED);
                 g_settings.launch_startup = (SendMessage(hChkStart, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                g_settings.auto_check_update = (SendMessage(hChkAutoUpd, BM_GETCHECK, 0, 0) == BST_CHECKED);
                 g_settings.bangla_typing = (SendMessage(hChkBng, BM_GETCHECK, 0, 0) == BST_CHECKED);
                 g_settings.banglish_recog = (SendMessage(hChkBngl, BM_GETCHECK, 0, 0) == BST_CHECKED);
                 g_settings.eng_to_bangla = (SendMessage(hChkE2B, BM_GETCHECK, 0, 0) == BST_CHECKED);
@@ -868,8 +880,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
             if (res == likhi::UpdateCheckResult::kUpToDate) {
                 SetWindowTextW(hLblStatus, L"✨ আপনি Likhi-এর সর্বশেষ সংস্করণ ব্যবহার করছেন।");
-                std::wstring upToDateMsg = L"আপনি Likhi-এর সর্বশেষ সংস্করণ ব্যবহার করছেন।\n\nবর্তমান সংস্করণ: " + ToBengaliDigits(likhi::kVersionWString);
-                MessageBoxW(hWnd, upToDateMsg.c_str(), L"Likhi আপডেট", MB_OK | MB_ICONINFORMATION);
             } else if (res == likhi::UpdateCheckResult::kUpdateAvailable && pInfo) {
                 SetWindowTextW(hLblStatus, L"🚀 Likhi-এর নতুন সংস্করণ পাওয়া গেছে!");
                 

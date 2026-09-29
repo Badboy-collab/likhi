@@ -86,6 +86,7 @@ BanglaEngine* g_engine = nullptr;
 InputMode g_mode = InputMode::kAutomatic;
 bool g_host_enabled = true;        // settings.json "universal_mode"
 bool g_personal_learning = true;   // settings.json "personal_learning"
+bool g_auto_check_update = false;  // settings.json "auto_check_update" (disabled by default)
 bool g_tray_added = false;
 
 HWND g_last_foreground = nullptr;
@@ -175,6 +176,8 @@ void LoadSettings() {
     if (text.find("\"universal_mode\": true") != std::string::npos) g_host_enabled = true;
     if (text.find("\"personal_learning\": false") != std::string::npos) g_personal_learning = false;
     if (text.find("\"personal_learning\": true") != std::string::npos) g_personal_learning = true;
+    if (text.find("\"auto_check_update\": false") != std::string::npos) g_auto_check_update = false;
+    if (text.find("\"auto_check_update\": true") != std::string::npos) g_auto_check_update = true;
 
     if (g_engine) BanglaEngine_SetLearningEnabled(g_engine, g_personal_learning);
     g_typing.SetEnabled(g_host_enabled && g_mode != InputMode::kTsfOnly);
@@ -521,18 +524,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
             if (res == likhi::UpdateCheckResult::kUpdateAvailable && pInfo) {
                 g_latest_update_version = std::wstring(pInfo->version.begin(), pInfo->version.end());
                 g_latest_update_url = pInfo->update_page_url;
-                if (g_window && g_tray_added) {
-                    NOTIFYICONDATAW nid = {0};
-                    nid.cbSize = sizeof(nid);
-                    nid.hWnd = g_window;
-                    nid.uID = 1;
-                    nid.uFlags = NIF_INFO;
-                    nid.dwInfoFlags = NIIF_INFO;
-                    wcsncpy(nid.szInfoTitle, L"Likhi (লিখি) আপডেট উপলব্ধ", 63);
-                    std::wstring balloon = L"Likhi-এর নতুন সংস্করণ (" + g_latest_update_version + L") পাওয়া গেছে। ক্লিক করে ডাউনলোড করুন।";
-                    wcsncpy(nid.szInfo, balloon.c_str(), 255);
-                    Shell_NotifyIconW(NIM_MODIFY, &nid);
-                }
+                // Strictly silent update readiness:
+                // Never interrupt the user while typing with recurring notification balloons or popups!
             }
             if (pInfo) delete pInfo;
             return 0;
@@ -544,7 +537,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
                 UpdateTray();
             } else if (wparam == kTimerBackgroundUpdateCheck) {
                 KillTimer(hwnd, kTimerBackgroundUpdateCheck);
-                if (likhi::UpdateService::ShouldCheckOnStartup()) {
+                if (g_auto_check_update && likhi::UpdateService::ShouldCheckOnStartup()) {
                     std::thread([hwnd]() {
                         likhi::ReleaseInfo* pInfo = new likhi::ReleaseInfo();
                         likhi::UpdateCheckResult res = likhi::UpdateService::CheckForUpdate(*pInfo, false);
@@ -688,7 +681,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command_line, int) {
     g_tray_added = Shell_NotifyIconW(NIM_ADD, &tray) != FALSE;
     RegisterHotKey(g_window, kHotkeyToggle, MOD_CONTROL | MOD_ALT, 'L');
     SetTimer(g_window, kTimerReloadSettings, kSettingsPollMs, nullptr);
-    SetTimer(g_window, kTimerBackgroundUpdateCheck, kUpdateCheckDelayMs, nullptr);
+    if (g_auto_check_update) {
+        SetTimer(g_window, kTimerBackgroundUpdateCheck, kUpdateCheckDelayMs, nullptr);
+    }
 
     g_keyboard_hook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHookProc, instance, 0);
     g_mouse_hook = SetWindowsHookExW(WH_MOUSE_LL, MouseHookProc, instance, 0);
