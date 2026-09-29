@@ -117,17 +117,21 @@ std::wstring Utf8ToWide(const std::string& utf8) {
     return wide;
 }
 
-// Helper to parse a single JSON release object
+// Helper to parse a single JSON release object (GitHub release or version.json manifest)
 bool ParseSingleReleaseObject(const std::string& obj_str, ReleaseInfo& out_info) {
     if (obj_str.empty()) return false;
 
     if (!ExtractJsonString(obj_str, "tag_name", out_info.tag_name)) {
-        return false;
-    }
-
-    out_info.version = out_info.tag_name;
-    if (!out_info.version.empty() && (out_info.version[0] == 'v' || out_info.version[0] == 'V')) {
-        out_info.version = out_info.version.substr(1);
+        // Fallback for version.json format: "version": "1.0.1"
+        if (!ExtractJsonString(obj_str, "version", out_info.version)) {
+            return false;
+        }
+        out_info.tag_name = "v" + out_info.version;
+    } else {
+        out_info.version = out_info.tag_name;
+        if (!out_info.version.empty() && (out_info.version[0] == 'v' || out_info.version[0] == 'V')) {
+            out_info.version = out_info.version.substr(1);
+        }
     }
 
     bool gh_prerelease = false;
@@ -148,10 +152,48 @@ bool ParseSingleReleaseObject(const std::string& obj_str, ReleaseInfo& out_info)
     if (out_info.name.empty()) out_info.name = "Likhi " + out_info.tag_name;
 
     ExtractJsonString(obj_str, "body", out_info.release_notes);
+    // If body not present, check changelog array from version.json
+    if (out_info.release_notes.empty()) {
+        size_t cl_pos = obj_str.find("\"changelog\"");
+        if (cl_pos != std::string::npos) {
+            size_t arr_start = obj_str.find('[', cl_pos);
+            size_t arr_end = obj_str.find(']', arr_start);
+            if (arr_start != std::string::npos && arr_end != std::string::npos) {
+                size_t cur = arr_start + 1;
+                std::string notes;
+                while (cur < arr_end) {
+                    size_t q1 = obj_str.find('"', cur);
+                    if (q1 == std::string::npos || q1 >= arr_end) break;
+                    size_t q2 = q1 + 1;
+                    std::string item;
+                    while (q2 < arr_end) {
+                        if (obj_str[q2] == '"' && obj_str[q2 - 1] != '\\') break;
+                        if (obj_str[q2] != '\\') item += obj_str[q2];
+                        q2++;
+                    }
+                    if (!item.empty()) {
+                        if (!notes.empty()) notes += "\n";
+                        notes += "• " + item;
+                    }
+                    cur = q2 + 1;
+                }
+                out_info.release_notes = notes;
+            }
+        }
+    }
+
     ExtractJsonString(obj_str, "published_at", out_info.published_at);
+    if (out_info.published_at.empty()) {
+        ExtractJsonString(obj_str, "release_date", out_info.published_at);
+    }
     out_info.update_page_url = kOfficialUpdateUrl;
 
-    // Assets inspection
+    // Check direct download_url, sha256, file_size from version.json
+    ExtractJsonString(obj_str, "download_url", out_info.download_url);
+    ExtractJsonString(obj_str, "sha256", out_info.sha256_hash);
+    ExtractJsonNumber(obj_str, "file_size", out_info.file_size);
+
+    // Assets inspection (GitHub Releases API format)
     size_t assets_pos = obj_str.find("\"assets\"");
     if (assets_pos != std::string::npos) {
         size_t search_pos = assets_pos;
@@ -165,8 +207,8 @@ bool ParseSingleReleaseObject(const std::string& obj_str, ReleaseInfo& out_info)
                 ExtractJsonNumber(obj_str, "size", size_bytes, search_pos);
 
                 out_info.download_url = dl_url;
-                out_info.sha256_hash = digest;
-                out_info.file_size = size_bytes;
+                if (!digest.empty()) out_info.sha256_hash = digest;
+                if (size_bytes > 0) out_info.file_size = size_bytes;
 
                 if (asset_name == "LikhiSetup.exe" || asset_name.find("Likhi_Setup") != std::string::npos) {
                     break;
@@ -494,56 +536,53 @@ UpdateCheckResult UpdateService::CheckForUpdate(ReleaseInfo& out_info, bool forc
         return UpdateCheckResult::kNetworkOffline;
     }
 
-    // Short timeouts so we never hang or delay startup: 3000ms each
-    DWORD timeout_ms = 3000;
+    // Timeouts: 4000ms each so we never hang
+    DWORD timeout_ms = 4000;
     WinHttpSetOption(h_session, WINHTTP_OPTION_CONNECT_TIMEOUT, &timeout_ms, sizeof(timeout_ms));
     WinHttpSetOption(h_session, WINHTTP_OPTION_SEND_TIMEOUT, &timeout_ms, sizeof(timeout_ms));
     WinHttpSetOption(h_session, WINHTTP_OPTION_RECEIVE_TIMEOUT, &timeout_ms, sizeof(timeout_ms));
 
-    HINTERNET h_connect = WinHttpConnect(h_session, L"api.github.com", INTERNET_DEFAULT_HTTPS_PORT, 0);
-    if (!h_connect) {
-        WinHttpCloseHandle(h_session);
-        return UpdateCheckResult::kNetworkOffline;
-    }
-
-    DWORD status_code = 0;
+    bool fetched = false;
     std::string response_data;
-    bool req_ok = FetchUrl(h_connect, L"/repos/Badboy-collab/likhi/releases/latest", status_code, response_data);
+    DWORD status_code = 0;
 
-    if (!req_ok) {
-        WinHttpCloseHandle(h_connect);
-        WinHttpCloseHandle(h_session);
-        return UpdateCheckResult::kNetworkOffline;
+    // STEP 1: Primary source of truth — Official getlikhi.com version.json (zero rate limit, direct CDN)
+    HINTERNET h_connect_primary = WinHttpConnect(h_session, L"getlikhi.com", INTERNET_DEFAULT_HTTPS_PORT, 0);
+    if (h_connect_primary) {
+        if (FetchUrl(h_connect_primary, L"/downloads/version.json", status_code, response_data) && status_code == 200) {
+            if (ParseReleaseJson(response_data, out_info, false)) {
+                fetched = true;
+            }
+        }
+        WinHttpCloseHandle(h_connect_primary);
     }
 
-    // If /releases/latest returned 404 (e.g. only prereleases exist or none published), fallback to /releases?per_page=5
-    if (status_code == 404) {
-        req_ok = FetchUrl(h_connect, L"/repos/Badboy-collab/likhi/releases?per_page=5", status_code, response_data);
-        if (!req_ok) {
-            WinHttpCloseHandle(h_connect);
-            WinHttpCloseHandle(h_session);
-            return UpdateCheckResult::kNetworkOffline;
+    // STEP 2: Fallback source — GitHub Releases API
+    if (!fetched) {
+        HINTERNET h_connect_gh = WinHttpConnect(h_session, L"api.github.com", INTERNET_DEFAULT_HTTPS_PORT, 0);
+        if (h_connect_gh) {
+            status_code = 0;
+            response_data.clear();
+            bool req_ok = FetchUrl(h_connect_gh, L"/repos/Badboy-collab/likhi/releases/latest", status_code, response_data);
+            if (status_code == 404) {
+                req_ok = FetchUrl(h_connect_gh, L"/repos/Badboy-collab/likhi/releases?per_page=5", status_code, response_data);
+            }
+            if (req_ok && status_code == 200) {
+                if (ParseReleaseJson(response_data, out_info, false)) {
+                    fetched = true;
+                }
+            }
+            WinHttpCloseHandle(h_connect_gh);
         }
     }
 
-    WinHttpCloseHandle(h_connect);
     WinHttpCloseHandle(h_session);
 
-    if (status_code != 200) {
-        if (status_code == 404) {
-            // No releases exist at all in repository
-            RecordCheckTimestamp();
-            return UpdateCheckResult::kUpToDate;
+    if (!fetched) {
+        if (status_code == 0) {
+            return UpdateCheckResult::kNetworkOffline;
         }
         return UpdateCheckResult::kError;
-    }
-
-    // Production Release Policy: strictly ignore drafts and prereleases for production installations
-    if (!ParseReleaseJson(response_data, out_info, false)) {
-        // Releases exist on remote (e.g. v1.0.0-test2), but NONE are stable releases.
-        // By documented policy, normal production users stay up-to-date with no errors.
-        RecordCheckTimestamp();
-        return UpdateCheckResult::kUpToDate;
     }
 
     RecordCheckTimestamp();
@@ -618,6 +657,217 @@ bool UpdateService::VerifySha256(const std::wstring& file_path, const std::strin
 
     CloseHandle(hFile);
     return success;
+}
+
+static bool DownloadFromUrl(
+    const std::string& url_str,
+    const std::wstring& dest_path,
+    DownloadProgressCallback progress_cb,
+    const std::atomic<bool>* cancel_flag,
+    uint64_t& out_bytes_written)
+{
+    out_bytes_written = 0;
+    if (url_str.empty() || dest_path.empty()) return false;
+
+    size_t last_slash = dest_path.find_last_of(L"\\/");
+    if (last_slash != std::wstring::npos) {
+        std::wstring dir = dest_path.substr(0, last_slash);
+        CreateDirectoryW(dir.c_str(), NULL);
+    }
+
+    std::wstring w_url = Utf8ToWide(url_str);
+    URL_COMPONENTSW urlComp = {0};
+    urlComp.dwStructSize = sizeof(urlComp);
+    urlComp.dwHostNameLength = (DWORD)-1;
+    urlComp.dwUrlPathLength = (DWORD)-1;
+    urlComp.dwExtraInfoLength = (DWORD)-1;
+
+    if (!WinHttpCrackUrl(w_url.c_str(), (DWORD)w_url.length(), 0, &urlComp)) {
+        return false;
+    }
+
+    std::wstring host(urlComp.lpszHostName, urlComp.dwHostNameLength);
+    std::wstring path(urlComp.lpszUrlPath, urlComp.dwUrlPathLength + urlComp.dwExtraInfoLength);
+    bool is_https = (urlComp.nScheme == INTERNET_SCHEME_HTTPS);
+    INTERNET_PORT port = urlComp.nPort;
+
+    HINTERNET hSession = WinHttpOpen(L"Likhi-AutoUpdater/1.0",
+                                     WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                     WINHTTP_NO_PROXY_NAME,
+                                     WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!hSession) return false;
+
+    DWORD connect_timeout = 15000;
+    DWORD send_timeout = 30000;
+    DWORD recv_timeout = 60000;
+    WinHttpSetOption(hSession, WINHTTP_OPTION_CONNECT_TIMEOUT, &connect_timeout, sizeof(connect_timeout));
+    WinHttpSetOption(hSession, WINHTTP_OPTION_SEND_TIMEOUT, &send_timeout, sizeof(send_timeout));
+    WinHttpSetOption(hSession, WINHTTP_OPTION_RECEIVE_TIMEOUT, &recv_timeout, sizeof(recv_timeout));
+
+    HINTERNET hConnect = WinHttpConnect(hSession, host.c_str(), port, 0);
+    if (!hConnect) {
+        WinHttpCloseHandle(hSession);
+        return false;
+    }
+
+    DWORD req_flags = is_https ? WINHTTP_FLAG_SECURE : 0;
+    HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", path.c_str(),
+                                           NULL, WINHTTP_NO_REFERER,
+                                           WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                           req_flags);
+    if (!hRequest) {
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return false;
+    }
+
+    DWORD redirect_policy = WINHTTP_OPTION_REDIRECT_POLICY_ALWAYS;
+    WinHttpSetOption(hRequest, WINHTTP_OPTION_REDIRECT_POLICY, &redirect_policy, sizeof(redirect_policy));
+
+    BOOL sent = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+                                   WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
+    if (!sent || !WinHttpReceiveResponse(hRequest, NULL)) {
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return false;
+    }
+
+    DWORD status_code = 0;
+    DWORD status_size = sizeof(status_code);
+    WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                        WINHTTP_HEADER_NAME_BY_INDEX, &status_code, &status_size, WINHTTP_NO_HEADER_INDEX);
+    if (status_code != 200) {
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return false;
+    }
+
+    DWORD content_length = 0;
+    DWORD cl_size = sizeof(content_length);
+    WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_CONTENT_LENGTH | WINHTTP_QUERY_FLAG_NUMBER,
+                        WINHTTP_HEADER_NAME_BY_INDEX, &content_length, &cl_size, WINHTTP_NO_HEADER_INDEX);
+    uint64_t total_bytes = content_length;
+
+    HANDLE hFile = CreateFileW(dest_path.c_str(), GENERIC_WRITE, 0, NULL,
+                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return false;
+    }
+
+    std::vector<char> buffer(65536);
+    DWORD bytes_available = 0;
+    bool write_ok = true;
+
+    while (WinHttpQueryDataAvailable(hRequest, &bytes_available) && bytes_available > 0) {
+        if (cancel_flag && cancel_flag->load()) {
+            write_ok = false;
+            break;
+        }
+        DWORD bytes_to_read = (std::min)(bytes_available, static_cast<DWORD>(buffer.size()));
+        DWORD bytes_read = 0;
+        if (WinHttpReadData(hRequest, buffer.data(), bytes_to_read, &bytes_read) && bytes_read > 0) {
+            DWORD written = 0;
+            if (!WriteFile(hFile, buffer.data(), bytes_read, &written, NULL) || written != bytes_read) {
+                write_ok = false;
+                break;
+            }
+            out_bytes_written += written;
+            if (progress_cb) {
+                progress_cb(out_bytes_written, total_bytes);
+            }
+        } else {
+            break;
+        }
+    }
+
+    CloseHandle(hFile);
+    WinHttpCloseHandle(hRequest);
+    WinHttpCloseHandle(hConnect);
+    WinHttpCloseHandle(hSession);
+
+    if (!write_ok || (cancel_flag && cancel_flag->load())) {
+        DeleteFileW(dest_path.c_str());
+        return false;
+    }
+
+    return (out_bytes_written > 0);
+}
+
+DownloadResult UpdateService::DownloadInstaller(
+    const std::string& download_url,
+    const std::string& fallback_url,
+    const std::wstring& dest_path,
+    const std::string& expected_sha256,
+    uint64_t expected_size,
+    DownloadProgressCallback progress_cb,
+    const std::atomic<bool>* cancel_flag)
+{
+    if (dest_path.empty()) return DownloadResult::kDiskError;
+
+    // Remove any previous partial file
+    DeleteFileW(dest_path.c_str());
+
+    uint64_t bytes_written = 0;
+    bool dl_ok = false;
+
+    // Try primary URL first
+    if (!download_url.empty()) {
+        dl_ok = DownloadFromUrl(download_url, dest_path, progress_cb, cancel_flag, bytes_written);
+    }
+
+    // Try fallback URL if primary failed
+    if (!dl_ok && !fallback_url.empty() && fallback_url != download_url) {
+        if (cancel_flag && cancel_flag->load()) return DownloadResult::kCancelled;
+        dl_ok = DownloadFromUrl(fallback_url, dest_path, progress_cb, cancel_flag, bytes_written);
+    }
+
+    if (cancel_flag && cancel_flag->load()) {
+        DeleteFileW(dest_path.c_str());
+        return DownloadResult::kCancelled;
+    }
+
+    if (!dl_ok || bytes_written == 0) {
+        DeleteFileW(dest_path.c_str());
+        return DownloadResult::kNetworkError;
+    }
+
+    // Size verification
+    if (expected_size > 0 && bytes_written != expected_size) {
+        DeleteFileW(dest_path.c_str());
+        return DownloadResult::kHashMismatch;
+    }
+
+    // SHA-256 integrity verification
+    if (!expected_sha256.empty()) {
+        if (!VerifySha256(dest_path, expected_sha256)) {
+            DeleteFileW(dest_path.c_str());
+            return DownloadResult::kHashMismatch;
+        }
+    }
+
+    return DownloadResult::kSuccess;
+}
+
+bool UpdateService::LaunchInstaller(const std::wstring& installer_path, bool silent) {
+    if (installer_path.empty() || GetFileAttributesW(installer_path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        return false;
+    }
+    std::wstring params = silent ? L"/silent" : L"";
+    HINSTANCE res = ShellExecuteW(NULL, L"open", installer_path.c_str(), params.c_str(), NULL, SW_SHOWNORMAL);
+    return reinterpret_cast<INT_PTR>(res) > 32;
+}
+
+std::wstring UpdateService::GetDefaultInstallerDownloadPath() {
+    wchar_t temp_dir[MAX_PATH] = {0};
+    GetTempPathW(MAX_PATH, temp_dir);
+    std::wstring update_dir = std::wstring(temp_dir) + L"Likhi_Update";
+    CreateDirectoryW(update_dir.c_str(), NULL);
+    return update_dir + L"\\LikhiSetup.exe";
 }
 
 } // namespace likhi

@@ -531,6 +531,16 @@ static int DoInstall() {
     if (!ExtractResource(IDR_PAYLOAD_SETTINGS, dir + L"\\bangla_settings.exe", wrote)) { WriteLogFile(); return 3; }
     if (!ExtractResource(IDR_PAYLOAD_UNIVERSAL, dir + L"\\likhi_universal.exe", wrote)) { WriteLogFile(); return 3; }
 
+    // If an older appdata copy exists, keep it synchronized with the new build
+    wchar_t appdata[MAX_PATH] = {0};
+    if (!g_dry && SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, appdata))) {
+        std::wstring appdataSettings = std::wstring(appdata) + L"\\PC-Bangla-Typing-App\\bangla_settings.exe";
+        if (GetFileAttributesW(appdataSettings.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            CopyFileW((dir + L"\\bangla_settings.exe").c_str(), appdataSettings.c_str(), FALSE);
+            Log(L"  synchronized appdata settings copy");
+        }
+    }
+
     // The installer itself must live in the install dir so the uninstall entry
     // keeps working after the original download is deleted.
     wchar_t self[MAX_PATH] = {0};

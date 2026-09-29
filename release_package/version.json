@@ -1,9 +1,9 @@
-﻿{
+{
   "version": "1.0.1",
   "release_date": "2026-09-28",
   "download_url": "https://getlikhi.com/downloads/LikhiSetup.exe",
-  "sha256": "2082cbf776ac4ce429913738b4c523491dfd56a3e8d1f41ebe445b091eee30b8",
-  "file_size": 18074041,
+  "sha256": "dd31916316bf5c190359575fb69e2a01c73473a04df762d6edd7ce3c411d9399",
+  "file_size": 18096764,
   "changelog": [
     "Improved context-aware candidate ranking for conversational phrases",
     "Eliminated candidate popup flicker during rapid typing",

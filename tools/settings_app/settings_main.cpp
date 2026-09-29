@@ -64,7 +64,9 @@ enum SectionID {
 #define IDC_CHK_ONLINE_SUG    2032
 #define IDC_CHK_PERS_LEARN    2033
 #define IDC_BTN_RESET_LEARN   2034
-#define WM_UPDATE_CHECK_DONE  (WM_APP + 20)
+#define WM_UPDATE_CHECK_DONE    (WM_APP + 20)
+#define WM_UPDATE_PROGRESS      (WM_APP + 21)
+#define WM_UPDATE_DOWNLOAD_DONE (WM_APP + 22)
 
 struct AppSettings {
     bool enable_likhi = true;
@@ -749,7 +751,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             break;
         }
 
-                case WM_UPDATE_CHECK_DONE: {
+        case WM_UPDATE_CHECK_DONE: {
             likhi::UpdateCheckResult res = (likhi::UpdateCheckResult)wParam;
             likhi::ReleaseInfo* pInfo = (likhi::ReleaseInfo*)lParam;
             if (g_hBtnUpd) EnableWindow(g_hBtnUpd, TRUE);
@@ -770,11 +772,33 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     if (notes.size() > 500) notes = notes.substr(0, 500) + L"...";
                     msg += L"নতুন যা যুক্ত হয়েছে:\n" + notes + L"\n\n";
                 }
-                msg += L"আপনি কি এখন অফিসিয়াল সাইট থেকে আপডেট করতে চান? (Update Now)";
+                msg += L"আপনি কি এখন আপডেট করতে চান? (Update Now)";
 
                 int choice = MessageBoxW(hWnd, msg.c_str(), L"UPDATE AVAILABLE — Likhi", MB_YESNO | MB_ICONINFORMATION);
                 if (choice == IDYES) {
-                    likhi::UpdateService::LaunchOfficialUpdateFlow(pInfo->update_page_url);
+                    if (g_hBtnUpd) EnableWindow(g_hBtnUpd, FALSE);
+                    SetWindowTextW(hLblStatus, L"📥 আপডেট ডাউনলোড হচ্ছে... অনুগ্রহ করে অপেক্ষা করুন...");
+
+                    std::thread([hWnd, pInfo]() {
+                        std::wstring dest_path = likhi::UpdateService::GetDefaultInstallerDownloadPath();
+                        std::string primary_url = pInfo->download_url.empty() ? 
+                            "https://getlikhi.com/downloads/LikhiSetup.exe" : pInfo->download_url;
+                        std::string fallback_url = "https://github.com/Badboy-collab/likhi/releases/download/" + 
+                            pInfo->tag_name + "/LikhiSetup.exe";
+
+                        likhi::DownloadResult dl_res = likhi::UpdateService::DownloadInstaller(
+                            primary_url, fallback_url, dest_path,
+                            pInfo->sha256_hash, pInfo->file_size,
+                            [hWnd](uint64_t dl, uint64_t tot) {
+                                PostMessageW(hWnd, WM_UPDATE_PROGRESS, (WPARAM)(dl / 1024), (LPARAM)(tot / 1024));
+                            },
+                            nullptr
+                        );
+
+                        delete pInfo;
+                        PostMessageW(hWnd, WM_UPDATE_DOWNLOAD_DONE, (WPARAM)dl_res, (LPARAM)new std::wstring(dest_path));
+                    }).detach();
+                    return 0; // pInfo is owned by thread
                 } else {
                     likhi::UpdateService::DismissVersion(pInfo->version);
                     SetWindowTextW(hLblStatus, L"আপডেটটি পরবর্তীতে অনুস্মারক রাখা হবে।");
@@ -786,6 +810,58 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
 
             if (pInfo) delete pInfo;
+            return 0;
+        }
+
+        case WM_UPDATE_PROGRESS: {
+            DWORD dl_kb = (DWORD)wParam;
+            DWORD tot_kb = (DWORD)lParam;
+            if (tot_kb > 0) {
+                DWORD pct = (dl_kb * 100) / tot_kb;
+                wchar_t buf[128];
+                swprintf(buf, 128, L"📥 আপডেট ডাউনলোড হচ্ছে... %lu%% (%lu KB / %lu KB)", pct, dl_kb, tot_kb);
+                SetWindowTextW(hLblStatus, buf);
+            } else if (dl_kb > 0) {
+                wchar_t buf[128];
+                swprintf(buf, 128, L"📥 আপডেট ডাউনলোড হচ্ছে... %lu KB", dl_kb);
+                SetWindowTextW(hLblStatus, buf);
+            }
+            return 0;
+        }
+
+        case WM_UPDATE_DOWNLOAD_DONE: {
+            likhi::DownloadResult res = (likhi::DownloadResult)wParam;
+            std::wstring* pPath = (std::wstring*)lParam;
+            if (g_hBtnUpd) EnableWindow(g_hBtnUpd, TRUE);
+
+            if (res == likhi::DownloadResult::kSuccess && pPath) {
+                SetWindowTextW(hLblStatus, L"✅ আপডেট প্রস্তুত। Likhi ইনস্টল করা হচ্ছে...");
+                MessageBoxW(hWnd,
+                    L"আপডেট প্রস্তুত। Likhi বন্ধ করে নতুন সংস্করণ ইনস্টল করা হচ্ছে...",
+                    L"Likhi Auto-Update", MB_OK | MB_ICONINFORMATION);
+
+                std::wstring installer_path = *pPath;
+                delete pPath;
+
+                // Launch verified installer
+                likhi::UpdateService::LaunchInstaller(installer_path, false);
+
+                // Exit settings app cleanly so installer can update files
+                PostQuitMessage(0);
+                return 0;
+            } else if (res == likhi::DownloadResult::kHashMismatch) {
+                SetWindowTextW(hLblStatus, L"❌ আপডেট ফাইল যাচাইকরণ ব্যর্থ হয়েছে।");
+                MessageBoxW(hWnd,
+                    L"আপডেট ফাইলটি যাচাই করা যায়নি (Checksum Mismatch)। আপনার বর্তমান সংস্করণটি অক্ষত রাখা হয়েছে।",
+                    L"আপডেট ত্রুটি", MB_OK | MB_ICONERROR);
+            } else {
+                SetWindowTextW(hLblStatus, L"⚠️ আপডেট ডাউনলোড ব্যর্থ হয়েছে। পরে চেষ্টা করুন।");
+                MessageBoxW(hWnd,
+                    L"আপডেট ফাইল ডাউনলোড করা যায়নি। আপনার ইন্টারনেট সংযোগ পরীক্ষা করে পুনরায় চেষ্টা করুন।",
+                    L"আপডেট ত্রুটি", MB_OK | MB_ICONWARNING);
+            }
+
+            if (pPath) delete pPath;
             return 0;
         }
 
