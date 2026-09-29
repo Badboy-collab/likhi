@@ -227,7 +227,83 @@ void SwitchSection(HWND hWnd, SectionID sec) {
     if (sec == SEC_DICTIONARY) {
         RefreshDictionaryList();
     }
-    InvalidateRect(hWnd, NULL, TRUE);
+    RECT rcCard = {245, 15, 805, 465};
+    InvalidateRect(hWnd, &rcCard, TRUE);
+}
+
+// ---------------------------------------------------------------------------
+// Modern Custom Button Renderer (Owner-drawn, high-DPI fluent style)
+// ---------------------------------------------------------------------------
+static void DrawModernButton(LPDRAWITEMSTRUCT pDIS, const wchar_t* text, HFONT hFont, bool isPrimary) {
+    HDC hdc = pDIS->hDC;
+    RECT rc = pDIS->rcItem;
+    bool isPressed = (pDIS->itemState & ODS_SELECTED);
+    bool isDisabled = (pDIS->itemState & ODS_DISABLED);
+    bool hasFocus = (pDIS->itemState & ODS_FOCUS);
+
+    COLORREF bgColor;
+    COLORREF textColor;
+    COLORREF borderColor;
+
+    if (isPrimary) {
+        if (isDisabled) {
+            bgColor = RGB(148, 163, 184); // Slate 400
+            textColor = RGB(241, 245, 249);
+            borderColor = bgColor;
+        } else if (isPressed) {
+            bgColor = RGB(29, 78, 216);  // Royal Blue 700
+            textColor = RGB(255, 255, 255);
+            borderColor = bgColor;
+        } else {
+            bgColor = RGB(37, 99, 235);  // Royal Blue 600
+            textColor = RGB(255, 255, 255);
+            borderColor = bgColor;
+        }
+    } else {
+        if (isDisabled) {
+            bgColor = RGB(241, 245, 249);
+            textColor = RGB(148, 163, 184);
+            borderColor = RGB(226, 232, 240);
+        } else if (isPressed) {
+            bgColor = RGB(226, 232, 240); // Slate 200
+            textColor = RGB(15, 23, 42);
+            borderColor = RGB(203, 213, 225);
+        } else {
+            bgColor = RGB(255, 255, 255); // Crisp White
+            textColor = RGB(30, 41, 59);  // Slate 800
+            borderColor = RGB(203, 213, 225); // Slate 300
+        }
+    }
+
+    HBRUSH hBr = CreateSolidBrush(bgColor);
+    HPEN hPen = CreatePen(PS_SOLID, 1, borderColor);
+    HBRUSH hOldBr = (HBRUSH)SelectObject(hdc, hBr);
+    HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+
+    RoundRect(hdc, rc.left, rc.top, rc.right, rc.bottom, 8, 8);
+
+    SelectObject(hdc, hOldBr);
+    SelectObject(hdc, hOldPen);
+    DeleteObject(hBr);
+    DeleteObject(hPen);
+
+    if (hasFocus && !isDisabled) {
+        HPEN hFocusPen = CreatePen(PS_DOT, 1, isPrimary ? RGB(191, 219, 254) : RGB(37, 99, 235));
+        HPEN hOldFocusPen = (HPEN)SelectObject(hdc, hFocusPen);
+        HBRUSH hOldFocusBr = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+        RoundRect(hdc, rc.left + 3, rc.top + 3, rc.right - 3, rc.bottom - 3, 6, 6);
+        SelectObject(hdc, hOldFocusBr);
+        SelectObject(hdc, hOldFocusPen);
+        DeleteObject(hFocusPen);
+    }
+
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, textColor);
+    HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
+
+    DrawTextW(hdc, text, -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+    SelectObject(hdc, hOldFont);
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -247,12 +323,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
 
             // Fonts: Nirmala UI for perfect Bengali, Segoe UI for English
-            hFontTitle = CreateFontW(-22, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Nirmala UI");
-            hFontHeader = CreateFontW(-19, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Nirmala UI");
+            hFontTitle = CreateFontW(-20, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Nirmala UI");
+            hFontHeader = CreateFontW(-17, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Nirmala UI");
             hFontBody = CreateFontW(-14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Nirmala UI");
             hFontBold = CreateFontW(-14, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Nirmala UI");
             hFontSub = CreateFontW(-12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-            hFontCredit = CreateFontW(-16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+            hFontCredit = CreateFontW(-15, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
 
             // Color Palette
             hBrushBg = CreateSolidBrush(RGB(248, 250, 252));        // Light surface
@@ -269,29 +345,30 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 g_hNavButtons[i] = CreateWindowW(
                     L"BUTTON", g_navLabels[i],
                     WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
-                    15, 95 + (i * 38), 205, 34,
+                    15, 95 + (i * 38), 205, 35,
                     hWnd, (HMENU)(intptr_t)(IDC_NAV_BASE + i), hInst, NULL
                 );
             }
 
             // ==============================================================
+            // ==============================================================
             // SECTION 0: GENERAL
             // ==============================================================
-            HWND hG_Title = CreateWindowW(L"STATIC", L"Likhi — সাধারণ পছন্দসমূহ", WS_CHILD | SS_LEFT, 250, 30, 520, 28, hWnd, NULL, NULL, NULL);
+            HWND hG_Title = CreateWindowW(L"STATIC", L"Likhi — সাধারণ পছন্দসমূহ", WS_CHILD | SS_LEFT, 265, 30, 510, 32, hWnd, NULL, NULL, NULL);
             SendMessage(hG_Title, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
-            HWND hG_Status = CreateWindowW(L"STATIC", L"🟢 Likhi স্ট্যাটাস: সক্রিয় ও প্রস্তুত (Active & Ready)", WS_CHILD | SS_LEFT, 250, 75, 520, 24, hWnd, NULL, NULL, NULL);
+            HWND hG_Status = CreateWindowW(L"STATIC", L"🟢 Likhi স্ট্যাটাস: সক্রিয় ও প্রস্তুত (Active & Ready)", WS_CHILD | SS_LEFT, 265, 75, 510, 28, hWnd, NULL, NULL, NULL);
             SendMessage(hG_Status, WM_SETFONT, (WPARAM)hFontBold, TRUE);
 
-            HWND hChkLikhi = CreateWindowW(L"BUTTON", L"Likhi টাইপিং ইঞ্জিন সক্রিয় রাখুন (Enable Likhi Service)", WS_CHILD | BS_AUTOCHECKBOX, 250, 115, 520, 24, hWnd, (HMENU)IDC_CHK_ENABLE_LIKHI, NULL, NULL);
+            HWND hChkLikhi = CreateWindowW(L"BUTTON", L"Likhi টাইপিং ইঞ্জিন সক্রিয় রাখুন (Enable Likhi Service)", WS_CHILD | BS_AUTOCHECKBOX, 265, 115, 510, 28, hWnd, (HMENU)IDC_CHK_ENABLE_LIKHI, NULL, NULL);
             SendMessage(hChkLikhi, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkLikhi, BM_SETCHECK, g_settings.enable_likhi ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hChkStart = CreateWindowW(L"BUTTON", L"উইন্ডোজ চালুর সাথে Likhi চালু করুন (Start with Windows)", WS_CHILD | BS_AUTOCHECKBOX, 250, 155, 520, 24, hWnd, (HMENU)IDC_CHK_STARTUP, NULL, NULL);
+            HWND hChkStart = CreateWindowW(L"BUTTON", L"উইন্ডোজ চালুর সাথে Likhi চালু করুন (Start with Windows)", WS_CHILD | BS_AUTOCHECKBOX, 265, 155, 510, 28, hWnd, (HMENU)IDC_CHK_STARTUP, NULL, NULL);
             SendMessage(hChkStart, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkStart, BM_SETCHECK, g_settings.launch_startup ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hG_LangCard = CreateWindowW(L"STATIC", L"📌 ডিফল্ট ইনপুট প্রোফাইল: বাংলা (বাংলাদেশ) — 0x0845\n\nকীবোর্ডে Win + Space চাপলে Likhi স্বয়ংক্রিয়ভাবে একটি মাত্র ক্লিন প্রোফাইল হিসেবে সক্রিয় থাকে।", WS_CHILD | SS_LEFT, 250, 210, 520, 80, hWnd, NULL, NULL, NULL);
+            HWND hG_LangCard = CreateWindowW(L"STATIC", L"📌 ডিফল্ট ইনপুট প্রোফাইল: বাংলা (বাংলাদেশ) — 0x0845\n\nকীবোর্ডে Win + Space চাপলে Likhi স্বয়ংক্রিয়ভাবে একটি মাত্র ক্লিন প্রোফাইল হিসেবে সক্রিয় থাকে।", WS_CHILD | SS_LEFT, 265, 205, 510, 90, hWnd, NULL, NULL, NULL);
             SendMessage(hG_LangCard, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
             g_section_controls[SEC_GENERAL].push_back(hG_Title);
@@ -303,22 +380,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // ==============================================================
             // SECTION 1: TYPING
             // ==============================================================
-            HWND hT_Title = CreateWindowW(L"STATIC", L"টাইপিং ও ফোনেটিক সেটিংস", WS_CHILD | SS_LEFT, 250, 30, 520, 28, hWnd, NULL, NULL, NULL);
+            HWND hT_Title = CreateWindowW(L"STATIC", L"টাইপিং ও ফোনেটিক সেটিংস", WS_CHILD | SS_LEFT, 265, 30, 510, 32, hWnd, NULL, NULL, NULL);
             SendMessage(hT_Title, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
-            HWND hChkBng = CreateWindowW(L"BUTTON", L"ফোনেটিক বাংলা টাইপিং চালু রাখুন (Bangla Typing)", WS_CHILD | BS_AUTOCHECKBOX, 250, 80, 520, 24, hWnd, (HMENU)IDC_CHK_BANGLA_TYPING, NULL, NULL);
+            HWND hChkBng = CreateWindowW(L"BUTTON", L"ফোনেটিক বাংলা টাইপিং চালু রাখুন (Bangla Typing)", WS_CHILD | BS_AUTOCHECKBOX, 265, 80, 510, 28, hWnd, (HMENU)IDC_CHK_BANGLA_TYPING, NULL, NULL);
             SendMessage(hChkBng, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkBng, BM_SETCHECK, g_settings.bangla_typing ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hChkBngl = CreateWindowW(L"BUTTON", L"বাংলিশ স্বীকৃতি ও উচ্চারণ ম্যাচিং (Banglish Recognition)", WS_CHILD | BS_AUTOCHECKBOX, 250, 120, 520, 24, hWnd, (HMENU)IDC_CHK_BANGLISH, NULL, NULL);
+            HWND hChkBngl = CreateWindowW(L"BUTTON", L"বাংলিশ স্বীকৃতি ও উচ্চারণ ম্যাচিং (Banglish Recognition)", WS_CHILD | BS_AUTOCHECKBOX, 265, 122, 510, 28, hWnd, (HMENU)IDC_CHK_BANGLISH, NULL, NULL);
             SendMessage(hChkBngl, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkBngl, BM_SETCHECK, g_settings.banglish_recog ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hChkE2B = CreateWindowW(L"BUTTON", L"ইংরেজি শব্দের বাংলা রূপান্তর (control -> কন্ট্রোল, office -> অফিস)", WS_CHILD | BS_AUTOCHECKBOX, 250, 160, 520, 24, hWnd, (HMENU)IDC_CHK_ENG_TO_BAN, NULL, NULL);
+            HWND hChkE2B = CreateWindowW(L"BUTTON", L"ইংরেজি শব্দের বাংলা রূপান্তর (control -> কন্ট্রোল, office -> অফিস)", WS_CHILD | BS_AUTOCHECKBOX, 265, 164, 510, 28, hWnd, (HMENU)IDC_CHK_ENG_TO_BAN, NULL, NULL);
             SendMessage(hChkE2B, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkE2B, BM_SETCHECK, g_settings.eng_to_bangla ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hChkFuz = CreateWindowW(L"BUTTON", L"বানান ভুলের সহনশীলতা (Fuzzy Spelling Tolerance)", WS_CHILD | BS_AUTOCHECKBOX, 250, 200, 520, 24, hWnd, (HMENU)IDC_CHK_FUZZY, NULL, NULL);
+            HWND hChkFuz = CreateWindowW(L"BUTTON", L"বানান ভুলের সহনশীলতা (Fuzzy Spelling Tolerance)", WS_CHILD | BS_AUTOCHECKBOX, 265, 206, 510, 28, hWnd, (HMENU)IDC_CHK_FUZZY, NULL, NULL);
             SendMessage(hChkFuz, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkFuz, BM_SETCHECK, g_settings.fuzzy_spelling ? BST_CHECKED : BST_UNCHECKED, 0);
 
@@ -331,39 +408,41 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // ==============================================================
             // SECTION 2: SUGGESTIONS
             // ==============================================================
-            HWND hS_Title = CreateWindowW(L"STATIC", L"স্মার্ট সাজেশন ও শব্দ অনুমান", WS_CHILD | SS_LEFT, 250, 30, 520, 28, hWnd, NULL, NULL, NULL);
+            // SECTION 2: SUGGESTIONS
+            // ==============================================================
+            HWND hS_Title = CreateWindowW(L"STATIC", L"স্মার্ট সাজেশন ও শব্দ অনুমান", WS_CHILD | SS_LEFT, 265, 30, 510, 32, hWnd, NULL, NULL, NULL);
             SendMessage(hS_Title, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
-            HWND hChkSug = CreateWindowW(L"BUTTON", L"টাইপ করার সময় সাজেশন বার প্রদর্শন করুন", WS_CHILD | BS_AUTOCHECKBOX, 250, 66, 520, 24, hWnd, (HMENU)IDC_CHK_SUGGESTIONS, NULL, NULL);
+            HWND hChkSug = CreateWindowW(L"BUTTON", L"টাইপ করার সময় সাজেশন বার প্রদর্শন করুন", WS_CHILD | BS_AUTOCHECKBOX, 265, 70, 510, 28, hWnd, (HMENU)IDC_CHK_SUGGESTIONS, NULL, NULL);
             SendMessage(hChkSug, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkSug, BM_SETCHECK, g_settings.show_suggestions ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hChkPred = CreateWindowW(L"BUTTON", L"প্রাসঙ্গিক পরবর্তী শব্দ অনুমান (Contextual Prediction)", WS_CHILD | BS_AUTOCHECKBOX, 250, 94, 520, 24, hWnd, (HMENU)IDC_CHK_PREDICTION, NULL, NULL);
+            HWND hChkPred = CreateWindowW(L"BUTTON", L"প্রাসঙ্গিক পরবর্তী শব্দ অনুমান (Contextual Prediction)", WS_CHILD | BS_AUTOCHECKBOX, 265, 102, 510, 28, hWnd, (HMENU)IDC_CHK_PREDICTION, NULL, NULL);
             SendMessage(hChkPred, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkPred, BM_SETCHECK, g_settings.word_prediction ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hChkEngCand = CreateWindowW(L"BUTTON", L"সাজেশন বারে আসল ইংরেজি রূপ বিকল্প হিসেবে রাখুন (Original English)", WS_CHILD | BS_AUTOCHECKBOX, 250, 122, 520, 24, hWnd, (HMENU)IDC_CHK_ENG_CANDIDATE, NULL, NULL);
+            HWND hChkEngCand = CreateWindowW(L"BUTTON", L"সাজেশন বারে আসল ইংরেজি রূপ বিকল্প হিসেবে রাখুন (Original English)", WS_CHILD | BS_AUTOCHECKBOX, 265, 134, 510, 28, hWnd, (HMENU)IDC_CHK_ENG_CANDIDATE, NULL, NULL);
             SendMessage(hChkEngCand, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkEngCand, BM_SETCHECK, g_settings.show_eng_candidate ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hChkAuto = CreateWindowW(L"BUTTON", L"অটো-কারেক্ট চালু করুন (Auto Correct)", WS_CHILD | BS_AUTOCHECKBOX, 250, 150, 520, 24, hWnd, (HMENU)IDC_CHK_AUTOCORRECT, NULL, NULL);
+            HWND hChkAuto = CreateWindowW(L"BUTTON", L"অটো-কারেক্ট চালু করুন (Auto Correct)", WS_CHILD | BS_AUTOCHECKBOX, 265, 166, 510, 28, hWnd, (HMENU)IDC_CHK_AUTOCORRECT, NULL, NULL);
             SendMessage(hChkAuto, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkAuto, BM_SETCHECK, g_settings.auto_correct ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hChkOnline = CreateWindowW(L"BUTTON", L"অনলাইন সাজেশন সহায়তা — ঐচ্ছিক ও প্রাইভেসি-ফার্স্ট", WS_CHILD | BS_AUTOCHECKBOX, 250, 178, 520, 24, hWnd, (HMENU)IDC_CHK_ONLINE_SUG, NULL, NULL);
+            HWND hChkOnline = CreateWindowW(L"BUTTON", L"অনলাইন সাজেশন সহায়তা — ঐচ্ছিক ও প্রাইভেসি-ফার্স্ট", WS_CHILD | BS_AUTOCHECKBOX, 265, 198, 510, 28, hWnd, (HMENU)IDC_CHK_ONLINE_SUG, NULL, NULL);
             SendMessage(hChkOnline, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkOnline, BM_SETCHECK, g_settings.online_suggestions ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hChkLearn = CreateWindowW(L"BUTTON", L"ব্যক্তিগত পছন্দ মনে রাখুন (Personal Learning — পছন্দের বানান শীর্ষে আসবে)", WS_CHILD | BS_AUTOCHECKBOX, 250, 206, 520, 24, hWnd, (HMENU)IDC_CHK_PERS_LEARN, NULL, NULL);
+            HWND hChkLearn = CreateWindowW(L"BUTTON", L"ব্যক্তিগত পছন্দ মনে রাখুন (Personal Learning — পছন্দের বানান শীর্ষে আসবে)", WS_CHILD | BS_AUTOCHECKBOX, 265, 230, 510, 28, hWnd, (HMENU)IDC_CHK_PERS_LEARN, NULL, NULL);
             SendMessage(hChkLearn, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkLearn, BM_SETCHECK, g_settings.personal_learning ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hS_CandLbl = CreateWindowW(L"STATIC", L"প্রস্তাবিত শব্দের সংখ্যা:", WS_CHILD | SS_LEFT, 250, 238, 150, 24, hWnd, NULL, NULL, NULL);
+            HWND hS_CandLbl = CreateWindowW(L"STATIC", L"প্রস্তাবিত শব্দের সংখ্যা:", WS_CHILD | SS_LEFT, 265, 268, 155, 28, hWnd, NULL, NULL, NULL);
             SendMessage(hS_CandLbl, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hR3 = CreateWindowW(L"BUTTON", L"3", WS_CHILD | BS_AUTORADIOBUTTON | WS_GROUP, 400, 238, 45, 24, hWnd, (HMENU)IDC_RADIO_CAND3, NULL, NULL);
-            HWND hR4 = CreateWindowW(L"BUTTON", L"4", WS_CHILD | BS_AUTORADIOBUTTON, 455, 238, 45, 24, hWnd, (HMENU)IDC_RADIO_CAND4, NULL, NULL);
-            HWND hR5 = CreateWindowW(L"BUTTON", L"5", WS_CHILD | BS_AUTORADIOBUTTON, 510, 238, 45, 24, hWnd, (HMENU)IDC_RADIO_CAND5, NULL, NULL);
+            HWND hR3 = CreateWindowW(L"BUTTON", L"3", WS_CHILD | BS_AUTORADIOBUTTON | WS_GROUP, 425, 268, 45, 28, hWnd, (HMENU)IDC_RADIO_CAND3, NULL, NULL);
+            HWND hR4 = CreateWindowW(L"BUTTON", L"4", WS_CHILD | BS_AUTORADIOBUTTON, 475, 268, 45, 28, hWnd, (HMENU)IDC_RADIO_CAND4, NULL, NULL);
+            HWND hR5 = CreateWindowW(L"BUTTON", L"5", WS_CHILD | BS_AUTORADIOBUTTON, 525, 268, 45, 28, hWnd, (HMENU)IDC_RADIO_CAND5, NULL, NULL);
 
             SendMessage(hR3, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hR4, WM_SETFONT, (WPARAM)hFontBody, TRUE);
@@ -373,10 +452,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             else if (g_settings.max_candidates == 4) SendMessage(hR4, BM_SETCHECK, BST_CHECKED, 0);
             else SendMessage(hR5, BM_SETCHECK, BST_CHECKED, 0);
 
-            HWND hBtnResetLearn = CreateWindowW(L"BUTTON", L"শেখা অভ্যাস রিসেট করুন (Reset Learned Habits)", WS_CHILD | BS_PUSHBUTTON, 250, 272, 300, 30, hWnd, (HMENU)IDC_BTN_RESET_LEARN, NULL, NULL);
-            SendMessage(hBtnResetLearn, WM_SETFONT, (WPARAM)hFontBold, TRUE);
+            HWND hBtnResetLearn = CreateWindowW(L"BUTTON", L"শেখা অভ্যাস রিসেট করুন (Reset Habits)", WS_CHILD | BS_OWNERDRAW, 265, 308, 320, 38, hWnd, (HMENU)IDC_BTN_RESET_LEARN, NULL, NULL);
 
-            HWND hS_Expl = CreateWindowW(L"STATIC", L"💡 গোপনীয়তা গ্যারান্টি: Likhi শতভাগ অফলাইন-ফার্স্ট। পাসওয়ার্ড বা স্পর্শকাতর তথ্য কখনো ইন্টারনেটে যায় না।", WS_CHILD | SS_LEFT, 250, 312, 520, 36, hWnd, NULL, NULL, NULL);
+            HWND hS_Expl = CreateWindowW(L"STATIC", L"💡 গোপনীয়তা গ্যারান্টি: Likhi শতভাগ অফলাইন-ফার্স্ট। পাসওয়ার্ড বা স্পর্শকাতর তথ্য কখনো ইন্টারনেটে যায় না।", WS_CHILD | SS_LEFT, 265, 358, 510, 50, hWnd, NULL, NULL, NULL);
             SendMessage(hS_Expl, WM_SETFONT, (WPARAM)hFontSub, TRUE);
 
             g_section_controls[SEC_SUGGESTIONS].push_back(hS_Title);
@@ -396,10 +474,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // ==============================================================
             // SECTION 3: BANGLISH
             // ==============================================================
-            HWND hB_Title = CreateWindowW(L"STATIC", L"বাংলিশ ও ঋণশব্দ ডিকশনারি", WS_CHILD | SS_LEFT, 250, 30, 520, 28, hWnd, NULL, NULL, NULL);
+            HWND hB_Title = CreateWindowW(L"STATIC", L"বাংলিশ ও ঋণশব্দ ডিকশনারি", WS_CHILD | SS_LEFT, 265, 30, 510, 32, hWnd, NULL, NULL, NULL);
             SendMessage(hB_Title, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
-            HWND hB_Desc = CreateWindowW(L"STATIC", L"Likhi আধুনিক বাংলিশ এবং দৈনন্দিন প্রযুক্তি ও অফিসের শব্দগুলো স্বয়ংক্রিয়ভাবে বাংলায় রূপান্তর করে।\n\nউদাহরণ:\n• battery -> ব্যাটারি | charger -> চার্জার\n• control -> কন্ট্রোল | space -> স্পেস\n• meeting -> মিটিং | project -> প্রজেক্ট\n• wifi -> ওয়াই-ফাই | internet -> ইন্টারনেট\n• table -> টেবিল | chair / cher -> চেয়ার\n• google -> গুগল | Google\n• anwar / anoyar -> আনোয়ার", WS_CHILD | SS_LEFT, 250, 75, 520, 280, hWnd, NULL, NULL, NULL);
+            HWND hB_Desc = CreateWindowW(L"STATIC", L"Likhi আধুনিক বাংলিশ এবং দৈনন্দিন প্রযুক্তি ও অফিসের শব্দগুলো স্বয়ংক্রিয়ভাবে বাংলায় রূপান্তর করে।\n\nউদাহরণ:\n• battery -> ব্যাটারি | charger -> চার্জার\n• control -> কন্ট্রোল | space -> স্পেস\n• meeting -> মিটিং | project -> প্রজেক্ট\n• wifi -> ওয়াই-ফাই | internet -> ইন্টারনেট\n• table -> টেবিল | chair / cher -> চেয়ার\n• google -> গুগল | Google\n• anwar / anoyar -> আনোয়ার", WS_CHILD | SS_LEFT, 265, 75, 510, 300, hWnd, NULL, NULL, NULL);
             SendMessage(hB_Desc, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
             g_section_controls[SEC_BANGLISH].push_back(hB_Title);
@@ -408,35 +486,28 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // ==============================================================
             // SECTION 4: DICTIONARY
             // ==============================================================
-            HWND hD_Title = CreateWindowW(L"STATIC", L"ব্যক্তিগত শব্দভাণ্ডার (Personal Dictionary)", WS_CHILD | SS_LEFT, 250, 30, 520, 28, hWnd, NULL, NULL, NULL);
+            HWND hD_Title = CreateWindowW(L"STATIC", L"ব্যক্তিগত শব্দভাণ্ডার (Personal Dictionary)", WS_CHILD | SS_LEFT, 265, 30, 510, 32, hWnd, NULL, NULL, NULL);
             SendMessage(hD_Title, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
-            hListDict = CreateWindowExW(WS_EX_CLIENTEDGE, L"LISTBOX", L"", WS_CHILD | WS_VSCROLL | LBS_NOTIFY, 250, 75, 240, 220, hWnd, (HMENU)IDC_LIST_DICT, NULL, NULL);
+            hListDict = CreateWindowExW(WS_EX_CLIENTEDGE, L"LISTBOX", L"", WS_CHILD | WS_VSCROLL | LBS_NOTIFY, 265, 75, 235, 250, hWnd, (HMENU)IDC_LIST_DICT, NULL, NULL);
             SendMessage(hListDict, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hD_L1 = CreateWindowW(L"STATIC", L"English Key:", WS_CHILD | SS_LEFT, 510, 75, 85, 22, hWnd, NULL, NULL, NULL);
+            HWND hD_L1 = CreateWindowW(L"STATIC", L"English Key:", WS_CHILD | SS_LEFT, 515, 75, 95, 26, hWnd, NULL, NULL, NULL);
             SendMessage(hD_L1, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            hEditRoman = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 600, 73, 170, 26, hWnd, (HMENU)IDC_EDIT_ROMAN, NULL, NULL);
+            hEditRoman = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 615, 73, 160, 28, hWnd, (HMENU)IDC_EDIT_ROMAN, NULL, NULL);
             SendMessage(hEditRoman, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hD_L2 = CreateWindowW(L"STATIC", L"বাংলা শব্দ:", WS_CHILD | SS_LEFT, 510, 115, 85, 22, hWnd, NULL, NULL, NULL);
+            HWND hD_L2 = CreateWindowW(L"STATIC", L"বাংলা শব্দ:", WS_CHILD | SS_LEFT, 515, 115, 95, 26, hWnd, NULL, NULL, NULL);
             SendMessage(hD_L2, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            hEditBangla = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 600, 113, 170, 26, hWnd, (HMENU)IDC_EDIT_BANGLA, NULL, NULL);
+            hEditBangla = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 615, 113, 160, 28, hWnd, (HMENU)IDC_EDIT_BANGLA, NULL, NULL);
             SendMessage(hEditBangla, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hBtnA = CreateWindowW(L"BUTTON", L"যুক্ত করুন (+)", WS_CHILD | BS_PUSHBUTTON, 510, 155, 125, 32, hWnd, (HMENU)IDC_BTN_ADD_WORD, NULL, NULL);
-            SendMessage(hBtnA, WM_SETFONT, (WPARAM)hFontBold, TRUE);
-
-            HWND hBtnD = CreateWindowW(L"BUTTON", L"মুছে ফেলুন (x)", WS_CHILD | BS_PUSHBUTTON, 645, 155, 125, 32, hWnd, (HMENU)IDC_BTN_DEL_WORD, NULL, NULL);
-            SendMessage(hBtnD, WM_SETFONT, (WPARAM)hFontBody, TRUE);
-
-            HWND hBtnI = CreateWindowW(L"BUTTON", L"ইমপোর্ট (.txt)", WS_CHILD | BS_PUSHBUTTON, 510, 200, 125, 32, hWnd, (HMENU)IDC_BTN_IMPORT, NULL, NULL);
-            SendMessage(hBtnI, WM_SETFONT, (WPARAM)hFontBody, TRUE);
-
-            HWND hBtnE = CreateWindowW(L"BUTTON", L"এক্সপোর্ট (.txt)", WS_CHILD | BS_PUSHBUTTON, 645, 200, 125, 32, hWnd, (HMENU)IDC_BTN_EXPORT, NULL, NULL);
-            SendMessage(hBtnE, WM_SETFONT, (WPARAM)hFontBody, TRUE);
+            HWND hBtnA = CreateWindowW(L"BUTTON", L"যুক্ত করুন (+)", WS_CHILD | BS_OWNERDRAW, 515, 160, 125, 38, hWnd, (HMENU)IDC_BTN_ADD_WORD, NULL, NULL);
+            HWND hBtnD = CreateWindowW(L"BUTTON", L"মুছে ফেলুন (×)", WS_CHILD | BS_OWNERDRAW, 650, 160, 125, 38, hWnd, (HMENU)IDC_BTN_DEL_WORD, NULL, NULL);
+            HWND hBtnI = CreateWindowW(L"BUTTON", L"ইমপোর্ট (.txt)", WS_CHILD | BS_OWNERDRAW, 515, 210, 125, 38, hWnd, (HMENU)IDC_BTN_IMPORT, NULL, NULL);
+            HWND hBtnE = CreateWindowW(L"BUTTON", L"এক্সপোর্ট (.txt)", WS_CHILD | BS_OWNERDRAW, 650, 210, 125, 38, hWnd, (HMENU)IDC_BTN_EXPORT, NULL, NULL);
 
             g_section_controls[SEC_DICTIONARY].push_back(hD_Title);
             g_section_controls[SEC_DICTIONARY].push_back(hListDict);
@@ -452,24 +523,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // ==============================================================
             // SECTION 5: KEYBOARD
             // ==============================================================
-            HWND hK_Title = CreateWindowW(L"STATIC", L"কীবোর্ড ও শর্টকাট আচরণ", WS_CHILD | SS_LEFT, 250, 30, 520, 28, hWnd, NULL, NULL, NULL);
+            HWND hK_Title = CreateWindowW(L"STATIC", L"কীবোর্ড ও শর্টকাট আচরণ", WS_CHILD | SS_LEFT, 265, 30, 510, 32, hWnd, NULL, NULL, NULL);
             SendMessage(hK_Title, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
-            HWND hK_Desc = CreateWindowW(L"STATIC", L"Likhi উইন্ডোজের সকল নেটিভ কীবোর্ড শর্টকাট সম্পূর্ণ অক্ষত রাখে।\n\n• Ctrl+C (Copy), Ctrl+V (Paste), Ctrl+A, Ctrl+Z ইত্যাদি সরাসরি কাজ করে\n• Numpad (0-9, +, -, *, .) সাধারণ সংখ্যার জন্য সংরক্ষিত\n• F1-F12 এবং অ্যারো কী স্বাভাবিকভাবে কাজ করে\n• উইন্ডোজ ভাষা পরিবর্তন: Win + Space\n\nসক্রিয় প্রোফাইল: Bangla (Bangladesh) — Likhi (লিখি)", WS_CHILD | SS_LEFT, 250, 75, 520, 280, hWnd, NULL, NULL, NULL);
+            HWND hK_Desc = CreateWindowW(L"STATIC", L"Likhi উইন্ডোজের সকল নেটিভ কীবোর্ড শর্টকাট সম্পূর্ণ অক্ষত রাখে।\n\n• Ctrl+C (Copy), Ctrl+V (Paste), Ctrl+A, Ctrl+Z ইত্যাদি সরাসরি কাজ করে\n• Numpad (0-9, +, -, *, .) সাধারণ সংখ্যার জন্য সংরক্ষিত\n• F1-F12 এবং অ্যারো কী স্বাভাবিকভাবে কাজ করে\n• উইন্ডোজ ভাষা পরিবর্তন: Win + Space\n\nসক্রিয় প্রোফাইল: Bangla (Bangladesh) — Likhi (লিখি)", WS_CHILD | SS_LEFT, 265, 75, 510, 160, hWnd, NULL, NULL, NULL);
             SendMessage(hK_Desc, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            g_section_controls[SEC_KEYBOARD].push_back(hK_Title);
-            g_section_controls[SEC_KEYBOARD].push_back(hK_Desc);
-
             // ---- Input Mode: which backend types Bangla -----------------------
-            // Automatic keeps the current behaviour (TSF first); Universal Mode
-            // also covers apps TSF cannot reach, such as WhatsApp Desktop.
-            HWND hK_ModeLbl = CreateWindowW(L"STATIC", L"ইনপুট মোড (Input Mode) — কোন অ্যাপে কীভাবে বাংলা লিখবেন:", WS_CHILD | SS_LEFT, 250, 262, 520, 24, hWnd, NULL, NULL, NULL);
+            HWND hK_ModeLbl = CreateWindowW(L"STATIC", L"ইনপুট মোড (Input Mode) — কোন অ্যাপে কীভাবে বাংলা লিখবেন:", WS_CHILD | SS_LEFT, 265, 245, 510, 26, hWnd, NULL, NULL, NULL);
             SendMessage(hK_ModeLbl, WM_SETFONT, (WPARAM)hFontBold, TRUE);
 
-            HWND hRM1 = CreateWindowW(L"BUTTON", L"অটোমেটিক (সুপারিশকৃত) — TSF যেখানে কাজ করে সেখানে TSF, বাকিতে Universal", WS_CHILD | BS_AUTORADIOBUTTON | WS_GROUP, 250, 292, 520, 24, hWnd, (HMENU)IDC_RADIO_MODE_AUTO, NULL, NULL);
-            HWND hRM2 = CreateWindowW(L"BUTTON", L"শুধু TSF — Word, Excel, Notepad (Universal বন্ধ থাকবে)", WS_CHILD | BS_AUTORADIOBUTTON, 250, 322, 520, 24, hWnd, (HMENU)IDC_RADIO_MODE_TSF, NULL, NULL);
-            HWND hRM3 = CreateWindowW(L"BUTTON", L"Universal Mode — WhatsApp সহ সব অ্যাপে বাংলা, যেখানে TSF পৌঁছায় না", WS_CHILD | BS_AUTORADIOBUTTON, 250, 352, 520, 24, hWnd, (HMENU)IDC_RADIO_MODE_UNIV, NULL, NULL);
+            HWND hRM1 = CreateWindowW(L"BUTTON", L"অটোমেটিক (সুপারিশকৃত) — TSF যেখানে কাজ করে সেখানে TSF, বাকিতে Universal", WS_CHILD | BS_AUTORADIOBUTTON | WS_GROUP, 265, 275, 510, 28, hWnd, (HMENU)IDC_RADIO_MODE_AUTO, NULL, NULL);
+            HWND hRM2 = CreateWindowW(L"BUTTON", L"শুধু TSF — Word, Excel, Notepad (Universal বন্ধ থাকবে)", WS_CHILD | BS_AUTORADIOBUTTON, 265, 307, 510, 28, hWnd, (HMENU)IDC_RADIO_MODE_TSF, NULL, NULL);
+            HWND hRM3 = CreateWindowW(L"BUTTON", L"Universal Mode — WhatsApp সহ সব অ্যাপে বাংলা, যেখানে TSF পৌঁছায় না", WS_CHILD | BS_AUTORADIOBUTTON, 265, 339, 510, 28, hWnd, (HMENU)IDC_RADIO_MODE_UNIV, NULL, NULL);
             SendMessage(hRM1, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hRM2, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hRM3, WM_SETFONT, (WPARAM)hFontBody, TRUE);
@@ -478,7 +544,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             else if (g_settings.input_mode == 2) SendMessage(hRM3, BM_SETCHECK, BST_CHECKED, 0);
             else SendMessage(hRM1, BM_SETCHECK, BST_CHECKED, 0);
 
-            HWND hK_ModeHint = CreateWindowW(L"STATIC", L"Universal Mode সক্রিয় থাকলে tray-তে Likhi আইকন দেখবেন।\nCtrl + Alt + L চেপে যেকোনো সময় pause/resume করতে পারেন। Save চাপলে সাথে সাথে কার্যকর হয়।", WS_CHILD | SS_LEFT, 250, 388, 520, 60, hWnd, NULL, NULL, NULL);
+            HWND hK_ModeHint = CreateWindowW(L"STATIC", L"Universal Mode সক্রিয় থাকলে tray-তে Likhi আইকন দেখবেন।\nCtrl + Alt + L চেপে যেকোনো সময় pause/resume করতে পারেন। Save চাপলে সাথে সাথে কার্যকর হয়।", WS_CHILD | SS_LEFT, 265, 380, 510, 60, hWnd, NULL, NULL, NULL);
             SendMessage(hK_ModeHint, WM_SETFONT, (WPARAM)hFontSub, TRUE);
 
             g_section_controls[SEC_KEYBOARD].push_back(hK_ModeLbl);
@@ -496,9 +562,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             HWND hA_ThemeLbl = CreateWindowW(L"STATIC", L"অ্যাপ্লিকেশন থিম নির্বাচন করুন:", WS_CHILD | SS_LEFT, 250, 80, 520, 24, hWnd, NULL, NULL, NULL);
             SendMessage(hA_ThemeLbl, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hRT1 = CreateWindowW(L"BUTTON", L"উইন্ডোজ সিস্টেম ডিফল্ট (System Default)", WS_CHILD | BS_AUTORADIOBUTTON | WS_GROUP, 250, 115, 320, 24, hWnd, (HMENU)IDC_RADIO_THEME_SYS, NULL, NULL);
-            HWND hRT2 = CreateWindowW(L"BUTTON", L"হালকা থিম (Light Mode)", WS_CHILD | BS_AUTORADIOBUTTON, 250, 150, 320, 24, hWnd, (HMENU)IDC_RADIO_THEME_LIGHT, NULL, NULL);
-            HWND hRT3 = CreateWindowW(L"BUTTON", L"ডার্ক থিম (Dark Mode)", WS_CHILD | BS_AUTORADIOBUTTON, 250, 185, 320, 24, hWnd, (HMENU)IDC_RADIO_THEME_DARK, NULL, NULL);
+            HWND hRT1 = CreateWindowW(L"BUTTON", L"উইন্ডোজ সিস্টেম ডিফল্ট (System Default)", WS_CHILD | BS_AUTORADIOBUTTON | WS_GROUP, 265, 115, 350, 28, hWnd, (HMENU)IDC_RADIO_THEME_SYS, NULL, NULL);
+            HWND hRT2 = CreateWindowW(L"BUTTON", L"হালকা থিম (Light Mode)", WS_CHILD | BS_AUTORADIOBUTTON, 265, 152, 350, 28, hWnd, (HMENU)IDC_RADIO_THEME_LIGHT, NULL, NULL);
+            HWND hRT3 = CreateWindowW(L"BUTTON", L"ডার্ক থিম (Dark Mode)", WS_CHILD | BS_AUTORADIOBUTTON, 265, 189, 350, 28, hWnd, (HMENU)IDC_RADIO_THEME_DARK, NULL, NULL);
 
             SendMessage(hRT1, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hRT2, WM_SETFONT, (WPARAM)hFontBody, TRUE);
@@ -517,14 +583,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // ==============================================================
             // SECTION 7: ADVANCED
             // ==============================================================
-            HWND hAdv_Title = CreateWindowW(L"STATIC", L"উন্নত সেটিংস ও ডায়াগনস্টিকস", WS_CHILD | SS_LEFT, 250, 30, 520, 28, hWnd, NULL, NULL, NULL);
+            HWND hAdv_Title = CreateWindowW(L"STATIC", L"উন্নত সেটিংস ও ডায়াগনস্টিকস", WS_CHILD | SS_LEFT, 265, 30, 510, 32, hWnd, NULL, NULL, NULL);
             SendMessage(hAdv_Title, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
-            HWND hAdv_Desc = CreateWindowW(L"STATIC", L"• মেমোরি পদচিহ্ন: ~১৩.১ MB (অত্যন্ত হালকা)\n• টাইপিং লেটেন্সি: ~৪০ মাইক্রোসেকেন্ড / কীস্ট্রোক\n• ডিকশনারি এন্ট্রি: ৮০,২৮৯টি ভ্যালিডেটেড শব্দ (Verified Full Lexicon)\n• আর্কিটেকচার: হাইব্রিড ইন্টেলিজেন্স + নেটিভ C++20 + Windows TSF + Universal Mode", WS_CHILD | SS_LEFT, 250, 75, 520, 120, hWnd, NULL, NULL, NULL);
+            HWND hAdv_Desc = CreateWindowW(L"STATIC", L"• মেমোরি পদচিহ্ন: ~১৩.১ MB (অত্যন্ত হালকা)\n• টাইপিং লেটেন্সি: ~৪০ মাইক্রোসেকেন্ড / কীস্ট্রোক\n• ডিকশনারি এন্ট্রি: ৮০,২৮৯টি ভ্যালিডেটেড শব্দ (Verified Full Lexicon)\n• আর্কিটেকচার: হাইব্রিড ইন্টেলিজেন্স + নেটিভ C++20 + Windows TSF + Universal Mode", WS_CHILD | SS_LEFT, 265, 75, 510, 125, hWnd, NULL, NULL, NULL);
             SendMessage(hAdv_Desc, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hBtnReset = CreateWindowW(L"BUTTON", L"ফ্যাক্টরি রিসেট করুন (Reset to Defaults)", WS_CHILD | BS_PUSHBUTTON, 250, 210, 280, 36, hWnd, (HMENU)IDC_BTN_RESET_DEF, NULL, NULL);
-            SendMessage(hBtnReset, WM_SETFONT, (WPARAM)hFontBold, TRUE);
+            HWND hBtnReset = CreateWindowW(L"BUTTON", L"ফ্যাক্টরি রিসেট করুন (Reset to Defaults)", WS_CHILD | BS_OWNERDRAW, 265, 220, 320, 38, hWnd, (HMENU)IDC_BTN_RESET_DEF, NULL, NULL);
 
             g_section_controls[SEC_ADVANCED].push_back(hAdv_Title);
             g_section_controls[SEC_ADVANCED].push_back(hAdv_Desc);
@@ -534,21 +599,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // SECTION 8: ABOUT (WITH LOGO & AH CREATIONS CREDIT)
             // ==============================================================
             std::wstring abTitle = L"Likhi (লিখি) — সংস্করণ " + ToBengaliDigits(likhi::kVersionWString);
-            HWND hAb_Title = CreateWindowW(L"STATIC", abTitle.c_str(), WS_CHILD | SS_LEFT, 370, 30, 400, 28, hWnd, NULL, NULL, NULL);
+            HWND hAb_Title = CreateWindowW(L"STATIC", abTitle.c_str(), WS_CHILD | SS_LEFT, 365, 30, 410, 32, hWnd, NULL, NULL, NULL);
             SendMessage(hAb_Title, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
-            HWND hAb_Tag = CreateWindowW(L"STATIC", L"“Fast • Smart • Natural — Bangla Typing for Windows”", WS_CHILD | SS_LEFT, 370, 65, 400, 24, hWnd, NULL, NULL, NULL);
+            HWND hAb_Tag = CreateWindowW(L"STATIC", L"“Fast • Smart • Natural — Bangla Typing for Windows”", WS_CHILD | SS_LEFT, 365, 68, 410, 26, hWnd, NULL, NULL, NULL);
             SendMessage(hAb_Tag, WM_SETFONT, (WPARAM)hFontBold, TRUE);
 
-            HWND hAb_Credit = CreateWindowW(L"STATIC", L"✨ Developed by AH Creations", WS_CHILD | SS_LEFT, 370, 95, 400, 26, hWnd, NULL, NULL, NULL);
+            HWND hAb_Credit = CreateWindowW(L"STATIC", L"✨ Developed by AH Creations", WS_CHILD | SS_LEFT, 365, 98, 410, 28, hWnd, NULL, NULL, NULL);
             SendMessage(hAb_Credit, WM_SETFONT, (WPARAM)hFontCredit, TRUE);
 
-            HWND hAb_Desc = CreateWindowW(L"STATIC", L"• ১০০% অফলাইন ও ব্যক্তিগত (০ ট্র্যাকিং / ক্লাউডমুক্ত)\n• সম্পূর্ণ স্বাধীন ও আধুনিক C++20 ল্যাঙ্গুয়েজ ইঞ্জিন\n• লাইসেন্স: MIT License\n• ক্রিয়েটর ও ডেভেলপার: AH Creations", WS_CHILD | SS_LEFT, 250, 155, 520, 120, hWnd, NULL, NULL, NULL);
+            HWND hAb_Desc = CreateWindowW(L"STATIC", L"• ১০০% অফলাইন ও ব্যক্তিগত (০ ট্র্যাকিং / ক্লাউডমুক্ত)\n• সম্পূর্ণ স্বাধীন ও আধুনিক C++20 ল্যাঙ্গুয়েজ ইঞ্জিন\n• লাইসেন্স: MIT License\n• ক্রিয়েটর ও ডেভেলপার: AH Creations", WS_CHILD | SS_LEFT, 265, 145, 510, 125, hWnd, NULL, NULL, NULL);
             SendMessage(hAb_Desc, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hBtnUpd = CreateWindowW(L"BUTTON", L"আপডেট পরীক্ষা করুন (Check Updates)", WS_CHILD | BS_PUSHBUTTON, 250, 285, 260, 34, hWnd, (HMENU)IDC_BTN_CHECK_UPDATE, NULL, NULL);
+            HWND hBtnUpd = CreateWindowW(L"BUTTON", L"আপডেট পরীক্ষা করুন (Check Updates)", WS_CHILD | BS_OWNERDRAW, 265, 290, 320, 40, hWnd, (HMENU)IDC_BTN_CHECK_UPDATE, NULL, NULL);
             g_hBtnUpd = hBtnUpd;
-            SendMessage(hBtnUpd, WM_SETFONT, (WPARAM)hFontBold, TRUE);
 
             g_section_controls[SEC_ABOUT].push_back(hAb_Title);
             g_section_controls[SEC_ABOUT].push_back(hAb_Tag);
@@ -559,14 +623,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // ==============================================================
             // BOTTOM BAR CONTROLS
             // ==============================================================
-            hLblStatus = CreateWindowW(L"STATIC", L"Likhi প্রস্তুত।", WS_VISIBLE | WS_CHILD | SS_LEFT, 25, 485, 480, 26, hWnd, (HMENU)IDC_LBL_STATUS, NULL, NULL);
+            hLblStatus = CreateWindowW(L"STATIC", L"Likhi প্রস্তুত।", WS_VISIBLE | WS_CHILD | SS_LEFT, 25, 485, 475, 26, hWnd, (HMENU)IDC_LBL_STATUS, NULL, NULL);
             SendMessage(hLblStatus, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hBtnSave = CreateWindowW(L"BUTTON", L"সংরক্ষণ করুন (Save)", WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON, 530, 480, 160, 36, hWnd, (HMENU)IDC_BTN_SAVE, NULL, NULL);
-            HWND hBtnClose = CreateWindowW(L"BUTTON", L"বন্ধ করুন", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, 705, 480, 95, 36, hWnd, (HMENU)IDC_BTN_CLOSE, NULL, NULL);
-
-            SendMessage(hBtnSave, WM_SETFONT, (WPARAM)hFontBold, TRUE);
-            SendMessage(hBtnClose, WM_SETFONT, (WPARAM)hFontBody, TRUE);
+            HWND hBtnSave = CreateWindowW(L"BUTTON", L"সংরক্ষণ করুন (Save)", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 515, 478, 180, 40, hWnd, (HMENU)IDC_BTN_SAVE, NULL, NULL);
+            HWND hBtnClose = CreateWindowW(L"BUTTON", L"বন্ধ করুন", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 705, 478, 100, 40, hWnd, (HMENU)IDC_BTN_CLOSE, NULL, NULL);
 
             SwitchSection(hWnd, SEC_GENERAL);
             break;
@@ -595,22 +656,54 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 SetBkMode(hdc, TRANSPARENT);
                 SelectObject(hdc, is_selected ? hFontBold : hFontBody);
                 
-                rc.left += 10;
+                rc.left += 12;
                 DrawTextW(hdc, g_navLabels[idx], -1, &rc, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                 return TRUE;
             }
+
+            // Modern custom buttons
+            switch (pDIS->CtlID) {
+                case IDC_BTN_SAVE:
+                case IDC_BTN_CHECK_UPDATE:
+                case IDC_BTN_ADD_WORD: {
+                    wchar_t txt[128] = {0};
+                    GetWindowTextW(pDIS->hwndItem, txt, 128);
+                    DrawModernButton(pDIS, txt, hFontBold, true);
+                    return TRUE;
+                }
+                case IDC_BTN_CLOSE:
+                case IDC_BTN_RESET_DEF:
+                case IDC_BTN_RESET_LEARN:
+                case IDC_BTN_DEL_WORD:
+                case IDC_BTN_IMPORT:
+                case IDC_BTN_EXPORT: {
+                    wchar_t txt[128] = {0};
+                    GetWindowTextW(pDIS->hwndItem, txt, 128);
+                    DrawModernButton(pDIS, txt, hFontBold, false);
+                    return TRUE;
+                }
+            }
             break;
         }
+
+        case WM_ERASEBKGND:
+            // Handled in WM_PAINT with WS_CLIPCHILDREN to eliminate flicker
+            return 1;
 
         case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hWnd, &ps);
 
-            // 1. Fill Sidebar Area (Left 235px)
-            RECT rcSidebar = {0, 0, 235, 580};
+            // 1. Fill Background
+            RECT rcClient;
+            GetClientRect(hWnd, &rcClient);
+            FillRect(hdc, &rcClient, hBrushBg);
+
+            // 2. Fill Sidebar Area (Left 235px)
+            RECT rcSidebar = {0, 0, 235, rcClient.bottom};
             FillRect(hdc, &rcSidebar, hBrushSidebar);
 
-            // 2. Draw Sidebar Top Header / Logo
+            // 3. Draw Sidebar Top Header / Logo
             if (hAppIcon) {
                 DrawIconEx(hdc, 18, 18, hAppIcon, 48, 48, 0, NULL, DI_NORMAL);
             }
@@ -623,23 +716,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             SelectObject(hdc, hFontSub);
             TextOutW(hdc, 76, 46, L"বাংলা লিখুন, সহজেই।", 19);
 
-            // 3. Draw Vertical Divider
+            // 4. Draw Vertical Divider
             HPEN hPenDivider = CreatePen(PS_SOLID, 1, RGB(226, 232, 240));
             SelectObject(hdc, hPenDivider);
             MoveToEx(hdc, 235, 0, NULL);
-            LineTo(hdc, 235, 580);
+            LineTo(hdc, 235, rcClient.bottom);
+            DeleteObject(hPenDivider);
 
-            // 4. Draw Content Card Area
-            RECT rcCard = {245, 15, 800, 465};
-            FillRect(hdc, &rcCard, hBrushCard);
-            FrameRect(hdc, &rcCard, hBrushBg);
+            // 5. Draw Content Card Area (Modern rounded card)
+            HPEN hPenCard = CreatePen(PS_SOLID, 1, RGB(226, 232, 240));
+            HBRUSH hOldBr = (HBRUSH)SelectObject(hdc, hBrushCard);
+            HPEN hOldPen = (HPEN)SelectObject(hdc, hPenCard);
+            RoundRect(hdc, 245, 15, 805, 465, 12, 12);
+            SelectObject(hdc, hOldBr);
+            SelectObject(hdc, hOldPen);
+            DeleteObject(hPenCard);
 
-            // 5. Draw About Logo if in About Section
+            // 6. Draw About Logo if in About Section
             if (g_active_section == SEC_ABOUT && hAppIcon) {
-                DrawIconEx(hdc, 255, 25, hAppIcon, 96, 96, 0, NULL, DI_NORMAL);
+                DrawIconEx(hdc, 265, 30, hAppIcon, 84, 84, 0, NULL, DI_NORMAL);
             }
 
-            DeleteObject(hPenDivider);
             EndPaint(hWnd, &ps);
             break;
         }
@@ -882,6 +979,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             HWND hCtl = (HWND)lParam;
             SetBkMode(hdc, TRANSPARENT);
             
+            // Check if the control is the status label on the bottom bar
+            if (hCtl == hLblStatus) {
+                SetTextColor(hdc, RGB(71, 85, 105)); // Slate 600
+                return (LRESULT)hBrushBg;
+            }
+
             // Highlight credit in Royal Blue
             if (GetDlgCtrlID(hCtl) == 0 && g_active_section == SEC_ABOUT) {
                 SetTextColor(hdc, RGB(2, 132, 199)); // Bright Sky Blue
@@ -950,7 +1053,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     HWND hWnd = CreateWindowW(
         L"LikhiFluentSettingsClass",
         L"Likhi (লিখি) — সেটিংস ও ড্যাশবোর্ড",
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN,
         CW_USEDEFAULT, CW_USEDEFAULT, 830, 570,
         NULL, NULL, hInstance, NULL
     );
