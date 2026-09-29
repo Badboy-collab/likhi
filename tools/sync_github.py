@@ -191,19 +191,19 @@ def main():
     token = args.token
     if not token:
         dc = get_device_code()
-        print("\n" + "=" * 60)
-        print(" GITHUB DEVICE AUTHORIZATION REQUIRED")
-        print("=" * 60)
-        print(f" 1. Go to:    {dc['verification_uri']}")
-        print(f" 2. Enter:    {dc['user_code']}")
-        print("=" * 60 + "\n")
+        print("\n" + "=" * 60, flush=True)
+        print(" GITHUB DEVICE AUTHORIZATION REQUIRED", flush=True)
+        print("=" * 60, flush=True)
+        print(f" 1. Go to:    {dc['verification_uri']}", flush=True)
+        print(f" 2. Enter:    {dc['user_code']}", flush=True)
+        print("=" * 60 + "\n", flush=True)
         
         if args.request_code_only:
             return 0
             
-        print("Waiting for authorization in browser...")
+        print("Waiting for authorization in browser...", flush=True)
         token = poll_device_token(dc['device_code'], interval=dc.get('interval', 5), expires_in=dc.get('expires_in', 900))
-        print(">>> Authorization successful!")
+        print(">>> Authorization successful!", flush=True)
 
     push_master(token)
     release_url = create_or_update_release(token)
