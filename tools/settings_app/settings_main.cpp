@@ -15,6 +15,18 @@
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "comctl32.lib")
 
+static std::wstring ToBengaliDigits(const std::wstring& s) {
+    std::wstring res;
+    for (wchar_t c : s) {
+        if (c >= L'0' && c <= L'9') {
+            res.push_back(L'০' + (c - L'0'));
+        } else {
+            res.push_back(c);
+        }
+    }
+    return res;
+}
+
 enum SectionID {
     SEC_GENERAL = 0,
     SEC_TYPING,
@@ -521,7 +533,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // ==============================================================
             // SECTION 8: ABOUT (WITH LOGO & AH CREATIONS CREDIT)
             // ==============================================================
-            HWND hAb_Title = CreateWindowW(L"STATIC", L"Likhi (লিখি) — সংস্করণ ১.০.১", WS_CHILD | SS_LEFT, 370, 30, 400, 28, hWnd, NULL, NULL, NULL);
+            std::wstring abTitle = L"Likhi (লিখি) — সংস্করণ " + ToBengaliDigits(likhi::kVersionWString);
+            HWND hAb_Title = CreateWindowW(L"STATIC", abTitle.c_str(), WS_CHILD | SS_LEFT, 370, 30, 400, 28, hWnd, NULL, NULL, NULL);
             SendMessage(hAb_Title, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
             HWND hAb_Tag = CreateWindowW(L"STATIC", L"“Fast • Smart • Natural — Bangla Typing for Windows”", WS_CHILD | SS_LEFT, 370, 65, 400, 24, hWnd, NULL, NULL, NULL);
@@ -758,9 +771,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
             if (res == likhi::UpdateCheckResult::kUpToDate) {
                 SetWindowTextW(hLblStatus, L"✨ আপনি Likhi-এর সর্বশেষ সংস্করণ ব্যবহার করছেন।");
-                MessageBoxW(hWnd, 
-                    L"আপনি Likhi-এর সর্বশেষ সংস্করণ ব্যবহার করছেন।\n\nবর্তমান সংস্করণ: ১.০.১", 
-                    L"Likhi আপডেট", MB_OK | MB_ICONINFORMATION);
+                std::wstring upToDateMsg = L"আপনি Likhi-এর সর্বশেষ সংস্করণ ব্যবহার করছেন।\n\nবর্তমান সংস্করণ: " + ToBengaliDigits(likhi::kVersionWString);
+                MessageBoxW(hWnd, upToDateMsg.c_str(), L"Likhi আপডেট", MB_OK | MB_ICONINFORMATION);
             } else if (res == likhi::UpdateCheckResult::kUpdateAvailable && pInfo) {
                 SetWindowTextW(hLblStatus, L"🚀 Likhi-এর নতুন সংস্করণ পাওয়া গেছে!");
                 

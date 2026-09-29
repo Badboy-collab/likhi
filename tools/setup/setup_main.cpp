@@ -415,6 +415,17 @@ static bool CreateShortcuts(const std::wstring& installDir) {
     CreateShortcut(installDir + L"\\LikhiSetup.exe", dir + L"\\Uninstall Likhi.lnk",
                    installDir, L"Uninstall Likhi");
     Log(L"  start-menu shortcuts created");
+
+    // Also synchronize legacy user-level start-menu shortcut if present
+    wchar_t userPrograms[MAX_PATH] = {0};
+    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_PROGRAMS, nullptr, 0, userPrograms))) {
+        std::wstring userDir = std::wstring(userPrograms) + L"\\" + kAppName;
+        std::wstring userLnk = userDir + L"\\Likhi Settings.lnk";
+        if (GetFileAttributesW(userLnk.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            CreateShortcut(installDir + L"\\bangla_settings.exe", userLnk, installDir, L"Likhi settings");
+            Log(L"  synchronized legacy user-level start-menu shortcut");
+        }
+    }
     return true;
 }
 
@@ -538,6 +549,20 @@ static int DoInstall() {
         if (GetFileAttributesW(appdataSettings.c_str()) != INVALID_FILE_ATTRIBUTES) {
             CopyFileW((dir + L"\\bangla_settings.exe").c_str(), appdataSettings.c_str(), FALSE);
             Log(L"  synchronized appdata settings copy");
+        }
+    }
+
+    // If an older localappdata copy exists (e.g. from legacy Inno Setup build), keep it synchronized
+    wchar_t localAppdata[MAX_PATH] = {0};
+    if (!g_dry && SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, localAppdata))) {
+        std::wstring legacyDir = std::wstring(localAppdata) + L"\\Programs\\Likhi";
+        std::wstring legacySettings = legacyDir + L"\\bangla_settings.exe";
+        if (GetFileAttributesW(legacySettings.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            CopyFileW((dir + L"\\bangla_settings.exe").c_str(), legacySettings.c_str(), FALSE);
+            CopyFileW((dir + L"\\bangla_tsf.dll").c_str(), (legacyDir + L"\\bangla_tsf.dll").c_str(), FALSE);
+            CopyFileW((dir + L"\\likhi_universal.exe").c_str(), (legacyDir + L"\\likhi_universal.exe").c_str(), FALSE);
+            CopyFileW((dir + L"\\data\\lexicon.bin").c_str(), (legacyDir + L"\\data\\lexicon.bin").c_str(), FALSE);
+            Log(L"  synchronized legacy localappdata installation copy");
         }
     }
 
