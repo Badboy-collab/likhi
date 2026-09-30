@@ -200,12 +200,31 @@ def main():
         print(f" 2. Enter:    {dc['user_code']}", flush=True)
         print("=" * 60 + "\n", flush=True)
         
+        user_code = dc['user_code']
+        try:
+            subprocess.run(['powershell', '-Command', f"Set-Clipboard -Value '{user_code}'"], capture_output=True)
+            print(f">>> Copied '{user_code}' to clipboard!", flush=True)
+        except Exception:
+            pass
+        try:
+            import webbrowser
+            webbrowser.open(dc['verification_uri'])
+            print(f">>> Opened {dc['verification_uri']} in browser!", flush=True)
+        except Exception:
+            pass
+        
         if args.request_code_only:
             return 0
             
         print("Waiting for authorization in browser...", flush=True)
         token = poll_device_token(dc['device_code'], interval=dc.get('interval', 5), expires_in=dc.get('expires_in', 900))
         print(">>> Authorization successful!", flush=True)
+        try:
+            store_input = f"protocol=https\nhost=github.com\nusername=Badboy-collab\npassword={token}\n\n"
+            subprocess.run(['git', 'credential-manager', 'store'], input=store_input, text=True, capture_output=True)
+            print(">>> Saved credential to Windows Credential Manager!", flush=True)
+        except Exception:
+            pass
 
     push_master(token)
     release_url = create_or_update_release(token)
