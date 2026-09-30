@@ -38,13 +38,13 @@ RELEASE_BODY = """## Likhi v1.0.1 Release (Windows)
 
 ### Verification:
 - **File**: `LikhiSetup.exe`
-- **Size**: 18,139,995 bytes
-- **SHA-256**: `21ae667deffcced3efd6caff59dd3fe35f76fff05ede4e9eca6c355516eccb3c`
+- **Size**: 18,096,764 bytes
+- **SHA-256**: `dd31916316bf5c190359575fb69e2a01c73473a04df762d6edd7ce3c411d9399`
 - **Regression Tests**: 983 / 983 Passing (100%)
 """
 ASSET_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'release_package', 'LikhiSetup.exe')
-EXPECTED_SIZE = 18139995
-EXPECTED_SHA256 = '21ae667deffcced3efd6caff59dd3fe35f76fff05ede4e9eca6c355516eccb3c'
+EXPECTED_SIZE = 18096764
+EXPECTED_SHA256 = 'dd31916316bf5c190359575fb69e2a01c73473a04df762d6edd7ce3c411d9399'
 
 def compute_sha256(path):
     h = hashlib.sha256()
@@ -111,6 +111,20 @@ def create_or_update_release(token):
         with urllib.request.urlopen(req) as resp:
             release = json.loads(resp.read().decode())
             print(f">>> Found existing release {TAG} (ID: {release['id']})")
+        # Update release metadata / notes
+        patch_payload = json.dumps({
+            'name': RELEASE_NAME,
+            'body': RELEASE_BODY,
+        }).encode('utf-8')
+        patch_req = urllib.request.Request(
+            f"https://api.github.com/repos/{REPO}/releases/{release['id']}",
+            data=patch_payload,
+            headers={**headers, 'Content-Type': 'application/json'},
+            method='PATCH'
+        )
+        with urllib.request.urlopen(patch_req) as resp:
+            release = json.loads(resp.read().decode())
+            print(f">>> Updated release metadata for {TAG}")
     except urllib.error.HTTPError as e:
         if e.code == 404:
             print(f">>> Creating new release {TAG}...")
@@ -191,6 +205,19 @@ def main():
         sys.exit(1)
 
     token = args.token
+    if not token:
+        try:
+            p = subprocess.run(['git', 'credential', 'fill'], input='protocol=https\nhost=github.com\n\n', text=True, capture_output=True)
+            for line in p.stdout.splitlines():
+                if line.startswith('password='):
+                    t = line.split('=', 1)[1].strip()
+                    if t:
+                        token = t
+                        print(">>> Retrieved GitHub credentials from Git Credential Manager.")
+                        break
+        except Exception:
+            pass
+
     if not token:
         dc = get_device_code()
         print("\n" + "=" * 60, flush=True)

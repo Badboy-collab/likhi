@@ -15,6 +15,7 @@ Usage:
 """
 
 import argparse
+import datetime
 import hashlib
 import os
 import posixpath
@@ -27,8 +28,8 @@ import deploy_theme as dt  # reuse the proven FTPS config/connection helpers
 
 DEFAULT_LOCAL = os.path.join(dt.REPO_ROOT, "release_package", "LikhiSetup.exe")
 VERSION_LOCAL = os.path.join(dt.REPO_ROOT, "release_package", "version.json")
-EXPECTED_SIZE = 18_139_995
-EXPECTED_SHA256 = "21ae667deffcced3efd6caff59dd3fe35f76fff05ede4e9eca6c355516eccb3c"
+EXPECTED_SIZE = 18_096_764
+EXPECTED_SHA256 = "dd31916316bf5c190359575fb69e2a01c73473a04df762d6edd7ce3c411d9399"
 EXPECTED_DOCUMENT_ROOT = "/home/shohojba/getlikhi.com"
 EXPECTED_INSTALLER_DIRECTORY = posixpath.join(EXPECTED_DOCUMENT_ROOT, "downloads")
 REMOTE_PATH = "/LikhiSetup.exe"
@@ -148,6 +149,32 @@ def main():
         ftp = dt.connect_ftp(config)
         print("\n  [OK] Connected (FTPS).")
         dt.ensure_remote_dir(ftp, config["remote_dir"])
+
+        # Pre-upload remote backup
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_dir = os.path.join(dt.WEBSITE_DIR, "backups", "installer-backup", ts)
+        os.makedirs(backup_dir, exist_ok=True)
+        rem_exists, rem_size = dt.remote_file_exists_and_size(ftp, remote_path)
+        if rem_exists:
+            print(f"  [BACKUP] Backing up existing remote {remote_name} ({rem_size:,} B)...")
+            bak_path = os.path.join(backup_dir, remote_name)
+            bak_digest = hashlib.sha256()
+            with open(bak_path, "wb") as bf:
+                def on_chunk(chunk):
+                    bf.write(chunk)
+                    bak_digest.update(chunk)
+                ftp.retrbinary(f"RETR {remote_path}", on_chunk)
+            print(f"  [BACKUP] Saved to {bak_path}")
+            print(f"  [BACKUP] Old remote SHA-256: {bak_digest.hexdigest()}")
+
+        # Check version.json backup
+        v_exists, v_size = dt.remote_file_exists_and_size(ftp, "/version.json")
+        if v_exists:
+            v_bak_path = os.path.join(backup_dir, "version.json")
+            with open(v_bak_path, "wb") as vbf:
+                ftp.retrbinary("RETR /version.json", vbf.write)
+            print(f"  [BACKUP] Saved remote version.json to {v_bak_path}")
+
         with open(args.file, "rb") as f:
             ftp.storbinary(f"STOR {remote_name}", f)
         print(f"  [OK] Uploaded {remote_name}")
