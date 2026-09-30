@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <windowsx.h>
 #include <commctrl.h>
 #include <uxtheme.h>
 #include <dwmapi.h>
@@ -36,6 +37,7 @@ enum SectionID {
     SEC_KEYBOARD,
     SEC_APPEARANCE,
     SEC_ADVANCED,
+    SEC_WHY_LIKHI,
     SEC_ABOUT,
     SEC_COUNT
 };
@@ -81,6 +83,8 @@ enum SectionID {
 #define WM_UPDATE_PROGRESS      (WM_APP + 21)
 #define WM_UPDATE_DOWNLOAD_DONE (WM_APP + 22)
 
+#include "why_likhi_page.h"
+
 struct AppSettings {
     bool enable_likhi = true;
     bool launch_startup = false;
@@ -108,6 +112,7 @@ static SectionID g_active_section = SEC_GENERAL;
 static HWND g_hNavButtons[SEC_COUNT];
 static std::vector<HWND> g_section_controls[SEC_COUNT];
 static HWND hListDict, hEditRoman, hEditBangla, hLblStatus, g_hBtnUpd = NULL;
+static HWND g_hWhyLikhiPage = NULL;
 static HFONT hFontTitle = NULL;
 static HFONT hFontHeader = NULL;
 static HFONT hFontBody = NULL;
@@ -133,6 +138,7 @@ const wchar_t* g_navLabels[SEC_COUNT] = {
     L"  🎛️  কীবোর্ড (Keyboard)",
     L"  🎨  রূপ (Appearance)",
     L"  ⚙️  উন্নত (Advanced)",
+    L"  🌟  কেন লিখি (Why Likhi)",
     L"  ℹ️  পরিচিতি (About)"
 };
 
@@ -232,7 +238,7 @@ void SwitchSection(HWND hWnd, SectionID sec) {
     if (sec == SEC_DICTIONARY) {
         RefreshDictionaryList();
     }
-    RECT rcCard = {245, 15, 805, 465};
+    RECT rcCard = {245, 15, 815, 475};
     InvalidateRect(hWnd, &rcCard, TRUE);
 }
 
@@ -350,7 +356,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 g_hNavButtons[i] = CreateWindowW(
                     L"BUTTON", g_navLabels[i],
                     WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
-                    15, 95 + (i * 38), 205, 35,
+                    15, 78 + (i * 37), 205, 34,
                     hWnd, (HMENU)(intptr_t)(IDC_NAV_BASE + i), hInst, NULL
                 );
             }
@@ -606,7 +612,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_section_controls[SEC_ADVANCED].push_back(hBtnReset);
 
             // ==============================================================
-            // SECTION 8: ABOUT (WITH LOGO & AH CREATIONS CREDIT)
+            // SECTION 8: WHY LIKHI (কেন লিখি — প্রোডাক্ট দর্শন ও বিস্তারিত তথ্য)
+            // ==============================================================
+            g_hWhyLikhiPage = likhi_why::CreateWhyLikhiPage(hWnd, hInst, 247, 17, 566, 456);
+            g_section_controls[SEC_WHY_LIKHI].push_back(g_hWhyLikhiPage);
+
+            // ==============================================================
+            // SECTION 9: ABOUT (WITH LOGO & AH CREATIONS CREDIT)
             // ==============================================================
             std::wstring abTitle = L"Likhi (লিখি) — সংস্করণ " + ToBengaliDigits(likhi::kVersionWString);
             HWND hAb_Title = CreateWindowW(L"STATIC", abTitle.c_str(), WS_CHILD | SS_LEFT, 365, 30, 410, 32, hWnd, NULL, NULL, NULL);
@@ -633,11 +645,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // ==============================================================
             // BOTTOM BAR CONTROLS
             // ==============================================================
-            hLblStatus = CreateWindowW(L"STATIC", L"Likhi প্রস্তুত।", WS_VISIBLE | WS_CHILD | SS_LEFT, 25, 485, 475, 26, hWnd, (HMENU)IDC_LBL_STATUS, NULL, NULL);
+            hLblStatus = CreateWindowW(L"STATIC", L"Likhi প্রস্তুত।", WS_VISIBLE | WS_CHILD | SS_LEFT, 25, 492, 480, 26, hWnd, (HMENU)IDC_LBL_STATUS, NULL, NULL);
             SendMessage(hLblStatus, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hBtnSave = CreateWindowW(L"BUTTON", L"সংরক্ষণ করুন (Save)", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 515, 478, 180, 40, hWnd, (HMENU)IDC_BTN_SAVE, NULL, NULL);
-            HWND hBtnClose = CreateWindowW(L"BUTTON", L"বন্ধ করুন", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 705, 478, 100, 40, hWnd, (HMENU)IDC_BTN_CLOSE, NULL, NULL);
+            HWND hBtnSave = CreateWindowW(L"BUTTON", L"সংরক্ষণ করুন (Save)", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 520, 485, 180, 40, hWnd, (HMENU)IDC_BTN_SAVE, NULL, NULL);
+            HWND hBtnClose = CreateWindowW(L"BUTTON", L"বন্ধ করুন", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 710, 485, 100, 40, hWnd, (HMENU)IDC_BTN_CLOSE, NULL, NULL);
 
             SwitchSection(hWnd, SEC_GENERAL);
             break;
@@ -737,7 +749,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             HPEN hPenCard = CreatePen(PS_SOLID, 1, RGB(226, 232, 240));
             HBRUSH hOldBr = (HBRUSH)SelectObject(hdc, hBrushCard);
             HPEN hOldPen = (HPEN)SelectObject(hdc, hPenCard);
-            RoundRect(hdc, 245, 15, 805, 465, 12, 12);
+            RoundRect(hdc, 245, 15, 815, 475, 12, 12);
             SelectObject(hdc, hOldBr);
             SelectObject(hdc, hOldPen);
             DeleteObject(hPenCard);
@@ -1060,11 +1072,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     RegisterClassExW(&wcex);
 
+    likhi_why::RegisterWhyLikhiPageClass(hInstance);
+
     HWND hWnd = CreateWindowW(
         L"LikhiFluentSettingsClass",
         L"Likhi (লিখি) — সেটিংস ও ড্যাশবোর্ড",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN,
-        CW_USEDEFAULT, CW_USEDEFAULT, 830, 570,
+        CW_USEDEFAULT, CW_USEDEFAULT, 840, 580,
         NULL, NULL, hInstance, NULL
     );
 

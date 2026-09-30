@@ -2,9 +2,10 @@
   "version": "1.0.1",
   "release_date": "2026-09-28",
   "download_url": "https://getlikhi.com/downloads/LikhiSetup.exe",
-  "sha256": "9858a32bc7fdcc6112d317362da824cb3a6ddd20356fc9a8e424fe09b8dacf13",
-  "file_size": 18101595,
+  "sha256": "21ae667deffcced3efd6caff59dd3fe35f76fff05ede4e9eca6c355516eccb3c",
+  "file_size": 18139995,
   "changelog": [
+    "Added complete 'Why Likhi' (কেন লিখি) product information, architecture, and philosophy page with interactive navigation",
     "Added auto-update check toggle and silenced background update notifications to prevent typing interruptions",
     "Refactored Settings & Dashboard UI: eliminated text clipping, improved Bengali typography padding, and added modern owner-drawn controls",
     "Improved context-aware candidate ranking for conversational phrases",
