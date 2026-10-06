@@ -137,6 +137,11 @@ bool CompositionManager::Initialize(HINSTANCE hInst) {
         RefreshVoiceRow();
         // Cloud replies arrive on the CloudTranslit worker thread; marshal them
         // onto the UI thread via the candidate window before touching state.
+        candidate_window_.SetCloudResultCallback([this](const std::wstring& word,
+                                                        size_t generation,
+                                                        const std::vector<std::wstring>& candidates) {
+            OnCloudResults(word, static_cast<uint32_t>(generation), candidates);
+        });
         cloud_.SetResultCallback([this](const std::wstring& word, uint32_t generation,
                                         const std::vector<std::wstring>& candidates) {
             candidate_window_.PostCloudResult(word, generation, candidates);

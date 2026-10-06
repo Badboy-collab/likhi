@@ -76,8 +76,14 @@ StartupSettings ApplySettingsFile(CompositionManager& mgr) {
         if (line.find("\"show_suggestions\": true") != std::string::npos) {
             mgr.SetSuggestionsEnabled(true);
         }
-        if (line.find("\"cloud_suggestions\": false") != std::string::npos ||
-            line.find("\"show_suggestions\": false") != std::string::npos) {
+        if (line.find("\"online_suggestions\": true") != std::string::npos ||
+            line.find("\"cloud_suggestions\": true") != std::string::npos) {
+            out.cloud_suggestions = true;
+        } else if (line.find("\"online_suggestions\": false") != std::string::npos ||
+                   line.find("\"cloud_suggestions\": false") != std::string::npos) {
+            out.cloud_suggestions = false;
+        }
+        if (line.find("\"show_suggestions\": false") != std::string::npos) {
             out.cloud_suggestions = false;
             mgr.SetSuggestionsEnabled(false);
         }

@@ -16,7 +16,8 @@ std::string ToLowerAscii(const std::string& str) {
 // Recognized suffixes in lowercase
 const char* const kKnownSuffixes[] = {
     "er", "r", "o", "ke", "re", "e", "te", "ta", "ti",
-    "ra", "der", "gulo", "guli", "khana", "khani", "tuku", "tai", nullptr
+    "ra", "der", "gulo", "guli", "khana", "khani", "tuku", "tai",
+    "moto", "moton", "bhabe", nullptr
 };
 
 } // namespace
@@ -67,6 +68,23 @@ bool BanglaMorphology::DecomposeCompoundToken(const std::string& token,
     if (lower.size() >= 5 && lower.substr(lower.size() - 3) == "leo") {
         out_stem = token.substr(0, token.size() - 1); // e.g. "korle", "gele", "pele"
         out_suffix = token.substr(token.size() - 1);  // "o"
+        return true;
+    }
+
+    // Compound suffixes: moto, moton, bhabe
+    if (lower.size() >= 6 && lower.substr(lower.size() - 4) == "moto") {
+        out_stem = token.substr(0, token.size() - 4);
+        out_suffix = "moto";
+        return true;
+    }
+    if (lower.size() >= 7 && lower.substr(lower.size() - 5) == "moton") {
+        out_stem = token.substr(0, token.size() - 5);
+        out_suffix = "moton";
+        return true;
+    }
+    if (lower.size() >= 7 && lower.substr(lower.size() - 5) == "bhabe") {
+        out_stem = token.substr(0, token.size() - 5);
+        out_suffix = "bhabe";
         return true;
     }
 
@@ -206,6 +224,17 @@ std::string BanglaMorphology::AttachSuffix(const std::string& bengali_stem,
     if (s == "khani") return bengali_stem + khani;
     if (s == "tuku")  return bengali_stem + tuku;
     if (s == "tai")   return bengali_stem + tai;
+
+    // 11. Compound adverbs / postpositions
+    const std::string moto = "\xE0\xA6\xAE\xE0\xA6\xA4\xE0\xA7\x8B";      // মতো
+    const std::string moton = "\xE0\xA6\xAE\xE0\xA6\xA4\xE0\xA6\xA8";     // মতন
+    const std::string bhabe = "\xE0\xA6\xAD\xE0\xA6\xBE\xE0\xA6\xB0\xE0\xA7\x87"; // ভাবে
+    if (s == "moto") return bengali_stem + moto;   // e.g. ঠিক -> ঠিকমতো
+    if (s == "moton") return bengali_stem + moton; // e.g. ঠিক -> ঠিকমতন
+    if (s == "bhabe") {
+        const std::string bhabe_str = "\xE0\xA6\xAD\xE0\xA6\xBE\xE0\xA6\xAC\xE0\xA7\x87"; // ভা + বে
+        return bengali_stem + bhabe_str; // e.g. ঠিক -> ঠিকভাবে
+    }
 
     return bengali_stem;
 }

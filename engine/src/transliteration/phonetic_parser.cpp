@@ -154,6 +154,41 @@ void PhoneticParser::ExpandState(const std::string& roman, const ParseState& sta
     }
     if (MatchPrefix(roman, pos, "tth")) {
         append_consonant(CONSONANT_TTHA, 3, 0.0f); // ঠ
+        // Branch for ত্থ conjunct (e.g. utthan -> উত্থান)
+        if (state.in_consonant && state.last_consonant != 0) {
+            ParseState stth = state;
+            stth.bengali.push_back(HASANT);
+            stth.bengali += {CONSONANT_TA, HASANT, CONSONANT_THA};
+            stth.roman_pos = pos + 3;
+            stth.penalty += 0.03f;
+            stth.in_consonant = true;
+            stth.last_consonant = CONSONANT_THA;
+            next_states.push_back(stth);
+        } else {
+            ParseState stth = state;
+            stth.bengali += {CONSONANT_TA, HASANT, CONSONANT_THA};
+            stth.roman_pos = pos + 3;
+            stth.penalty += 0.03f;
+            stth.in_consonant = true;
+            stth.last_consonant = CONSONANT_THA;
+            next_states.push_back(stth);
+        }
+        return;
+    }
+    if (MatchPrefix(roman, pos, "thh")) {
+        // thh -> থ্য / থ (Banglish geminate for থ্য as in tothho -> তথ্য)
+        ParseState sthh = state;
+        if (state.in_consonant && state.last_consonant != 0) {
+            sthh.bengali.push_back(HASANT);
+        }
+        sthh.bengali += {CONSONANT_THA, HASANT, CONSONANT_YA}; // থ্য
+        sthh.roman_pos = pos + 3;
+        sthh.penalty += 0.02f;
+        sthh.in_consonant = true;
+        sthh.last_consonant = CONSONANT_YA;
+        next_states.push_back(sthh);
+
+        append_consonant(CONSONANT_THA, 3, 0.04f); // থ fallback
         return;
     }
     if (MatchPrefix(roman, pos, "ddh")) {
@@ -202,6 +237,11 @@ void PhoneticParser::ExpandState(const std::string& roman, const ParseState& sta
         append_consonant(CONSONANT_BHA, 2, 0.0f); // ভ
         return;
     }
+    if (MatchPrefix(roman, pos, "shh")) {
+        append_consonant(CONSONANT_SHA, 3, 0.0f); // শ (e.g. inshhallah -> ইনশাল্লাহ)
+        append_consonant(CONSONANT_SA, 3, 0.02f);  // স
+        return;
+    }
     if (MatchPrefix(roman, pos, "sh")) {
         append_consonant(CONSONANT_SHA, 2, 0.0f); // শ
         append_consonant(CONSONANT_SA, 2, 0.01f);  // স (e.g. shocheton -> সচেতন)
@@ -230,7 +270,11 @@ void PhoneticParser::ExpandState(const std::string& roman, const ParseState& sta
         return;
     }
     if (MatchPrefix(roman, pos, "ri") || MatchPrefix(roman, pos, "rri")) {
-        append_vowel(VOWEL_RI, KAR_RI, (MatchPrefix(roman, pos, "rri") ? 3 : 2), 0.0f);
+        size_t c_len = MatchPrefix(roman, pos, "rri") ? 3 : 2;
+        // In natural Banglish typing, 'ri' overwhelmingly represents র + ি (e.g. bistarit -> বিস্তারিত, rito -> রিট, pori -> পরি/পড়ি).
+        // Sanskrit/Tatsama words using ঋ / ৃ (rishi, brishti, smriti) are also supported via alternative branch.
+        append_consonant(CONSONANT_RA, 1, 0.0f);
+        append_vowel(VOWEL_RI, KAR_RI, c_len, 0.03f);
         return;
     }
     if (MatchPrefix(roman, pos, "oi")) {
@@ -360,6 +404,31 @@ void PhoneticParser::ExpandState(const std::string& roman, const ParseState& sta
         case 'w': case 'W':
             append_consonant(CONSONANT_BA, 1, 0.05f);
             break;
+        case 'x': case 'X': {
+            // 'x' -> ক্স (ক + ্ + স) as in extra/excel, or ক্ষ as in xerox
+            ParseState sx = state;
+            if (state.in_consonant && state.last_consonant != 0) {
+                sx.bengali.push_back(HASANT);
+            }
+            sx.bengali += {CONSONANT_KA, HASANT, CONSONANT_SA}; // ক্স
+            sx.roman_pos = pos + 1;
+            sx.penalty += 0.01f;
+            sx.in_consonant = true;
+            sx.last_consonant = CONSONANT_SA;
+            next_states.push_back(sx);
+
+            ParseState sx2 = state;
+            if (state.in_consonant && state.last_consonant != 0) {
+                sx2.bengali.push_back(HASANT);
+            }
+            sx2.bengali += {CONSONANT_KA, HASANT, CONSONANT_SSA}; // ক্ষ
+            sx2.roman_pos = pos + 1;
+            sx2.penalty += 0.04f;
+            sx2.in_consonant = true;
+            sx2.last_consonant = CONSONANT_SSA;
+            next_states.push_back(sx2);
+            break;
+        }
         case 'y': case 'Y':
             append_consonant(CONSONANT_YYA, 1, 0.0f);
             append_consonant(CONSONANT_YA, 1, 0.02f);
