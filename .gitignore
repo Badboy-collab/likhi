@@ -35,6 +35,9 @@ tsf/src/key_event_sink_tmp.cpp
 tsf/src/key_diag.h
 tools/probe_words.cpp
 tools/probe_langid.cpp
+probe_words.exe
+*.flag
+_tmp_*
 
 # Credentials & deployment artifacts
 .env
@@ -43,3 +46,6 @@ tools/probe_langid.cpp
 .deploy_manifest.json
 backups/
 logs/
+_backup_*/
+website_backup_*/
+_theme_backup_*/

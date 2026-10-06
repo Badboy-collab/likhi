@@ -26,6 +26,7 @@ RELEASE_NAME = 'Likhi v1.0.1 - One-Click Installer (Windows)'
 RELEASE_BODY = """## Likhi v1.0.1 Release (Windows)
 
 ### Highlights & Fixes:
+- **'Why Likhi' (কেন লিখি) Product & Philosophy Page**: Full interactive product information, architecture, and vision page inside Settings with 6-step workflow, 4 problem-solution cards, 2-column natural Banglish mapping, and direct settings navigation.
 - **Silent Update & User Control**: Added auto-update check toggle in Settings and silenced background update notifications so user typing is never interrupted.
 - **Settings & Dashboard UI Polish**: Eliminated Bengali typography clipping (WS_CLIPCHILDREN, increased diacritic padding), added modern fluent styled buttons, and fixed dark border artifacts.
 - **In-App Auto-Update Pipeline**: Fully integrated download and installation flow directly in Settings app with live progress, CryptoAPI SHA-256 integrity verification, and silent/interactive update launch.
@@ -37,13 +38,13 @@ RELEASE_BODY = """## Likhi v1.0.1 Release (Windows)
 
 ### Verification:
 - **File**: `LikhiSetup.exe`
-- **Size**: 18,101,595 bytes
-- **SHA-256**: `9858a32bc7fdcc6112d317362da824cb3a6ddd20356fc9a8e424fe09b8dacf13`
+- **Size**: 18,096,764 bytes
+- **SHA-256**: `dd31916316bf5c190359575fb69e2a01c73473a04df762d6edd7ce3c411d9399`
 - **Regression Tests**: 983 / 983 Passing (100%)
 """
 ASSET_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'release_package', 'LikhiSetup.exe')
-EXPECTED_SIZE = 18101595
-EXPECTED_SHA256 = '9858a32bc7fdcc6112d317362da824cb3a6ddd20356fc9a8e424fe09b8dacf13'
+EXPECTED_SIZE = 18096764
+EXPECTED_SHA256 = 'dd31916316bf5c190359575fb69e2a01c73473a04df762d6edd7ce3c411d9399'
 
 def compute_sha256(path):
     h = hashlib.sha256()
@@ -110,6 +111,20 @@ def create_or_update_release(token):
         with urllib.request.urlopen(req) as resp:
             release = json.loads(resp.read().decode())
             print(f">>> Found existing release {TAG} (ID: {release['id']})")
+        # Update release metadata / notes
+        patch_payload = json.dumps({
+            'name': RELEASE_NAME,
+            'body': RELEASE_BODY,
+        }).encode('utf-8')
+        patch_req = urllib.request.Request(
+            f"https://api.github.com/repos/{REPO}/releases/{release['id']}",
+            data=patch_payload,
+            headers={**headers, 'Content-Type': 'application/json'},
+            method='PATCH'
+        )
+        with urllib.request.urlopen(patch_req) as resp:
+            release = json.loads(resp.read().decode())
+            print(f">>> Updated release metadata for {TAG}")
     except urllib.error.HTTPError as e:
         if e.code == 404:
             print(f">>> Creating new release {TAG}...")
@@ -191,6 +206,19 @@ def main():
 
     token = args.token
     if not token:
+        try:
+            p = subprocess.run(['git', 'credential', 'fill'], input='protocol=https\nhost=github.com\n\n', text=True, capture_output=True)
+            for line in p.stdout.splitlines():
+                if line.startswith('password='):
+                    t = line.split('=', 1)[1].strip()
+                    if t:
+                        token = t
+                        print(">>> Retrieved GitHub credentials from Git Credential Manager.")
+                        break
+        except Exception:
+            pass
+
+    if not token:
         dc = get_device_code()
         print("\n" + "=" * 60, flush=True)
         print(" GITHUB DEVICE AUTHORIZATION REQUIRED", flush=True)
@@ -199,12 +227,31 @@ def main():
         print(f" 2. Enter:    {dc['user_code']}", flush=True)
         print("=" * 60 + "\n", flush=True)
         
+        user_code = dc['user_code']
+        try:
+            subprocess.run(['powershell', '-Command', f"Set-Clipboard -Value '{user_code}'"], capture_output=True)
+            print(f">>> Copied '{user_code}' to clipboard!", flush=True)
+        except Exception:
+            pass
+        try:
+            import webbrowser
+            webbrowser.open(dc['verification_uri'])
+            print(f">>> Opened {dc['verification_uri']} in browser!", flush=True)
+        except Exception:
+            pass
+        
         if args.request_code_only:
             return 0
             
         print("Waiting for authorization in browser...", flush=True)
         token = poll_device_token(dc['device_code'], interval=dc.get('interval', 5), expires_in=dc.get('expires_in', 900))
         print(">>> Authorization successful!", flush=True)
+        try:
+            store_input = f"protocol=https\nhost=github.com\nusername=Badboy-collab\npassword={token}\n\n"
+            subprocess.run(['git', 'credential-manager', 'store'], input=store_input, text=True, capture_output=True)
+            print(">>> Saved credential to Windows Credential Manager!", flush=True)
+        except Exception:
+            pass
 
     push_master(token)
     release_url = create_or_update_release(token)
