@@ -51,6 +51,7 @@
 #include <thread>
 #include "likhi_version.h"
 #include "update_service.h"
+#include "translation_service.h"
 
 using likhi::universal::ActionKind;
 using likhi::universal::ClassifyKey;
@@ -68,6 +69,7 @@ const UINT_PTR kBengaliLangId = 0x0845;
 const wchar_t kWindowClass[] = L"LikhiUniversalModeWindow";
 const UINT kTrayMessage = WM_APP + 1;
 const int kHotkeyToggle = 0xA1;
+const int kHotkeyToggleConversion = 0xA2;
 const UINT_PTR kTimerReloadSettings = 1;
 const UINT kSettingsPollMs = 3000;
 const UINT_PTR kTimerBackgroundUpdateCheck = 2;
@@ -87,6 +89,9 @@ InputMode g_mode = InputMode::kAutomatic;
 bool g_host_enabled = true;        // settings.json "universal_mode"
 bool g_personal_learning = true;   // settings.json "personal_learning"
 bool g_auto_check_update = false;  // settings.json "auto_check_update" (disabled by default)
+bool g_english_translation_enabled = true; // settings.json "english_translation"
+likhi::ConversionTarget g_conversion_target = likhi::ConversionTarget::kBangla;
+likhi::TranslationService g_translation_service;
 bool g_tray_added = false;
 
 HWND g_last_foreground = nullptr;
@@ -178,6 +183,9 @@ void LoadSettings() {
     if (text.find("\"personal_learning\": true") != std::string::npos) g_personal_learning = true;
     if (text.find("\"auto_check_update\": false") != std::string::npos) g_auto_check_update = false;
     if (text.find("\"auto_check_update\": true") != std::string::npos) g_auto_check_update = true;
+    if (text.find("\"english_translation\": false") != std::string::npos) g_english_translation_enabled = false;
+    if (text.find("\"english_translation\": true") != std::string::npos) g_english_translation_enabled = true;
+    g_translation_service.SetConsentEnabled(g_english_translation_enabled);
 
     if (g_engine) BanglaEngine_SetLearningEnabled(g_engine, g_personal_learning);
     g_typing.SetEnabled(g_host_enabled && g_mode != InputMode::kTsfOnly);
@@ -366,22 +374,37 @@ void AppendBackspaces(std::vector<INPUT>& inputs, int count) {
 // then type the boundary character. When the engine has no Bengali answer the
 // erasure is skipped entirely and only the boundary character is sent, so the
 // user's own text is never damaged.
+// In English conversion mode, converts the transliterated word/phrase into English.
 void ApplyReplace(const Decision& decision) {
-    const std::wstring bengali = Transliterate(decision.roman);
+    std::wstring replacement = Transliterate(decision.roman);
+    
+    if (g_conversion_target == likhi::ConversionTarget::kEnglish &&
+        g_english_translation_enabled && !replacement.empty()) {
+        std::wstring cached_en;
+        if (g_translation_service.LookupCache(replacement, cached_en)) {
+            replacement = cached_en;
+        } else {
+            likhi::TranslationResult res = g_translation_service.TranslateDirect(replacement, 1500);
+            if (res.success && !res.translated_english.empty()) {
+                replacement = res.translated_english;
+            }
+        }
+    }
+
     std::vector<INPUT> inputs;
-    if (!bengali.empty()) {
+    if (!replacement.empty()) {
         AppendBackspaces(inputs, decision.erase_chars);
-        AppendUnicode(inputs, bengali);
+        AppendUnicode(inputs, replacement);
     }
     AppendUnicode(inputs, decision.trailing);
     if (!inputs.empty()) {
         SendInput((UINT)inputs.size(), inputs.data(), sizeof(INPUT));
     }
-    if (!bengali.empty() && g_engine) {
+    if (!replacement.empty() && g_engine && g_conversion_target == likhi::ConversionTarget::kBangla) {
         // Same personalisation file as the TSF path: learning in WhatsApp is
         // visible in Word and the other way round.
         BanglaEngine_LearnWord(g_engine, NarrowUtf8(decision.roman).c_str(),
-                               NarrowUtf8(bengali).c_str());
+                               NarrowUtf8(replacement).c_str());
     }
 }
 
@@ -438,8 +461,9 @@ void UpdateTray() {
                               : g_mode == InputMode::kUniversalOnly ? L"Universal only"
                                                                     : L"Automatic";
     if (!g_host_enabled) mode_text = L"paused";
+    const wchar_t* conv_text = g_conversion_target == likhi::ConversionTarget::kEnglish ? L" [EN]" : L" [BN]";
     wchar_t tip[128] = {0};
-    wsprintfW(tip, L"Likhi Universal Mode - %ls", mode_text);
+    wsprintfW(tip, L"Likhi Universal Mode - %ls%ls", mode_text, conv_text);
     wcsncpy(data.szTip, tip, 127);
     Shell_NotifyIconW(NIM_MODIFY, &data);
 }
@@ -448,6 +472,11 @@ void ShowTrayMenu() {
     HMENU menu = CreatePopupMenu();
     AppendMenuW(menu, MF_STRING | (g_host_enabled ? MF_CHECKED : 0), 100,
                 L"Universal Mode active");
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING | (g_conversion_target == likhi::ConversionTarget::kBangla ? MF_CHECKED : 0),
+                107, L"মোড: বাংলা (Bangla) [Ctrl+Alt+E]");
+    AppendMenuW(menu, MF_STRING | (g_conversion_target == likhi::ConversionTarget::kEnglish ? MF_CHECKED : 0),
+                108, L"মোড: English অনুবাদ (Translation) [Ctrl+Alt+E]");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING | (g_mode == InputMode::kAutomatic ? MF_CHECKED : 0),
                 101, L"Automatic (TSF first)");
@@ -477,6 +506,14 @@ void ShowTrayMenu() {
         g_host_enabled = !g_host_enabled;
         g_typing.SetEnabled(g_host_enabled && g_mode != InputMode::kTsfOnly);
         Log(g_host_enabled ? "universal mode resumed" : "universal mode paused");
+        UpdateTray();
+    } else if (command == 107) {
+        g_conversion_target = likhi::ConversionTarget::kBangla;
+        Log("conversion target = bangla");
+        UpdateTray();
+    } else if (command == 108) {
+        g_conversion_target = likhi::ConversionTarget::kEnglish;
+        Log("conversion target = english");
         UpdateTray();
     } else if (command >= 101 && command <= 103) {
         g_mode = command == 101 ? InputMode::kAutomatic
@@ -508,6 +545,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
                 g_host_enabled = !g_host_enabled;
                 g_typing.SetEnabled(g_host_enabled && g_mode != InputMode::kTsfOnly);
                 Log(g_host_enabled ? "hotkey: resumed" : "hotkey: paused");
+                UpdateTray();
+            } else if (wparam == kHotkeyToggleConversion) {
+                g_conversion_target = (g_conversion_target == likhi::ConversionTarget::kBangla)
+                                          ? likhi::ConversionTarget::kEnglish
+                                          : likhi::ConversionTarget::kBangla;
+                Log(g_conversion_target == likhi::ConversionTarget::kEnglish ? "hotkey: english conversion mode" : "hotkey: bangla mode");
                 UpdateTray();
             }
             return 0;
@@ -680,6 +723,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command_line, int) {
     wcscpy_s(tray.szTip, L"Likhi Universal Mode");
     g_tray_added = Shell_NotifyIconW(NIM_ADD, &tray) != FALSE;
     RegisterHotKey(g_window, kHotkeyToggle, MOD_CONTROL | MOD_ALT, 'L');
+    RegisterHotKey(g_window, kHotkeyToggleConversion, MOD_CONTROL | MOD_ALT, 'E');
+    g_translation_service.SetConsentEnabled(g_english_translation_enabled);
+    g_translation_service.Start();
+
     SetTimer(g_window, kTimerReloadSettings, kSettingsPollMs, nullptr);
     if (g_auto_check_update) {
         SetTimer(g_window, kTimerBackgroundUpdateCheck, kUpdateCheckDelayMs, nullptr);
@@ -698,6 +745,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command_line, int) {
     if (g_keyboard_hook) UnhookWindowsHookEx(g_keyboard_hook);
     if (g_mouse_hook) UnhookWindowsHookEx(g_mouse_hook);
     if (g_tray_added) Shell_NotifyIconW(NIM_DELETE, &tray);
+    UnregisterHotKey(g_window, kHotkeyToggle);
+    UnregisterHotKey(g_window, kHotkeyToggleConversion);
+    g_translation_service.Stop();
     KillTimer(g_window, kTimerReloadSettings);
     if (g_engine) BanglaEngine_Destroy(g_engine);
     if (single) CloseHandle(single);

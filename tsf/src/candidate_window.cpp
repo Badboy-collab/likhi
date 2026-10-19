@@ -14,6 +14,9 @@ const UINT kCloudResultMsg = WM_APP + 0x6A;
 // Same idea for the voice recognition result (worker thread -> UI thread).
 const UINT kVoiceResultMsg = WM_APP + 0x6B;
 
+// Translation result from worker thread to UI thread
+const UINT kTranslationResultMsg = WM_APP + 0x6C;
+
 // Bengali numerals (U+09E6..U+09EF) for the candidate index. The strip is a
 // vertical IME list, so numbering uses the user's own script.
 const wchar_t* kBengaliDigits = L"\u09E6\u09E7\u09E8\u09E9\u09EA\u09EB\u09EC\u09ED\u09EE\u09EF";
@@ -45,7 +48,8 @@ const int kCornerR  = 8;
 // Microphone row under the candidate rows.
 const int kVoiceRowH    = 24;
 const int kVoiceIconBox = 22;
-const int kMinWidth     = 132;
+const int kModeBarH     = 24;
+const int kMinWidth     = 180;
 
 struct CloudResultPayload {
     std::wstring word;
@@ -56,6 +60,12 @@ struct CloudResultPayload {
 struct VoiceResultPayload {
     std::wstring text;
     std::wstring error;
+};
+
+struct TranslationResultPayload {
+    std::wstring src;
+    std::wstring trans;
+    size_t generation;
 };
 
 // Small GDI microphone glyph (capsule + cradle + stand).
@@ -91,12 +101,17 @@ CandidateWindow::CandidateWindow()
       hfont_bengali_(nullptr),
       hfont_number_(nullptr),
       hfont_score_(nullptr),
+      hfont_mode_(nullptr),
       width_(250),
       height_(42),
       last_width_(0),
       last_height_(0),
+      conversion_mode_(ConversionTarget::kBangla),
       voice_state_(VoiceState::Off) {
     memset(&caret_rect_, 0, sizeof(RECT));
+    memset(&mode_bar_rect_, 0, sizeof(RECT));
+    memset(&bn_btn_rect_, 0, sizeof(RECT));
+    memset(&en_btn_rect_, 0, sizeof(RECT));
 }
 
 CandidateWindow::~CandidateWindow() {
@@ -145,6 +160,13 @@ bool CandidateWindow::Initialize(HINSTANCE hInst) {
         L"Segoe UI"
     );
 
+    hfont_mode_ = CreateFontW(
+        -12, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+        L"Segoe UI"
+    );
+
     return true;
 }
 
@@ -161,9 +183,32 @@ void CandidateWindow::Destroy() {
         DeleteObject(hfont_number_);
         hfont_number_ = nullptr;
     }
+    if (hfont_mode_) {
+        DeleteObject(hfont_mode_);
+        hfont_mode_ = nullptr;
+    }
     if (hinst_) {
         UnregisterClassW(WINDOW_CLASS_NAME, hinst_);
         hinst_ = nullptr;
+    }
+}
+
+void CandidateWindow::SetConversionMode(ConversionTarget mode) {
+    conversion_mode_ = mode;
+    if (hwnd_ && is_visible_) {
+        InvalidateRect(hwnd_, NULL, FALSE);
+    }
+}
+
+void CandidateWindow::ToggleConversionMode() {
+    conversion_mode_ = (conversion_mode_ == ConversionTarget::kBangla)
+                           ? ConversionTarget::kEnglish
+                           : ConversionTarget::kBangla;
+    if (conversion_mode_cb_) {
+        conversion_mode_cb_(conversion_mode_);
+    }
+    if (hwnd_ && is_visible_) {
+        InvalidateRect(hwnd_, NULL, FALSE);
     }
 }
 
@@ -175,13 +220,15 @@ void CandidateWindow::UpdateDimensions() {
 
     candidate_item_rects_.clear();
     mic_rect_ = RECT{0, 0, 0, 0};
+    mode_bar_rect_ = RECT{0, 0, 0, 0};
+    bn_btn_rect_ = RECT{0, 0, 0, 0};
+    en_btn_rect_ = RECT{0, 0, 0, 0};
 
     // VERTICAL strip: one candidate per row, number in a left column so the
     // Bengali words line up. Width = widest row, height = rows + padding.
     const size_t count = (candidates_.size() < kMaxVisible) ? candidates_.size() : kMaxVisible;
 
     int widest = 0;
-    int y = kTopPad;
     for (size_t i = 0; i < count; i++) {
         SIZE num_size = {0}, text_size = {0};
 
@@ -194,14 +241,27 @@ void CandidateWindow::UpdateDimensions() {
 
         int item_w = kPadX + num_size.cx + 8 + text_size.cx + kPadX;
         if (item_w > widest) widest = item_w;
-
-        RECT item_r = { 6, y, 6 + item_w, y + kItemH };
-        candidate_item_rects_.push_back(item_r);
-
-        y += kItemH + kItemGapY;
     }
 
-    for (RECT& r : candidate_item_rects_) r.right = r.left + widest; // full-width rows
+    if (widest < kMinWidth) widest = kMinWidth;
+
+    int y = kTopPad;
+
+    // Mode Selector Row ([ বাংলা ] ⇄ [ English ])
+    mode_bar_rect_ = RECT{ 6, y, 6 + widest, y + kModeBarH };
+    int mid_x = 6 + widest / 2;
+    int btn_w = (widest - 32) / 2;
+    if (btn_w > 72) btn_w = 72;
+    bn_btn_rect_ = RECT{ mid_x - 10 - btn_w, y + 2, mid_x - 10, y + kModeBarH - 2 };
+    en_btn_rect_ = RECT{ mid_x + 10, y + 2, mid_x + 10 + btn_w, y + kModeBarH - 2 };
+    y += kModeBarH + 4;
+
+    // Candidate rows
+    for (size_t i = 0; i < count; i++) {
+        RECT item_r = { 6, y, 6 + widest, y + kItemH };
+        candidate_item_rects_.push_back(item_r);
+        y += kItemH + kItemGapY;
+    }
 
     // Microphone row (voice input) sits under the candidates, separated by a
     // hairline. This is the clickable microphone of the strip.
@@ -213,7 +273,11 @@ void CandidateWindow::UpdateDimensions() {
             GetTextExtentPoint32W(hdc, label.c_str(), (int)label.size(), &label_size);
         }
         const int voice_w = kPadX + kVoiceIconBox + label_size.cx + kPadX + 24;
-        if (voice_w > widest) widest = voice_w;
+        if (voice_w > widest) {
+            widest = voice_w;
+            mode_bar_rect_.right = 6 + widest;
+            for (RECT& r : candidate_item_rects_) r.right = 6 + widest;
+        }
         mic_rect_ = RECT{6, y, 6 + widest, y + kVoiceRowH};
         y += kVoiceRowH;
     }
@@ -221,7 +285,6 @@ void CandidateWindow::UpdateDimensions() {
     SelectObject(hdc, old_font);
     ReleaseDC(hwnd_, hdc);
 
-    if (widest < kMinWidth) widest = kMinWidth;
     width_ = widest + 12;
     height_ = y + kTopPad;
 }
@@ -301,6 +364,14 @@ void CandidateWindow::PostCloudResult(const std::wstring& word, size_t generatio
     }
 }
 
+void CandidateWindow::PostTranslationResult(const std::wstring& src, const std::wstring& trans, size_t generation) {
+    if (!hwnd_) return;
+    TranslationResultPayload* p = new TranslationResultPayload{src, trans, generation};
+    if (!PostMessageW(hwnd_, kTranslationResultMsg, 0, reinterpret_cast<LPARAM>(p))) {
+        delete p;
+    }
+}
+
 void CandidateWindow::SelectNext() {
     if (candidates_.empty()) return;
     selected_index_ = (selected_index_ + 1) % candidates_.size();
@@ -334,6 +405,61 @@ void CandidateWindow::OnPaint(HWND hWnd) {
     FillRect(memDC, &client_rect, bg_brush);
     DeleteObject(bg_brush);
 
+    // Draw Language Conversion Mode Selector Bar ([ বাংলা ] ⇄ [ English ])
+    if (mode_bar_rect_.bottom > mode_bar_rect_.top) {
+        SetBkMode(memDC, TRANSPARENT);
+
+        // Draw বাংলা pill button
+        bool bn_active = (conversion_mode_ == ConversionTarget::kBangla);
+        if (bn_active) {
+            HBRUSH btn_bg = CreateSolidBrush(RGB(232, 240, 254)); // Soft Google Blue
+            HPEN btn_pen = CreatePen(PS_SOLID, 1, RGB(168, 199, 250));
+            HGDIOBJ old_b = SelectObject(memDC, btn_bg);
+            HGDIOBJ old_p = SelectObject(memDC, btn_pen);
+            RoundRect(memDC, bn_btn_rect_.left, bn_btn_rect_.top, bn_btn_rect_.right, bn_btn_rect_.bottom, 6, 6);
+            SelectObject(memDC, old_b);
+            SelectObject(memDC, old_p);
+            DeleteObject(btn_bg);
+            DeleteObject(btn_pen);
+        }
+        SelectObject(memDC, hfont_bengali_);
+        SetTextColor(memDC, bn_active ? RGB(26, 115, 232) : RGB(95, 99, 104));
+        RECT bn_text_rect = bn_btn_rect_;
+        DrawTextW(memDC, L"বাংলা", -1, &bn_text_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+        // Draw middle arrow ⇄
+        SelectObject(memDC, hfont_mode_);
+        SetTextColor(memDC, RGB(128, 134, 139));
+        RECT arrow_rect = {bn_btn_rect_.right, mode_bar_rect_.top, en_btn_rect_.left, mode_bar_rect_.bottom};
+        DrawTextW(memDC, L"⇄", -1, &arrow_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+        // Draw English pill button
+        bool en_active = (conversion_mode_ == ConversionTarget::kEnglish);
+        if (en_active) {
+            HBRUSH btn_bg = CreateSolidBrush(RGB(232, 240, 254));
+            HPEN btn_pen = CreatePen(PS_SOLID, 1, RGB(168, 199, 250));
+            HGDIOBJ old_b = SelectObject(memDC, btn_bg);
+            HGDIOBJ old_p = SelectObject(memDC, btn_pen);
+            RoundRect(memDC, en_btn_rect_.left, en_btn_rect_.top, en_btn_rect_.right, en_btn_rect_.bottom, 6, 6);
+            SelectObject(memDC, old_b);
+            SelectObject(memDC, old_p);
+            DeleteObject(btn_bg);
+            DeleteObject(btn_pen);
+        }
+        SelectObject(memDC, hfont_mode_);
+        SetTextColor(memDC, en_active ? RGB(26, 115, 232) : RGB(95, 99, 104));
+        RECT en_text_rect = en_btn_rect_;
+        DrawTextW(memDC, L"English", -1, &en_text_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+        // Subtle hairline separator below mode bar
+        HPEN sep_pen = CreatePen(PS_SOLID, 1, RGB(232, 234, 237));
+        HGDIOBJ old_sep = SelectObject(memDC, sep_pen);
+        MoveToEx(memDC, mode_bar_rect_.left + 4, mode_bar_rect_.bottom + 1, nullptr);
+        LineTo(memDC, mode_bar_rect_.right - 4, mode_bar_rect_.bottom + 1);
+        SelectObject(memDC, old_sep);
+        DeleteObject(sep_pen);
+    }
+
     // Draw Candidates
     for (size_t i = 0; i < candidates_.size() && i < candidate_item_rects_.size(); i++) {
         const RECT& item_rect = candidate_item_rects_[i];
@@ -365,7 +491,7 @@ void CandidateWindow::OnPaint(HWND hWnd) {
         DrawTextW(memDC, num_str.c_str(), (int)num_str.size(), &num_rect,
                   DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
 
-        // Draw Bengali Word (own column -> all words align)
+        // Draw Bengali/English Candidate Word (own column -> all words align)
         SelectObject(memDC, hfont_bengali_);
         SetTextColor(memDC, is_selected ? RGB(26, 115, 232) : RGB(32, 33, 36));
         RECT text_rect = item_rect;
@@ -430,14 +556,36 @@ void CandidateWindow::OnPaint(HWND hWnd) {
 }
 
 void CandidateWindow::OnLButtonDown(HWND hWnd, int x, int y) {
-    // Microphone row first: it is a button, not a candidate.
+    POINT pt = {x, y};
+
+    // Mode Selector Bar clicks ([ বাংলা ] ⇄ [ English ])
+    if (PtInRect(&bn_btn_rect_, pt)) {
+        if (conversion_mode_ != ConversionTarget::kBangla) {
+            SetConversionMode(ConversionTarget::kBangla);
+            if (conversion_mode_cb_) conversion_mode_cb_(conversion_mode_);
+        }
+        return;
+    }
+    if (PtInRect(&en_btn_rect_, pt)) {
+        if (conversion_mode_ != ConversionTarget::kEnglish) {
+            SetConversionMode(ConversionTarget::kEnglish);
+            if (conversion_mode_cb_) conversion_mode_cb_(conversion_mode_);
+        }
+        return;
+    }
+    if (PtInRect(&mode_bar_rect_, pt)) {
+        ToggleConversionMode();
+        return;
+    }
+
+    // Microphone row: it is a button, not a candidate.
     if (voice_state_ != VoiceState::Off &&
-        PtInRect(&mic_rect_, POINT{x, y}) && voice_toggle_cb_) {
+        PtInRect(&mic_rect_, pt) && voice_toggle_cb_) {
         voice_toggle_cb_();
         return;
     }
     for (size_t i = 0; i < candidate_item_rects_.size(); i++) {
-        if (PtInRect(&candidate_item_rects_[i], POINT{x, y})) {
+        if (PtInRect(&candidate_item_rects_[i], pt)) {
             selected_index_ = i;
             if (selection_callback_) {
                 selection_callback_(i);
@@ -545,6 +693,16 @@ LRESULT CALLBACK CandidateWindow::WndProc(HWND hWnd, UINT message, WPARAM wParam
                 if (p) {
                     if (pThis && pThis->cloud_cb_) {
                         pThis->cloud_cb_(p->word, p->generation, p->candidates);
+                    }
+                    delete p;
+                }
+                return 0;
+            }
+            case kTranslationResultMsg: {
+                TranslationResultPayload* p = reinterpret_cast<TranslationResultPayload*>(lParam);
+                if (p) {
+                    if (pThis && pThis->trans_cb_) {
+                        pThis->trans_cb_(p->src, p->trans, p->generation);
                     }
                     delete p;
                 }

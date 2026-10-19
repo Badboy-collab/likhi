@@ -79,6 +79,7 @@ enum SectionID {
 #define IDC_CHK_PERS_LEARN    2033
 #define IDC_BTN_RESET_LEARN   2034
 #define IDC_CHK_AUTO_UPDATE   2035
+#define IDC_CHK_ENGLISH_TRANSLATE 2036
 #define WM_UPDATE_CHECK_DONE    (WM_APP + 20)
 #define WM_UPDATE_PROGRESS      (WM_APP + 21)
 #define WM_UPDATE_DOWNLOAD_DONE (WM_APP + 22)
@@ -97,6 +98,7 @@ struct AppSettings {
     bool word_prediction = true;
     bool show_eng_candidate = true;
     bool auto_correct = false;
+    bool english_translation = true; // Gboard-style Banglish -> English conversion
     bool online_suggestions = false; // Hybrid suggestion enhancement (privacy-first, optional)
     bool personal_learning = true;   // Personal learning from user selections
     int max_candidates = 5;
@@ -162,6 +164,8 @@ void LoadSettings() {
         if (line.find("\"enable_likhi\": false") != std::string::npos) g_settings.enable_likhi = false;
         if (line.find("\"auto_correct\": true") != std::string::npos) g_settings.auto_correct = true;
         if (line.find("\"auto_correct\": false") != std::string::npos) g_settings.auto_correct = false;
+        if (line.find("\"english_translation\": false") != std::string::npos) g_settings.english_translation = false;
+        if (line.find("\"english_translation\": true") != std::string::npos) g_settings.english_translation = true;
         if (line.find("\"show_suggestions\": false") != std::string::npos) g_settings.show_suggestions = false;
         if (line.find("\"max_candidates\": 3") != std::string::npos) g_settings.max_candidates = 3;
         if (line.find("\"max_candidates\": 4") != std::string::npos) g_settings.max_candidates = 4;
@@ -200,6 +204,7 @@ void SaveSettings() {
     out << "  \"word_prediction\": " << (g_settings.word_prediction ? "true" : "false") << ",\n";
     out << "  \"show_eng_candidate\": " << (g_settings.show_eng_candidate ? "true" : "false") << ",\n";
     out << "  \"auto_correct\": " << (g_settings.auto_correct ? "true" : "false") << ",\n";
+    out << "  \"english_translation\": " << (g_settings.english_translation ? "true" : "false") << ",\n";
     out << "  \"online_suggestions\": " << (g_settings.online_suggestions ? "true" : "false") << ",\n";
     out << "  \"personal_learning\": " << (g_settings.personal_learning ? "true" : "false") << ",\n";
     out << "  \"max_candidates\": " << g_settings.max_candidates << ",\n";
@@ -493,10 +498,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             HWND hB_Title = CreateWindowW(L"STATIC", L"বাংলিশ ও ঋণশব্দ ডিকশনারি", WS_CHILD | SS_LEFT, 265, 30, 510, 32, hWnd, NULL, NULL, NULL);
             SendMessage(hB_Title, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
-            HWND hB_Desc = CreateWindowW(L"STATIC", L"Likhi আধুনিক বাংলিশ এবং দৈনন্দিন প্রযুক্তি ও অফিসের শব্দগুলো স্বয়ংক্রিয়ভাবে বাংলায় রূপান্তর করে।\n\nউদাহরণ:\n• battery -> ব্যাটারি | charger -> চার্জার\n• control -> কন্ট্রোল | space -> স্পেস\n• meeting -> মিটিং | project -> প্রজেক্ট\n• wifi -> ওয়াই-ফাই | internet -> ইন্টারনেট\n• table -> টেবিল | chair / cher -> চেয়ার\n• google -> গুগল | Google\n• anwar / anoyar -> আনোয়ার", WS_CHILD | SS_LEFT, 265, 75, 510, 300, hWnd, NULL, NULL, NULL);
+            HWND hChkEngTrans = CreateWindowW(L"BUTTON", L"ইংরেজি অনুবাদ মোড (Banglish -> English Translation) — [Ctrl+Alt+E]", WS_CHILD | BS_AUTOCHECKBOX, 265, 70, 510, 28, hWnd, (HMENU)IDC_CHK_ENGLISH_TRANSLATE, NULL, NULL);
+            SendMessage(hChkEngTrans, WM_SETFONT, (WPARAM)hFontBody, TRUE);
+            SendMessage(hChkEngTrans, BM_SETCHECK, g_settings.english_translation ? BST_CHECKED : BST_UNCHECKED, 0);
+
+            HWND hB_Desc = CreateWindowW(L"STATIC", L"Likhi আধুনিক বাংলিশ এবং দৈনন্দিন প্রযুক্তি ও অফিসের শব্দগুলো স্বয়ংক্রিয়ভাবে বাংলায় রূপান্তর করে।\n\nইংরেজি অনুবাদ মোড সক্রিয় থাকলে ক্যান্ডিডেট বারে [ বাংলা ] ⇄ [ English ] নির্বাচক দিয়ে সরাসরি ইংরেজিতে অনুবাদ করা যায় (যেমন: ami valo achi -> I am fine)।\n\nবাংলিশ ঋণশব্দ রূপান্তর উদাহরণ:\n• battery -> ব্যাটারি | charger -> চার্জার\n• control -> কন্ট্রোল | space -> স্পেস\n• meeting -> মিটিং | project -> প্রজেক্ট\n• wifi -> ওয়াই-ফাই | internet -> ইন্টারনেট\n• table -> টেবিল | chair / cher -> চেয়ার\n• google -> গুগল | Google\n• anwar / anoyar -> আনোয়ার", WS_CHILD | SS_LEFT, 265, 105, 510, 280, hWnd, NULL, NULL, NULL);
             SendMessage(hB_Desc, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
             g_section_controls[SEC_BANGLISH].push_back(hB_Title);
+            g_section_controls[SEC_BANGLISH].push_back(hChkEngTrans);
             g_section_controls[SEC_BANGLISH].push_back(hB_Desc);
 
             // ==============================================================
@@ -796,6 +806,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 g_settings.word_prediction = (SendMessage(hChkPred, BM_GETCHECK, 0, 0) == BST_CHECKED);
                 g_settings.show_eng_candidate = (SendMessage(hChkEngCand, BM_GETCHECK, 0, 0) == BST_CHECKED);
                 g_settings.auto_correct = (SendMessage(hChkAuto, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                g_settings.english_translation = (SendMessage(GetDlgItem(hWnd, IDC_CHK_ENGLISH_TRANSLATE), BM_GETCHECK, 0, 0) == BST_CHECKED);
                 g_settings.online_suggestions = (SendMessage(GetDlgItem(hWnd, IDC_CHK_ONLINE_SUG), BM_GETCHECK, 0, 0) == BST_CHECKED);
                 g_settings.personal_learning = (SendMessage(GetDlgItem(hWnd, IDC_CHK_PERS_LEARN), BM_GETCHECK, 0, 0) == BST_CHECKED);
 

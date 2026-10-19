@@ -135,6 +135,12 @@ bool CompositionManager::Initialize(HINSTANCE hInst) {
         });
         InitVoice();
         RefreshVoiceRow();
+
+        // Language Mode Selector callback from candidate window
+        candidate_window_.SetConversionModeCallback([this](CandidateWindow::ConversionTarget mode) {
+            SetConversionTarget(mode);
+        });
+
         // Cloud replies arrive on the CloudTranslit worker thread; marshal them
         // onto the UI thread via the candidate window before touching state.
         candidate_window_.SetCloudResultCallback([this](const std::wstring& word,
@@ -146,12 +152,28 @@ bool CompositionManager::Initialize(HINSTANCE hInst) {
                                         const std::vector<std::wstring>& candidates) {
             candidate_window_.PostCloudResult(word, generation, candidates);
         });
+
+        // Translation replies arrive on the TranslationService worker thread; marshal
+        // them onto the UI thread via the candidate window.
+        candidate_window_.SetTranslationResultCallback([this](const std::wstring& src,
+                                                              const std::wstring& trans,
+                                                              size_t generation) {
+            OnTranslationResult(src, trans, static_cast<uint32_t>(generation));
+        });
+        translation_service_.SetCallback([this](const std::wstring& src,
+                                                const std::wstring& trans,
+                                                uint32_t generation) {
+            candidate_window_.PostTranslationResult(src, trans, generation);
+        });
+        translation_service_.SetConsentEnabled(translation_enabled_);
+        translation_service_.Start();
     }
 
     return true;
 }
 
 void CompositionManager::Shutdown() {
+    translation_service_.Stop();
     if (active_composition_) {
         active_composition_->Release();
         active_composition_ = nullptr;
@@ -242,6 +264,74 @@ void CompositionManager::SetSuggestionsEnabled(bool enabled) {
         // A hidden strip means no online lookup either.
         SetCloudTranslitEnabled(false);
         candidate_window_.Hide();
+    }
+}
+
+void CompositionManager::SetConversionTarget(CandidateWindow::ConversionTarget target) {
+    if (conversion_target_ == target) return;
+    conversion_target_ = target;
+    candidate_window_.SetConversionMode(target);
+    if (is_composing_) {
+        UpdateCompositionAndUI(current_context_);
+    }
+}
+
+void CompositionManager::ToggleConversionTarget() {
+    SetConversionTarget(conversion_target_ == CandidateWindow::ConversionTarget::kBangla
+                            ? CandidateWindow::ConversionTarget::kEnglish
+                            : CandidateWindow::ConversionTarget::kBangla);
+}
+
+void CompositionManager::SetEnglishTranslationEnabled(bool enabled) {
+    translation_enabled_ = enabled;
+    translation_service_.SetConsentEnabled(enabled);
+}
+
+void CompositionManager::OnTranslationResult(const std::wstring& bengali_source,
+                                             const std::wstring& english_translated,
+                                             uint32_t generation) {
+    if (conversion_target_ != CandidateWindow::ConversionTarget::kEnglish) return;
+    if (!is_composing_ || generation != translation_gen_) return;
+    if (english_translated.empty()) return;
+
+    current_english_trans_ = english_translated;
+
+    std::vector<std::wstring> updated;
+    updated.push_back(english_translated);
+    if (!bengali_source.empty()) updated.push_back(bengali_source);
+    if (!roman_buffer_.empty()) {
+        std::wstring r(roman_buffer_.begin(), roman_buffer_.end());
+        if (r != english_translated && r != bengali_source) updated.push_back(r);
+    }
+
+    current_candidates_w_ = updated;
+    current_bengali_top_ = english_translated;
+    selected_candidate_idx_ = 0;
+
+    if (current_context_ && active_composition_) {
+        ITfEditSession* textSession = new ActionEditSession(current_context_,
+            [this](TfEditCookie ec) -> HRESULT {
+                ITfRange* pRange = nullptr;
+                if (this->active_composition_ &&
+                    SUCCEEDED(this->active_composition_->GetRange(&pRange)) && pRange) {
+                    pRange->SetText(ec, 0, this->current_bengali_top_.c_str(),
+                                    (LONG)this->current_bengali_top_.length());
+                    pRange->Release();
+                }
+                return S_OK;
+            });
+        HRESULT hrSession = S_OK;
+        HRESULT hr = current_context_->RequestEditSession(
+            service_->GetClientId(), textSession, TF_ES_READWRITE | TF_ES_SYNC, &hrSession);
+        if (hr == TF_E_SYNCHRONOUS) {
+            current_context_->RequestEditSession(
+                service_->GetClientId(), textSession, TF_ES_READWRITE, &hrSession);
+        }
+        textSession->Release();
+    }
+
+    if (caret_rect_valid_ && suggestions_enabled_) {
+        candidate_window_.ShowCandidates(current_candidates_w_, selected_candidate_idx_, caret_rect_);
     }
 }
 
@@ -408,25 +498,64 @@ void CompositionManager::UpdateCompositionAndUI(ITfContext* pContext) {
 
     is_composing_ = true;
 
-    // 1. Query candidates from native engine
-    BanglaEngine_ResetComposition(engine_);
-    BanglaEngine_SetComposition(engine_, roman_buffer_.c_str());
+    if (conversion_target_ == CandidateWindow::ConversionTarget::kEnglish) {
+        // English Translation Mode:
+        // Transliterate Roman buffer as sentence to get intermediate Bengali
+        char bn_sentence[512] = {0};
+        BanglaEngine_TransliterateSentence(engine_, roman_buffer_.c_str(), bn_sentence, sizeof(bn_sentence));
+        std::wstring bn_text = Utf8ToUtf16(bn_sentence);
 
-    CandidateList list;
-    BanglaEngine_GetCandidates(engine_, &list);
+        current_candidates_w_.clear();
 
-    current_candidates_w_.clear();
-    for (uint32_t i = 0; i < list.count; i++) {
-        current_candidates_w_.push_back(Utf8ToUtf16(list.candidates[i].bengali_text));
-    }
+        std::wstring cached_trans;
+        if (translation_service_.LookupCache(bn_text, cached_trans)) {
+            current_english_trans_ = cached_trans;
+            current_candidates_w_.push_back(cached_trans);
+        } else {
+            // Fresh buffer or translation pending: show Bengali transliteration or roman buffer,
+            // never an old stale sentence translation from earlier keystrokes
+            if (!bn_text.empty()) {
+                current_candidates_w_.push_back(bn_text);
+            } else {
+                current_candidates_w_.push_back(Utf8ToUtf16(roman_buffer_));
+            }
+            if (translation_enabled_) {
+                ++translation_gen_;
+                translation_service_.RequestTranslation(bn_text, translation_gen_);
+            }
+        }
 
-    if (!current_candidates_w_.empty()) {
+        if (!bn_text.empty() && bn_text != current_candidates_w_[0]) {
+            current_candidates_w_.push_back(bn_text);
+        }
+        std::wstring r(roman_buffer_.begin(), roman_buffer_.end());
+        if (r != current_candidates_w_[0] && r != bn_text) {
+            current_candidates_w_.push_back(r);
+        }
+
         current_bengali_top_ = current_candidates_w_[0];
+        selected_candidate_idx_ = 0;
     } else {
-        current_bengali_top_ = Utf8ToUtf16(roman_buffer_);
-    }
+        // 1. Query candidates from native engine
+        BanglaEngine_ResetComposition(engine_);
+        BanglaEngine_SetComposition(engine_, roman_buffer_.c_str());
 
-    selected_candidate_idx_ = 0;
+        CandidateList list;
+        BanglaEngine_GetCandidates(engine_, &list);
+
+        current_candidates_w_.clear();
+        for (uint32_t i = 0; i < list.count; i++) {
+            current_candidates_w_.push_back(Utf8ToUtf16(list.candidates[i].bengali_text));
+        }
+
+        if (!current_candidates_w_.empty()) {
+            current_bengali_top_ = current_candidates_w_[0];
+        } else {
+            current_bengali_top_ = Utf8ToUtf16(roman_buffer_);
+        }
+
+        selected_candidate_idx_ = 0;
+    }
 
     if (!pContext) return;
 
@@ -503,7 +632,9 @@ void CompositionManager::UpdateCompositionAndUI(ITfContext* pContext) {
     updateSession->Release();
 
     // Schedule the online lookup for the current word (debounced internally).
-    RequestCloudLookup();
+    if (conversion_target_ == CandidateWindow::ConversionTarget::kBangla) {
+        RequestCloudLookup();
+    }
 }
 
 bool CompositionManager::OnCharacter(ITfContext* pContext, char ch) {
@@ -530,6 +661,11 @@ bool CompositionManager::OnBackspace(ITfContext* pContext) {
 bool CompositionManager::OnSpace(ITfContext* pContext) {
     if (!is_composing_) {
         return false;
+    }
+    if (conversion_target_ == CandidateWindow::ConversionTarget::kEnglish) {
+        roman_buffer_.push_back(' ');
+        UpdateCompositionAndUI(pContext);
+        return true;
     }
     // OnTestKeyDown returned TRUE for Space when composing, so the host will
     // NOT insert a space. Commit "word + one U+0020" as a SINGLE SetText inside
@@ -610,6 +746,10 @@ bool CompositionManager::OnPunctuation(ITfContext* pContext, char punct) {
     // post-EndComposition insert (which could delete the word in some hosts).
     if (!is_composing_) {
         return false;
+    }
+    if (conversion_target_ == CandidateWindow::ConversionTarget::kEnglish) {
+        std::wstring trailing = std::wstring(1, (wchar_t)punct);
+        return CommitCurrentComposition(pContext, selected_candidate_idx_, trailing);
     }
     std::wstring trailing = (punct == '.') ? L"।" : std::wstring(1, (wchar_t)punct);
     return CommitCurrentComposition(pContext, selected_candidate_idx_, trailing);
@@ -712,6 +852,9 @@ bool CompositionManager::CommitCurrentComposition(ITfContext* pContext, size_t c
     // Reset local state
     is_composing_ = false;
     roman_buffer_.clear();
+    current_english_trans_.clear();
+    translation_service_.Cancel();
+    ++translation_gen_;
     current_candidates_w_.clear();
     current_bengali_top_.clear();
     selected_candidate_idx_ = 0;
@@ -752,6 +895,9 @@ bool CompositionManager::CancelComposition(ITfContext* pContext) {
 
     is_composing_ = false;
     roman_buffer_.clear();
+    current_english_trans_.clear();
+    translation_service_.Cancel();
+    ++translation_gen_;
     current_candidates_w_.clear();
     current_bengali_top_.clear();
     selected_candidate_idx_ = 0;

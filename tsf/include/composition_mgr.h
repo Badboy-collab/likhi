@@ -9,6 +9,7 @@
 #include "candidate_window.h"
 #include "cloud_translit.h"
 #include "voice_input.h"
+#include "../../engine/include/translation_service.h"
 
 #include <memory>
 #include <thread>
@@ -100,6 +101,16 @@ public:
     // Query candidates
     const std::vector<std::wstring>& GetCurrentCandidates() const { return current_candidates_w_; }
 
+    // ---- English Conversion Mode (Banglish -> English) ----------------
+    void SetConversionTarget(CandidateWindow::ConversionTarget target);
+    CandidateWindow::ConversionTarget GetConversionTarget() const { return conversion_target_; }
+    void ToggleConversionTarget();
+    void SetEnglishTranslationEnabled(bool enabled);
+    bool IsEnglishTranslationEnabled() const { return translation_enabled_; }
+    void OnTranslationResult(const std::wstring& bengali_source,
+                             const std::wstring& english_translated,
+                             uint32_t generation);
+
 private:
     void UpdateCompositionAndUI(ITfContext* pContext);
 
@@ -155,6 +166,13 @@ private:
 
     ITfComposition* active_composition_;
     ITfContext* current_context_;
+
+    // ---- English translation plumbing (Banglish -> English) ------------
+    likhi::TranslationService translation_service_;
+    CandidateWindow::ConversionTarget conversion_target_ = CandidateWindow::ConversionTarget::kBangla;
+    bool translation_enabled_ = true;
+    uint32_t translation_gen_ = 0;
+    std::wstring current_english_trans_;
 
     // ---- voice plumbing -------------------------------------------------
     void InitVoice();

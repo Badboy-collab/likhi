@@ -88,6 +88,15 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* pic, WPARAM wParam, LPARAM l
         }
     }
 
+    // Ctrl+Alt+E = English conversion mode toggle (Banglish -> English).
+    if (wParam == 'E') {
+        KeyState probe = ReadKeyState(wParam);
+        if (probe.ctrl && probe.alt && !probe.shift && !probe.win) {
+            *pfEaten = TRUE;
+            return S_OK;
+        }
+    }
+
     KeyState st = ReadKeyState(wParam);
     st.composing          = composition_mgr_.IsComposing();
     st.candidates_visible = composition_mgr_.HasVisibleCandidates();
@@ -121,6 +130,16 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* pic, WPARAM wParam, LPARAM lPara
         KeyState probe = ReadKeyState(wParam);
         if (probe.ctrl && probe.alt && !probe.shift && !probe.win) {
             if ((lParam & (1 << 30)) == 0) composition_mgr_.ToggleVoice();
+            *pfEaten = TRUE;
+            return S_OK;
+        }
+    }
+
+    // Ctrl+Alt+E = English conversion mode toggle.
+    if (wParam == 'E') {
+        KeyState probe = ReadKeyState(wParam);
+        if (probe.ctrl && probe.alt && !probe.shift && !probe.win) {
+            if ((lParam & (1 << 30)) == 0) composition_mgr_.ToggleConversionTarget();
             *pfEaten = TRUE;
             return S_OK;
         }

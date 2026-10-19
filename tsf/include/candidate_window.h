@@ -58,6 +58,25 @@ public:
     void PostCloudResult(const std::wstring& word, size_t generation,
                          const std::vector<std::wstring>& candidates);
 
+    // Translation result marshaling
+    using TranslationResultCallback = std::function<void(const std::wstring& src,
+                                                          const std::wstring& trans,
+                                                          size_t generation)>;
+    void SetTranslationResultCallback(TranslationResultCallback cb) { trans_cb_ = std::move(cb); }
+    void PostTranslationResult(const std::wstring& src, const std::wstring& trans, size_t generation);
+
+    // ---- Language Mode Selector (Gboard style: [ বাংলা ] ↔ [ English ]) ----
+    enum class ConversionTarget {
+        kBangla = 0,
+        kEnglish = 1
+    };
+    using ConversionModeCallback = std::function<void(ConversionTarget mode)>;
+
+    void SetConversionMode(ConversionTarget mode);
+    ConversionTarget GetConversionMode() const { return conversion_mode_; }
+    void SetConversionModeCallback(ConversionModeCallback cb) { conversion_mode_cb_ = std::move(cb); }
+    void ToggleConversionMode();
+
 private:
     static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
     void OnPaint(HWND hWnd);
@@ -74,15 +93,23 @@ private:
     RECT caret_rect_;
     SelectionCallback selection_callback_;
     CloudResultCallback cloud_cb_;
+    TranslationResultCallback trans_cb_;
 
     HFONT hfont_bengali_;
     HFONT hfont_number_;
     HFONT hfont_score_;
+    HFONT hfont_mode_;
 
     int width_;
     int height_;
     int last_width_;
     int last_height_;
+
+    ConversionTarget conversion_mode_;
+    ConversionModeCallback conversion_mode_cb_;
+    RECT mode_bar_rect_;
+    RECT bn_btn_rect_;
+    RECT en_btn_rect_;
 
     // Voice (microphone) state. Declared last so the constructor's init list
     // order matches the declaration order.

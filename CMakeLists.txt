@@ -68,6 +68,13 @@ set(TSF_SOURCES
     tsf/src/bangla_tsf.def
 )
 
+# Translation Service Target (Async WinHTTP dict-chrome-ex translation + caching)
+add_library(likhi_translation_service STATIC
+    engine/src/translation/translation_service.cpp
+)
+target_include_directories(likhi_translation_service PUBLIC engine/include)
+target_link_libraries(likhi_translation_service PUBLIC winhttp)
+
 # Windows TSF DLL Target
 add_library(bangla_tsf SHARED ${TSF_SOURCES})
 set_target_properties(bangla_tsf PROPERTIES
@@ -76,6 +83,7 @@ set_target_properties(bangla_tsf PROPERTIES
 )
 target_link_libraries(bangla_tsf PRIVATE
     bangla_engine_static
+    likhi_translation_service
     ole32
     oleaut32
     user32
@@ -150,6 +158,7 @@ add_executable(test_tsf_integration
 target_link_libraries(test_tsf_integration PRIVATE
     winmm
     bangla_engine_static
+    likhi_translation_service
     ole32
     oleaut32
     user32
@@ -175,6 +184,7 @@ add_executable(test_p0_keyboard
 target_link_libraries(test_p0_keyboard PRIVATE
     winmm
     bangla_engine_static
+    likhi_translation_service
     ole32
     oleaut32
     user32
@@ -221,6 +231,14 @@ target_link_libraries(test_update_service PRIVATE
     likhi_update_service
 )
 
+# Automated Translation Service Test Target
+add_executable(test_translation_service
+    tests/unit/test_translation_service.cpp
+)
+target_link_libraries(test_translation_service PRIVATE
+    likhi_translation_service
+)
+
 # Universal Mode host (non-TSF fallback input path): tray icon + low-level
 # keyboard hook that types Bangla through Unicode keystrokes where TSF cannot
 # reach (UWP/Store apps, Java UIs, games, remote sessions).
@@ -232,6 +250,7 @@ target_compile_definitions(likhi_universal PRIVATE UNICODE _UNICODE)
 target_link_libraries(likhi_universal PRIVATE
     likhi_universal_core
     bangla_engine_static
+    likhi_translation_service
     likhi_update_service
     user32
     gdi32
@@ -336,6 +355,7 @@ add_executable(real_world_qa_runner
 target_link_libraries(real_world_qa_runner PRIVATE
     winmm
     bangla_engine_static
+    likhi_translation_service
     ole32
     oleaut32
     user32

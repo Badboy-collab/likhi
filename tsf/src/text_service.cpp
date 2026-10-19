@@ -87,6 +87,11 @@ StartupSettings ApplySettingsFile(CompositionManager& mgr) {
             out.cloud_suggestions = false;
             mgr.SetSuggestionsEnabled(false);
         }
+        if (line.find("\"english_translation\": false") != std::string::npos) {
+            mgr.SetEnglishTranslationEnabled(false);
+        } else if (line.find("\"english_translation\": true") != std::string::npos) {
+            mgr.SetEnglishTranslationEnabled(true);
+        }
     }
     return out;
 }
