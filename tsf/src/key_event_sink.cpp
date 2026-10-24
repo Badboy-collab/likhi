@@ -77,6 +77,8 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* pic, WPARAM wParam, LPARAM l
     if (!pfEaten) return E_INVALIDARG;
     *pfEaten = FALSE;
 
+    composition_mgr_.SyncConversionTargetFromIpc();
+
     // Ctrl+Alt+V = voice typing. Eaten here so the host never sees the chord;
     // the toggle itself runs in OnKeyDown (which never fires on auto-repeat).
     if (wParam == 'V' && !composition_mgr_.IsVoiceEnabled() ) { /* fall through: still eaten */ }

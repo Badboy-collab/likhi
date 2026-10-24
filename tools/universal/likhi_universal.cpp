@@ -34,6 +34,7 @@
 // ============================================================================
 
 #include <windows.h>
+#include <gdiplus.h>
 #include <shellapi.h>
 #include <shlobj.h>
 #include <psapi.h>
@@ -52,6 +53,10 @@
 #include "likhi_version.h"
 #include "update_service.h"
 #include "translation_service.h"
+#include "likhi_mode_ipc.h"
+#include "topbar_window.h"
+#include "virtual_keyboard_window.h"
+#include "candidate_window.h"
 
 using likhi::universal::ActionKind;
 using likhi::universal::ClassifyKey;
@@ -70,6 +75,8 @@ const wchar_t kWindowClass[] = L"LikhiUniversalModeWindow";
 const UINT kTrayMessage = WM_APP + 1;
 const int kHotkeyToggle = 0xA1;
 const int kHotkeyToggleConversion = 0xA2;
+const int kHotkeyToggleSpace = 0xA3;
+const int kHotkeyToggleVoice = 0xA4;
 const UINT_PTR kTimerReloadSettings = 1;
 const UINT kSettingsPollMs = 3000;
 const UINT_PTR kTimerBackgroundUpdateCheck = 2;
@@ -88,11 +95,18 @@ BanglaEngine* g_engine = nullptr;
 InputMode g_mode = InputMode::kAutomatic;
 bool g_host_enabled = true;        // settings.json "universal_mode"
 bool g_personal_learning = true;   // settings.json "personal_learning"
-bool g_auto_check_update = false;  // settings.json "auto_check_update" (disabled by default)
+bool g_auto_check_update = true;   // settings.json "auto_check_update" (enabled by default)
 bool g_english_translation_enabled = true; // settings.json "english_translation"
 likhi::ConversionTarget g_conversion_target = likhi::ConversionTarget::kBangla;
 likhi::TranslationService g_translation_service;
 bool g_tray_added = false;
+likhi::universal::TopBarWindow g_topbar;
+likhi::universal::VirtualKeyboardWindow g_osk;
+bangla_tsf::CandidateWindow g_candidate_window;
+std::vector<std::wstring> g_current_candidates;
+bool g_show_topbar = true;
+int g_topbar_x = -1;
+int g_topbar_y = 10;
 
 HWND g_last_foreground = nullptr;
 std::wstring g_latest_update_version;
@@ -185,6 +199,12 @@ void LoadSettings() {
     if (text.find("\"auto_check_update\": true") != std::string::npos) g_auto_check_update = true;
     if (text.find("\"english_translation\": false") != std::string::npos) g_english_translation_enabled = false;
     if (text.find("\"english_translation\": true") != std::string::npos) g_english_translation_enabled = true;
+    if (text.find("\"show_topbar\": false") != std::string::npos) g_show_topbar = false;
+    if (text.find("\"show_topbar\": true") != std::string::npos) g_show_topbar = true;
+    if (text.find("\"topbar_autohide\": true") != std::string::npos) g_topbar.SetAutoHide(true);
+    if (text.find("\"topbar_autohide\": false") != std::string::npos) g_topbar.SetAutoHide(false);
+    if (text.find("\"topbar_dock\": \"right\"") != std::string::npos) g_topbar.SetDockPosition(likhi::universal::TopBarWindow::kDockRight);
+    if (text.find("\"topbar_dock\": \"top\"") != std::string::npos) g_topbar.SetDockPosition(likhi::universal::TopBarWindow::kDockTop);
     g_translation_service.SetConsentEnabled(g_english_translation_enabled);
 
     if (g_engine) BanglaEngine_SetLearningEnabled(g_engine, g_personal_learning);
@@ -308,12 +328,24 @@ bool ForegroundIsBengali() {
 // The complete activation policy for the universal backend.
 bool ShouldHandleNow() {
     if (!g_host_enabled || !g_typing.enabled()) return false;
-    // Never transform anything unless the user really selected Bengali input for
-    // this window: English typing in a chat must stay English.
-    if (!ForegroundIsBengali()) return false;
-    if (g_mode == InputMode::kTsfOnly) return false;
-    if (g_mode == InputMode::kUniversalOnly) return true;
-    return !TsfLoadedInForegroundProcess();
+
+    likhi::ModeTarget mode = likhi::ModeIpc::Instance().GetMode();
+    if (mode == likhi::ModeTarget::kEnglish) {
+        return false;
+    }
+
+    // When TSF is actively loaded and active in the foreground application,
+    // let TSF handle it! Universal mode must NOT double-handle or conflict!
+    if (ForegroundIsBengali() && TsfLoadedInForegroundProcess()) {
+        return false;
+    }
+
+    // In all other cases (e.g. Chrome with ENG layout, Discord, games, non-TSF apps):
+    if (mode == likhi::ModeTarget::kBangla || mode == likhi::ModeTarget::kBanglaToEnglish) {
+        return true;
+    }
+
+    return false;
 }
 
 void ResetIfFocusChanged() {
@@ -321,6 +353,54 @@ void ResetIfFocusChanged() {
     if (foreground != g_last_foreground) {
         g_last_foreground = foreground;
         g_typing.Reset();  // the caret belongs to another window now
+        if (g_candidate_window.IsVisible()) {
+            g_candidate_window.Hide();
+            g_current_candidates.clear();
+        }
+    }
+}
+
+
+static std::wstring FindSoundFile(const wchar_t* filename) {
+    wchar_t appdata[MAX_PATH] = {0};
+    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, appdata))) {
+        std::wstring p = std::wstring(appdata) + L"\\PC-Bangla-Typing-App\\sound\\" + filename;
+        if (GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES) return p;
+    }
+    wchar_t mod[MAX_PATH] = {0};
+    GetModuleFileNameW(nullptr, mod, MAX_PATH);
+    std::wstring dir = mod;
+    size_t sl = dir.find_last_of(L"\\/");
+    if (sl != std::wstring::npos) dir = dir.substr(0, sl);
+    std::wstring p2 = dir + L"\\sound\\" + filename;
+    if (GetFileAttributesW(p2.c_str()) != INVALID_FILE_ATTRIBUTES) return p2;
+    std::wstring p3 = dir + L"\\..\\assets\\sound\\" + filename;
+    if (GetFileAttributesW(p3.c_str()) != INVALID_FILE_ATTRIBUTES) return p3;
+    return L"";
+}
+
+void PlaySoundEffect(int sound_type = 0) {
+    std::wstring snd_path;
+    if (sound_type == 3) {
+        snd_path = FindSoundFile(L"voice_start.wav");
+    } else if (sound_type == 1) {
+        snd_path = FindSoundFile(L"switch_bn.wav");
+    } else if (sound_type == 2) {
+        snd_path = FindSoundFile(L"switch_en.wav");
+    } else {
+        bool is_en = (likhi::ModeIpc::Instance().GetMode() == likhi::ModeTarget::kEnglish);
+        snd_path = FindSoundFile(is_en ? L"switch_en.wav" : L"switch_bn.wav");
+        if (snd_path.empty()) snd_path = FindSoundFile(L"switch_lang.wav");
+    }
+
+    if (!snd_path.empty() && PlaySoundW(snd_path.c_str(), NULL, SND_FILENAME | SND_ASYNC | SND_NODEFAULT)) {
+        return;
+    }
+
+    if (sound_type == 3) {
+        PlaySoundW(L"C:\\Windows\\Media\\Windows Proximity Connection.wav", NULL, SND_FILENAME | SND_ASYNC | SND_NODEFAULT);
+    } else {
+        PlaySoundW(L"C:\\Windows\\Media\\Windows Notify Messaging.wav", NULL, SND_FILENAME | SND_ASYNC | SND_NODEFAULT);
     }
 }
 
@@ -370,16 +450,51 @@ void AppendBackspaces(std::vector<INPUT>& inputs, int count) {
     }
 }
 
-// Performs one word replacement: erase the roman run, type the Bengali word,
-// then type the boundary character. When the engine has no Bengali answer the
-// erasure is skipped entirely and only the boundary character is sent, so the
-// user's own text is never damaged.
-// In English conversion mode, converts the transliterated word/phrase into English.
-void ApplyReplace(const Decision& decision) {
-    std::wstring replacement = Transliterate(decision.roman);
-    
-    if (g_conversion_target == likhi::ConversionTarget::kEnglish &&
-        g_english_translation_enabled && !replacement.empty()) {
+RECT GetCurrentCaretRect() {
+    RECT rc = {0, 0, 0, 0};
+    HWND fg = GetForegroundWindow();
+    if (fg) {
+        DWORD thread_id = GetWindowThreadProcessId(fg, nullptr);
+        GUITHREADINFO gti = {sizeof(GUITHREADINFO)};
+        if (GetGUIThreadInfo(thread_id, &gti)) {
+            if (gti.hwndCaret) {
+                rc = gti.rcCaret;
+                ClientToScreen(gti.hwndCaret, (LPPOINT)&rc.left);
+                ClientToScreen(gti.hwndCaret, (LPPOINT)&rc.right);
+            } else if (gti.hwndFocus) {
+                GetWindowRect(gti.hwndFocus, &rc);
+                rc.bottom = rc.top + 20;
+                rc.right = rc.left + 5;
+            }
+        }
+    }
+    if (rc.left == 0 && rc.right == 0 && rc.top == 0 && rc.bottom == 0) {
+        POINT pt;
+        GetCursorPos(&pt);
+        rc.left = pt.x;
+        rc.top = pt.y;
+        rc.right = pt.x + 2;
+        rc.bottom = pt.y + 20;
+    }
+    return rc;
+}
+
+void CommitCandidateByIndex(size_t index) {
+    if (index >= g_current_candidates.size() || !g_typing.has_pending()) {
+        g_candidate_window.Hide();
+        g_current_candidates.clear();
+        g_typing.Reset();
+        return;
+    }
+
+    std::wstring replacement = g_current_candidates[index];
+    int erase_count = (int)g_typing.roman().size();
+    std::wstring roman = g_typing.roman();
+
+    likhi::ModeTarget cur_mode = likhi::ModeIpc::Instance().GetMode();
+    bool is_en_mode = (cur_mode == likhi::ModeTarget::kEnglish);
+    bool is_trans_mode = (cur_mode == likhi::ModeTarget::kBanglaToEnglish);
+    if (is_trans_mode && !replacement.empty()) {
         std::wstring cached_en;
         if (g_translation_service.LookupCache(replacement, cached_en)) {
             replacement = cached_en;
@@ -392,19 +507,161 @@ void ApplyReplace(const Decision& decision) {
     }
 
     std::vector<INPUT> inputs;
+    if (erase_count > 0) {
+        AppendBackspaces(inputs, erase_count);
+    }
     if (!replacement.empty()) {
+        AppendUnicode(inputs, replacement);
+    }
+    AppendUnicode(inputs, L" ");
+
+    if (!inputs.empty()) {
+        SendInput((UINT)inputs.size(), inputs.data(), sizeof(INPUT));
+    }
+
+    if (!replacement.empty() && g_engine && !is_en_mode) {
+        BanglaEngine_LearnWord(g_engine, NarrowUtf8(roman).c_str(),
+                               NarrowUtf8(replacement).c_str());
+    }
+
+    g_candidate_window.Hide();
+    g_current_candidates.clear();
+    g_typing.Reset();
+}
+
+void UpdateCandidateWindow() {
+    if (!g_engine || !g_typing.has_pending() || !ShouldHandleNow()) {
+        if (g_candidate_window.IsVisible()) {
+            g_candidate_window.Hide();
+        }
+        g_current_candidates.clear();
+        return;
+    }
+
+    std::wstring roman = g_typing.roman();
+    std::string key = NarrowUtf8(roman);
+    BanglaEngine_SetComposition(g_engine, key.c_str());
+    CandidateList list;
+    BanglaEngine_GetCandidates(g_engine, &list);
+
+    g_current_candidates.clear();
+    for (size_t i = 0; i < (size_t)list.count && i < 5; ++i) {
+        std::wstring cand = WidenUtf8(list.candidates[i].bengali_text);
+        if (!cand.empty()) {
+            g_current_candidates.push_back(cand);
+        }
+    }
+    bool has_roman = false;
+    for (const auto& c : g_current_candidates) {
+        if (c == roman) { has_roman = true; break; }
+    }
+    if (!has_roman && g_current_candidates.size() < 6) {
+        g_current_candidates.push_back(roman);
+    }
+
+    if (g_current_candidates.empty()) {
+        g_candidate_window.Hide();
+        return;
+    }
+
+    RECT caret_rc = GetCurrentCaretRect();
+    g_candidate_window.ShowCandidates(g_current_candidates, 0, caret_rc);
+}
+
+// Performs one word replacement: erase the roman run, type the Bengali word,
+// then type the boundary character. When the engine has no Bengali answer the
+// erasure is skipped entirely and only the boundary character is sent, so the
+// user's own text is never damaged.
+// In English conversion mode, converts the transliterated word/phrase into English.
+void ApplyReplace(const Decision& decision) {
+    std::wstring replacement;
+    size_t sel = g_candidate_window.GetSelectedIndex();
+    if (g_candidate_window.IsVisible() && sel < g_current_candidates.size()) {
+        replacement = g_current_candidates[sel];
+    } else {
+        replacement = Transliterate(decision.roman);
+    }
+    
+    likhi::ModeTarget cur_mode = likhi::ModeIpc::Instance().GetMode();
+    bool is_en_mode = (cur_mode == likhi::ModeTarget::kEnglish);
+    bool is_trans_mode = (cur_mode == likhi::ModeTarget::kBanglaToEnglish);
+    if (is_trans_mode && !replacement.empty()) {
+        std::wstring cached_en;
+        if (g_translation_service.LookupCache(replacement, cached_en)) {
+            replacement = cached_en;
+        } else {
+            likhi::TranslationResult res = g_translation_service.TranslateDirect(replacement, 1500);
+            if (res.success && !res.translated_english.empty()) {
+                replacement = res.translated_english;
+            }
+        }
+    }
+
+    std::vector<INPUT> inputs;
+    if (decision.erase_chars > 0) {
         AppendBackspaces(inputs, decision.erase_chars);
+    }
+    if (!replacement.empty()) {
         AppendUnicode(inputs, replacement);
     }
     AppendUnicode(inputs, decision.trailing);
     if (!inputs.empty()) {
         SendInput((UINT)inputs.size(), inputs.data(), sizeof(INPUT));
     }
-    if (!replacement.empty() && g_engine && g_conversion_target == likhi::ConversionTarget::kBangla) {
+    if (!replacement.empty() && g_engine && !is_en_mode) {
         // Same personalisation file as the TSF path: learning in WhatsApp is
         // visible in Word and the other way round.
         BanglaEngine_LearnWord(g_engine, NarrowUtf8(decision.roman).c_str(),
                                NarrowUtf8(replacement).c_str());
+    }
+    if (g_candidate_window.IsVisible()) {
+        g_candidate_window.Hide();
+        g_current_candidates.clear();
+    }
+}
+
+void UpdateTray();
+void ShowTransientBadge(bool is_english);
+
+void TriggerModeToggle() {
+    static DWORD s_last_toggle = 0;
+    DWORD now = GetTickCount();
+    if (now - s_last_toggle < 250) return;
+    s_last_toggle = now;
+
+    likhi::ModeIpc::Instance().ToggleMode();
+    likhi::ModeTarget m = likhi::ModeIpc::Instance().GetMode();
+    PlaySoundEffect(m == likhi::ModeTarget::kEnglish ? 2 : 1);
+    bool is_en = (m == likhi::ModeTarget::kEnglish);
+    Log(is_en ? "hotkey: english mode" : "hotkey: bangla mode");
+    UpdateTray();
+    ShowTransientBadge(is_en);
+    g_topbar.UpdateMode(m);
+    g_typing.Reset();
+    if (g_candidate_window.IsVisible()) {
+        g_candidate_window.Hide();
+        g_current_candidates.clear();
+    }
+}
+
+void TriggerTranslationToggle() {
+    static DWORD s_last_toggle = 0;
+    DWORD now = GetTickCount();
+    if (now - s_last_toggle < 250) return;
+    s_last_toggle = now;
+
+    likhi::ModeIpc::Instance().ToggleBanglaToEnglish();
+    likhi::ModeTarget m = likhi::ModeIpc::Instance().GetMode();
+    PlaySoundEffect(m == likhi::ModeTarget::kEnglish ? 2 : 1);
+    bool is_en = (m == likhi::ModeTarget::kEnglish);
+    Log(m == likhi::ModeTarget::kBanglaToEnglish ? "hotkey: english conversion mode" : "hotkey: bangla mode");
+    UpdateTray();
+    ShowTransientBadge(is_en);
+    g_topbar.UpdateMode(m);
+    g_typing.Reset();
+    if (g_candidate_window.IsVisible()) {
+        g_candidate_window.Hide();
+        g_current_candidates.clear();
     }
 }
 
@@ -413,8 +670,66 @@ LRESULT CALLBACK KeyboardHookProc(int code, WPARAM wparam, LPARAM lparam) {
         const KBDLLHOOKSTRUCT* key = reinterpret_cast<KBDLLHOOKSTRUCT*>(lparam);
         // Never react to our own synthetic keystrokes.
         if (!(key->flags & LLKHF_INJECTED)) {
+            bool is_ctrl = ModifierDown(VK_CONTROL);
+            bool is_alt = ModifierDown(VK_MENU);
+            bool is_shift = ModifierDown(VK_SHIFT);
+            bool is_win = ModifierDown(VK_LWIN) || ModifierDown(VK_RWIN);
+
+            // Instant Global Shortcut Toggle:
+            // 1. Ctrl + Alt + Space (Primary user hotkey)
+            // 2. Ctrl + Space
+            // 3. F12
+            if ((key->vkCode == VK_SPACE && is_ctrl && is_alt) ||
+                (key->vkCode == VK_SPACE && is_ctrl && !is_alt && !is_shift && !is_win) ||
+                (key->vkCode == VK_F12 && !is_ctrl && !is_alt && !is_shift && !is_win)) {
+                TriggerModeToggle();
+                return 1; // Eat the hotkey event completely!
+            }
+
+            // Ctrl + Alt + E for Banglish to English translation mode
+            if (key->vkCode == 'E' && is_ctrl && is_alt && !is_win) {
+                TriggerTranslationToggle();
+                return 1;
+            }
+
             ResetIfFocusChanged();
             if (ShouldHandleNow()) {
+                if (g_candidate_window.IsVisible() && g_typing.has_pending()) {
+                    if (key->vkCode == VK_DOWN && !is_ctrl && !is_alt && !is_win) {
+                        g_candidate_window.SelectNext();
+                        return 1;
+                    }
+                    if (key->vkCode == VK_UP && !is_ctrl && !is_alt && !is_win) {
+                        g_candidate_window.SelectPrev();
+                        return 1;
+                    }
+                    if (key->vkCode == VK_TAB && !is_ctrl && !is_alt && !is_win) {
+                        g_candidate_window.SelectNext();
+                        return 1;
+                    }
+                    if (key->vkCode == VK_ESCAPE && !is_ctrl && !is_alt && !is_win) {
+                        g_candidate_window.Hide();
+                        g_current_candidates.clear();
+                        g_typing.Reset();
+                        return 1;
+                    }
+                    if (!is_ctrl && !is_alt && !is_win && !is_shift) {
+                        if (key->vkCode >= '1' && key->vkCode <= '5') {
+                            size_t idx = (size_t)(key->vkCode - '1');
+                            if (idx < g_current_candidates.size()) {
+                                CommitCandidateByIndex(idx);
+                                return 1;
+                            }
+                        } else if (key->vkCode >= VK_NUMPAD1 && key->vkCode <= VK_NUMPAD5) {
+                            size_t idx = (size_t)(key->vkCode - VK_NUMPAD1);
+                            if (idx < g_current_candidates.size()) {
+                                CommitCandidateByIndex(idx);
+                                return 1;
+                            }
+                        }
+                    }
+                }
+
                 const wchar_t ch = CharacterFor(key->vkCode, key->scanCode);
                 const KeyEvent event = ClassifyKey(
                     (int)key->vkCode, ch, ModifierDown(VK_CONTROL), ModifierDown(VK_MENU),
@@ -424,9 +739,27 @@ LRESULT CALLBACK KeyboardHookProc(int code, WPARAM wparam, LPARAM lparam) {
                 if (decision.kind == ActionKind::kReplace) {
                     ApplyReplace(decision);
                     return 1;  // consumed: we type the word and the boundary
+                } else if (decision.kind == ActionKind::kBuffer) {
+                    UpdateCandidateWindow();
+                } else {
+                    if (key->vkCode == VK_BACK) {
+                        if (g_typing.has_pending()) {
+                            UpdateCandidateWindow();
+                        } else if (g_candidate_window.IsVisible()) {
+                            g_candidate_window.Hide();
+                            g_current_candidates.clear();
+                        }
+                    } else if (!g_typing.has_pending() && g_candidate_window.IsVisible()) {
+                        g_candidate_window.Hide();
+                        g_current_candidates.clear();
+                    }
                 }
             } else {
                 g_typing.Reset();
+                if (g_candidate_window.IsVisible()) {
+                    g_candidate_window.Hide();
+                    g_current_candidates.clear();
+                }
             }
         }
     }
@@ -437,11 +770,23 @@ LRESULT CALLBACK KeyboardHookProc(int code, WPARAM wparam, LPARAM lparam) {
 // observes: it never consumes a mouse event.
 LRESULT CALLBACK MouseHookProc(int code, WPARAM wparam, LPARAM lparam) {
     if (code == HC_ACTION) {
+        const MSLLHOOKSTRUCT* ms = reinterpret_cast<MSLLHOOKSTRUCT*>(lparam);
         switch (wparam) {
             case WM_LBUTTONDOWN: case WM_RBUTTONDOWN: case WM_MBUTTONDOWN:
-            case WM_MOUSEWHEEL:  case WM_MOUSEHWHEEL:
+            case WM_MOUSEWHEEL:  case WM_MOUSEHWHEEL: {
+                if (ms && g_candidate_window.IsVisible()) {
+                    HWND pt_wnd = WindowFromPoint(ms->pt);
+                    if (pt_wnd == g_candidate_window.GetHwnd() || pt_wnd == g_topbar.GetHwnd()) {
+                        break;
+                    }
+                }
                 g_typing.Reset();
+                if (g_candidate_window.IsVisible()) {
+                    g_candidate_window.Hide();
+                    g_current_candidates.clear();
+                }
                 break;
+            }
             default:
                 break;
         }
@@ -449,33 +794,227 @@ LRESULT CALLBACK MouseHookProc(int code, WPARAM wparam, LPARAM lparam) {
     return CallNextHookEx(nullptr, code, wparam, lparam);
 }
 
-// --- tray --------------------------------------------------------------------
+// // --- tray and floating indicator --------------------------------------------
+HICON g_tray_icon = nullptr;
+HWND g_badge_window = nullptr;
+bool g_badge_is_english = false;
+const UINT_PTR kTimerHideBadge = 42;
+
+HICON CreateModeIcon(likhi::ModeTarget mode) {
+    int cx = GetSystemMetrics(SM_CXSMICON);
+    int cy = GetSystemMetrics(SM_CYSMICON);
+    if (cx <= 0) cx = 16;
+    if (cy <= 0) cy = 16;
+
+    HDC screen_dc = GetDC(nullptr);
+    HDC mem_dc = CreateCompatibleDC(screen_dc);
+
+    BITMAPINFO bmi = {0};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = cx;
+    bmi.bmiHeader.biHeight = -cy;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* bits = nullptr;
+    HBITMAP color_bmp = CreateDIBSection(mem_dc, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!color_bmp || !bits) {
+        DeleteDC(mem_dc);
+        ReleaseDC(nullptr, screen_dc);
+        return nullptr;
+    }
+
+    HGDIOBJ old_color = SelectObject(mem_dc, color_bmp);
+    memset(bits, 0, cx * cy * 4);
+
+    // Full rounded tile matching Kontho Image 3
+    COLORREF bg_color = (mode == likhi::ModeTarget::kEnglish) ? RGB(2, 132, 199)
+                      : (mode == likhi::ModeTarget::kBanglaToEnglish) ? RGB(13, 148, 136)
+                      : RGB(0, 168, 240); // Cyan for Bangla
+    HBRUSH brand_bg = CreateSolidBrush(bg_color);
+    HPEN brand_pen = CreatePen(PS_SOLID, 1, bg_color);
+    HGDIOBJ ob = SelectObject(mem_dc, brand_bg);
+    HGDIOBJ op = SelectObject(mem_dc, brand_pen);
+    RoundRect(mem_dc, 0, 0, cx, cy, 5, 5);
+    SelectObject(mem_dc, ob);
+    SelectObject(mem_dc, op);
+    DeleteObject(brand_bg);
+    DeleteObject(brand_pen);
+
+    SetBkMode(mem_dc, TRANSPARENT);
+    SetTextColor(mem_dc, RGB(255, 255, 255));
+
+    const wchar_t* label = (mode == likhi::ModeTarget::kEnglish) ? L"Eng"
+                         : (mode == likhi::ModeTarget::kBanglaToEnglish) ? L"B-E"
+                         : L"\u09ac\u09be\u0982";
+
+    int font_h = (mode == likhi::ModeTarget::kEnglish) ? (cy * 65 / 100) : (cy * 75 / 100);
+    HFONT font = CreateFontW(
+        -font_h, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+        (mode == likhi::ModeTarget::kBangla) ? L"Vrinda" : L"Segoe UI"
+    );
+    HGDIOBJ of = SelectObject(mem_dc, font);
+    RECT tr = {0, 0, cx, cy};
+    DrawTextW(mem_dc, label, -1, &tr, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    SelectObject(mem_dc, of);
+    DeleteObject(font);
+
+    GdiFlush();
+
+    // 32-bit Alpha Channel: ensure opaque pixels
+    uint32_t* px = static_cast<uint32_t*>(bits);
+    std::vector<uint8_t> mask_bits((((cx + 15) / 16) * 2) * cy, 0);
+    int mask_stride = ((cx + 15) / 16) * 2;
+
+    for (int y = 0; y < cy; ++y) {
+        for (int x = 0; x < cx; ++x) {
+            int idx = y * cx + x;
+            if ((px[idx] & 0x00FFFFFF) != 0) {
+                px[idx] |= 0xFF000000;
+            } else {
+                mask_bits[y * mask_stride + (x / 8)] |= (0x80 >> (x % 8));
+            }
+        }
+    }
+
+    HBITMAP mask_bmp = CreateBitmap(cx, cy, 1, 1, mask_bits.data());
+    ICONINFO ii = {0};
+    ii.fIcon = TRUE;
+    ii.hbmColor = color_bmp;
+    ii.hbmMask = mask_bmp;
+    HICON result = CreateIconIndirect(&ii);
+
+    SelectObject(mem_dc, old_color);
+    DeleteObject(color_bmp);
+    DeleteObject(mask_bmp);
+    DeleteDC(mem_dc);
+    ReleaseDC(nullptr, screen_dc);
+    return result;
+}
+
+
+LRESULT CALLBACK BadgeWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_PAINT) {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+        RECT rc;
+        GetClientRect(hwnd, &rc);
+        HDC memDC = CreateCompatibleDC(hdc);
+        HBITMAP memBmp = CreateCompatibleBitmap(hdc, rc.right, rc.bottom);
+        HGDIOBJ oldBmp = SelectObject(memDC, memBmp);
+
+        HBRUSH bg = CreateSolidBrush(g_badge_is_english ? RGB(26, 115, 232) : RGB(15, 157, 88));
+        FillRect(memDC, &rc, bg);
+        DeleteObject(bg);
+
+        SetBkMode(memDC, TRANSPARENT);
+        SetTextColor(memDC, RGB(255, 255, 255));
+        HFONT font = CreateFontW(
+            -13, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+            L"Segoe UI"
+        );
+        HGDIOBJ of = SelectObject(memDC, font);
+        const wchar_t* text = g_badge_is_english ? L"Likhi: English" : L"Likhi: বাংলা";
+        DrawTextW(memDC, text, -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        SelectObject(memDC, of);
+        DeleteObject(font);
+
+        BitBlt(hdc, 0, 0, rc.right, rc.bottom, memDC, 0, 0, SRCCOPY);
+        SelectObject(memDC, oldBmp);
+        DeleteObject(memBmp);
+        DeleteDC(memDC);
+        EndPaint(hwnd, &ps);
+        return 0;
+    } else if (msg == WM_TIMER && wp == kTimerHideBadge) {
+        KillTimer(hwnd, kTimerHideBadge);
+        ShowWindow(hwnd, SW_HIDE);
+        return 0;
+    } else if (msg == WM_ERASEBKGND) {
+        return 1;
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+void ShowTransientBadge(bool is_english) {
+    g_badge_is_english = is_english;
+    if (!g_badge_window) {
+        WNDCLASSEXW wc = {0};
+        wc.cbSize = sizeof(wc);
+        wc.lpfnWndProc = BadgeWndProc;
+        wc.hInstance = g_instance;
+        wc.lpszClassName = L"LikhiFloatingModeBadge";
+        RegisterClassExW(&wc);
+
+        g_badge_window = CreateWindowExW(
+            WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+            L"LikhiFloatingModeBadge", L"", WS_POPUP,
+            0, 0, 160, 32,
+            nullptr, nullptr, g_instance, nullptr
+        );
+        if (g_badge_window) {
+            HRGN rgn = CreateRoundRectRgn(0, 0, 161, 33, 12, 12);
+            SetWindowRgn(g_badge_window, rgn, TRUE);
+        }
+    }
+    if (!g_badge_window) return;
+
+    POINT pt;
+    GetCursorPos(&pt);
+    int x = pt.x + 12;
+    int y = pt.y - 40;
+    if (y < 20) y = pt.y + 24;
+
+    SetWindowPos(g_badge_window, HWND_TOPMOST, x, y, 160, 32,
+                 SWP_SHOWWINDOW | SWP_NOACTIVATE);
+    InvalidateRect(g_badge_window, nullptr, FALSE);
+    SetTimer(g_badge_window, kTimerHideBadge, 1200, nullptr);
+}
+
 void UpdateTray() {
     if (!g_window || !g_tray_added) return;
     NOTIFYICONDATAW data = {0};
     data.cbSize = sizeof(data);
     data.hWnd = g_window;
     data.uID = 1;
-    data.uFlags = NIF_TIP;
-    const wchar_t* mode_text = g_mode == InputMode::kTsfOnly      ? L"TSF only"
-                              : g_mode == InputMode::kUniversalOnly ? L"Universal only"
-                                                                    : L"Automatic";
-    if (!g_host_enabled) mode_text = L"paused";
-    const wchar_t* conv_text = g_conversion_target == likhi::ConversionTarget::kEnglish ? L" [EN]" : L" [BN]";
+    data.uFlags = NIF_TIP | NIF_ICON;
+
+    likhi::ModeTarget mode = likhi::ModeIpc::Instance().GetMode();
+    bool is_english = (mode == likhi::ModeTarget::kEnglish);
+    HICON new_icon = CreateModeIcon(mode);
+    if (new_icon) {
+        if (g_tray_icon) DestroyIcon(g_tray_icon);
+        g_tray_icon = new_icon;
+        data.hIcon = g_tray_icon;
+    }
+
+    const wchar_t* mode_title = is_english ? L"Likhi (লিখি) — [EN] English অনুবাদ"
+                                            : L"Likhi (লিখি) — [BN] বাংলা মোড";
     wchar_t tip[128] = {0};
-    wsprintfW(tip, L"Likhi Universal Mode - %ls%ls", mode_text, conv_text);
+    wsprintfW(tip, L"%ls\n(ক্লিক করুন বা Ctrl+Alt+E চাপুন)", mode_title);
     wcsncpy(data.szTip, tip, 127);
     Shell_NotifyIconW(NIM_MODIFY, &data);
 }
 
 void ShowTrayMenu() {
     HMENU menu = CreatePopupMenu();
+    AppendMenuW(menu, MF_STRING, 111, L"🪟 টপবার খুলুন ও সামনে আনুন (Open TopBar)");
+    AppendMenuW(menu, MF_STRING, 112, L"🔄 টপবার স্ক্রিনের কেন্দ্রে রিসেট (Reset TopBar)");
+    AppendMenuW(menu, MF_STRING | (g_topbar.IsVisible() ? MF_CHECKED : 0),
+                109, L"👁️ ভাসমান টপবার লুকান / দেখান (Toggle TopBar)");
+    AppendMenuW(menu, MF_STRING, 113, L"🎙️ বাংলা ভয়েস টাইপিং (Bangla Voice Typing) [Ctrl+Alt+V]");
+    AppendMenuW(menu, MF_STRING, 110, L"⌨️ অন-স্ক্রিন কিবোর্ড (Virtual Keyboard)");
     AppendMenuW(menu, MF_STRING | (g_host_enabled ? MF_CHECKED : 0), 100,
                 L"Universal Mode active");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING | (g_conversion_target == likhi::ConversionTarget::kBangla ? MF_CHECKED : 0),
+    bool is_english = (likhi::ModeIpc::Instance().GetMode() == likhi::ModeTarget::kEnglish);
+    AppendMenuW(menu, MF_STRING | (!is_english ? MF_CHECKED : 0),
                 107, L"মোড: বাংলা (Bangla) [Ctrl+Alt+E]");
-    AppendMenuW(menu, MF_STRING | (g_conversion_target == likhi::ConversionTarget::kEnglish ? MF_CHECKED : 0),
+    AppendMenuW(menu, MF_STRING | (is_english ? MF_CHECKED : 0),
                 108, L"মোড: English অনুবাদ (Translation) [Ctrl+Alt+E]");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING | (g_mode == InputMode::kAutomatic ? MF_CHECKED : 0),
@@ -502,19 +1041,43 @@ void ShowTrayMenu() {
     DestroyMenu(menu);
     if (command == 0) return;
 
-    if (command == 100) {
+    if (command == 111) {
+        g_show_topbar = true;
+        g_topbar.Show(true);
+        g_topbar.ExpandBar();
+        g_topbar.SetAutoHide(false);
+        g_topbar.SaveCoordinates();
+    } else if (command == 112) {
+        int screen_w = GetSystemMetrics(SM_CXSCREEN);
+        g_topbar.SetPosition((screen_w - 266) / 2, 10);
+        g_show_topbar = true;
+        g_topbar.Show(true);
+        g_topbar.ExpandBar();
+        g_topbar.SetAutoHide(false);
+        g_topbar.SaveCoordinates();
+    } else if (command == 110) {
+        g_osk.ToggleVisibility();
+    } else if (command == 113) {
+        g_topbar.LaunchVoiceInput();
+    } else if (command == 109) {
+        g_show_topbar = !g_topbar.IsVisible();
+        g_topbar.Show(g_show_topbar);
+        g_topbar.SaveCoordinates();
+    } else if (command == 100) {
         g_host_enabled = !g_host_enabled;
         g_typing.SetEnabled(g_host_enabled && g_mode != InputMode::kTsfOnly);
         Log(g_host_enabled ? "universal mode resumed" : "universal mode paused");
         UpdateTray();
     } else if (command == 107) {
-        g_conversion_target = likhi::ConversionTarget::kBangla;
+        likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kBangla);
         Log("conversion target = bangla");
         UpdateTray();
+        ShowTransientBadge(false);
     } else if (command == 108) {
-        g_conversion_target = likhi::ConversionTarget::kEnglish;
+        likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kEnglish);
         Log("conversion target = english");
         UpdateTray();
+        ShowTransientBadge(true);
     } else if (command >= 101 && command <= 103) {
         g_mode = command == 101 ? InputMode::kAutomatic
                : command == 102 ? InputMode::kTsfOnly
@@ -538,6 +1101,32 @@ void ShowTrayMenu() {
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
+    if (message == likhi::ModeIpc::GetBroadcastMessage()) {
+        bool is_en = (likhi::ModeIpc::Instance().GetMode() == likhi::ModeTarget::kEnglish);
+        UpdateTray();
+        ShowTransientBadge(is_en);
+        g_topbar.UpdateMode(likhi::ModeIpc::Instance().GetMode());
+        return 0;
+    }
+    if (message == likhi::ModeIpc::GetShowTopBarMessage()) {
+        g_show_topbar = true;
+        g_topbar.Show(true);
+        g_topbar.ExpandBar();
+        g_topbar.SetAutoHide(false);
+        g_topbar.SaveCoordinates();
+        return 0;
+    }
+    if (message == likhi::ModeIpc::GetResetTopBarMessage()) {
+        int screen_w = GetSystemMetrics(SM_CXSCREEN);
+        g_topbar.SetPosition((screen_w - 266) / 2, 10);
+        g_show_topbar = true;
+        g_topbar.Show(true);
+        g_topbar.ExpandBar();
+        g_topbar.SetAutoHide(false);
+        g_topbar.SaveCoordinates();
+        return 0;
+    }
+
     switch (message) {
 
         case WM_HOTKEY:
@@ -546,16 +1135,26 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
                 g_typing.SetEnabled(g_host_enabled && g_mode != InputMode::kTsfOnly);
                 Log(g_host_enabled ? "hotkey: resumed" : "hotkey: paused");
                 UpdateTray();
+            } else if (wparam == kHotkeyToggleSpace) {
+                TriggerModeToggle();
             } else if (wparam == kHotkeyToggleConversion) {
-                g_conversion_target = (g_conversion_target == likhi::ConversionTarget::kBangla)
-                                          ? likhi::ConversionTarget::kEnglish
-                                          : likhi::ConversionTarget::kBangla;
-                Log(g_conversion_target == likhi::ConversionTarget::kEnglish ? "hotkey: english conversion mode" : "hotkey: bangla mode");
-                UpdateTray();
+                TriggerTranslationToggle();
+            } else if (wparam == kHotkeyToggleVoice) {
+                g_topbar.LaunchVoiceInput();
             }
             return 0;
         case kTrayMessage:
-            if (LOWORD(lparam) == WM_RBUTTONUP || LOWORD(lparam) == WM_CONTEXTMENU) {
+            if (LOWORD(lparam) == WM_LBUTTONUP) {
+                // Mouse left-click on tray icon immediately toggles BN <-> EN
+                TriggerModeToggle();
+            } else if (LOWORD(lparam) == WM_LBUTTONDBLCLK) {
+                // Double-click on tray icon immediately brings TopBar to front
+                g_show_topbar = true;
+                g_topbar.Show(true);
+                g_topbar.ExpandBar();
+                g_topbar.SetAutoHide(false);
+                g_topbar.SaveCoordinates();
+            } else if (LOWORD(lparam) == WM_RBUTTONUP || LOWORD(lparam) == WM_CONTEXTMENU) {
                 ShowTrayMenu();
             } else if (LOWORD(lparam) == 0x0405 /* NIN_BALLOONUSERCLICK */) {
                 likhi::UpdateService::LaunchOfficialUpdateFlow(g_latest_update_url);
@@ -567,8 +1166,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
             if (res == likhi::UpdateCheckResult::kUpdateAvailable && pInfo) {
                 g_latest_update_version = std::wstring(pInfo->version.begin(), pInfo->version.end());
                 g_latest_update_url = pInfo->update_page_url;
-                // Strictly silent update readiness:
-                // Never interrupt the user while typing with recurring notification balloons or popups!
+                std::wstring msg = L"Likhi এর একটি নতুন সংস্করণ (" + g_latest_update_version +
+                                   L") পাওয়া গেছে!\n\nআপনি কি এখনই নতুন সংস্করণটি ডাউনলোড ও আপডেট করতে চান?";
+                int choice = MessageBoxW(g_window, msg.c_str(), L"Likhi Update (লিখি আপডেট)",
+                                         MB_YESNO | MB_ICONINFORMATION | MB_TOPMOST);
+                if (choice == IDYES) {
+                    likhi::UpdateService::LaunchOfficialUpdateFlow(g_latest_update_url);
+                }
+
             }
             if (pInfo) delete pInfo;
             return 0;
@@ -671,6 +1276,10 @@ int RunCheck() {
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command_line, int) {
     g_instance = instance;
 
+    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+    ULONG_PTR gdiplusToken = 0;
+    Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, nullptr);
+
     // One instance only: two hooks would fight over the same word.
     HANDLE single = CreateMutexW(nullptr, FALSE, L"Local\\LikhiUniversalMode");
     const bool already_running = single && GetLastError() == ERROR_ALREADY_EXISTS;
@@ -689,13 +1298,29 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command_line, int) {
         const int result = RunCheck();
         if (g_engine) BanglaEngine_Destroy(g_engine);
         if (single) CloseHandle(single);
+    if (gdiplusToken) {
+        Gdiplus::GdiplusShutdown(gdiplusToken);
+    }
         return result;
     }
 
     if (already_running) {
-        Log("another universal host is already running - exiting");
+        Log("another universal host is already running - requesting topbar show");
+        HWND hRunning = FindWindowW(kWindowClass, L"Likhi Universal Mode");
+        if (hRunning) {
+            PostMessageW(hRunning, likhi::ModeIpc::GetShowTopBarMessage(), 0, 0);
+        }
+        HWND hTopBar = FindWindowW(L"LikhiFloatingTopBar", L"Likhi TopBar");
+        if (hTopBar) {
+            PostMessageW(hTopBar, likhi::ModeIpc::GetShowTopBarMessage(), 0, 0);
+            ShowWindow(hTopBar, SW_SHOW);
+            SetWindowPos(hTopBar, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+        }
         if (g_engine) BanglaEngine_Destroy(g_engine);
         if (single) CloseHandle(single);
+        if (gdiplusToken) {
+            Gdiplus::GdiplusShutdown(gdiplusToken);
+        }
         return 0;
     }
 
@@ -706,11 +1331,27 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command_line, int) {
     window_class.lpszClassName = kWindowClass;
     RegisterClassExW(&window_class);
 
-    g_window = CreateWindowExW(0, kWindowClass, L"Likhi Universal Mode", 0, 0, 0, 0, 0,
-                               HWND_MESSAGE, nullptr, instance, nullptr);
+    // Create top-level invisible message window (parent nullptr) so PostMessage(HWND_BROADCAST)
+    // is delivered properly. (HWND_MESSAGE windows never receive broadcast messages).
+    g_window = CreateWindowExW(0, kWindowClass, L"Likhi Universal Mode", WS_POPUP, 0, 0, 0, 0,
+                               nullptr, nullptr, instance, nullptr);
     if (!g_window) {
         if (g_engine) BanglaEngine_Destroy(g_engine);
         return 1;
+    }
+
+    // Bypass User Interface Privilege Isolation (UIPI) so non-elevated apps can notify this window
+    typedef BOOL (WINAPI *ChangeWindowMessageFilterExFn)(HWND, UINT, DWORD, PCHANGEFILTERSTRUCT);
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (user32) {
+        auto pChangeFilter = (ChangeWindowMessageFilterExFn)GetProcAddress(user32, "ChangeWindowMessageFilterEx");
+        if (pChangeFilter) {
+            pChangeFilter(g_window, likhi::ModeIpc::GetBroadcastMessage(), 1 /* MSGFLT_ALLOW */, nullptr);
+            pChangeFilter(g_window, likhi::ModeIpc::GetShowTopBarMessage(), 1 /* MSGFLT_ALLOW */, nullptr);
+            pChangeFilter(g_window, likhi::ModeIpc::GetResetTopBarMessage(), 1 /* MSGFLT_ALLOW */, nullptr);
+            pChangeFilter(g_window, kTrayMessage, 1 /* MSGFLT_ALLOW */, nullptr);
+            pChangeFilter(g_window, WM_COMMAND, 1 /* MSGFLT_ALLOW */, nullptr);
+        }
     }
 
     NOTIFYICONDATAW tray = {0};
@@ -722,15 +1363,71 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command_line, int) {
     tray.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
     wcscpy_s(tray.szTip, L"Likhi Universal Mode");
     g_tray_added = Shell_NotifyIconW(NIM_ADD, &tray) != FALSE;
+    UpdateTray();
     RegisterHotKey(g_window, kHotkeyToggle, MOD_CONTROL | MOD_ALT, 'L');
     RegisterHotKey(g_window, kHotkeyToggleConversion, MOD_CONTROL | MOD_ALT, 'E');
+    RegisterHotKey(g_window, kHotkeyToggleSpace, MOD_CONTROL | MOD_ALT, VK_SPACE);
+    RegisterHotKey(g_window, kHotkeyToggleVoice, MOD_CONTROL | MOD_ALT, 'V');
     g_translation_service.SetConsentEnabled(g_english_translation_enabled);
     g_translation_service.Start();
+
+    // Ensure autostart entry in HKCU Run so Likhi launches on Windows login
+    wchar_t current_exe[MAX_PATH] = {0};
+    if (GetModuleFileNameW(nullptr, current_exe, MAX_PATH)) {
+        HKEY hRunKey = nullptr;
+        if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, nullptr, 0,
+                            KEY_SET_VALUE, nullptr, &hRunKey, nullptr) == ERROR_SUCCESS) {
+            std::wstring quoted = L"\"" + std::wstring(current_exe) + L"\"";
+            RegSetValueExW(hRunKey, L"LikhiUniversal", 0, REG_SZ,
+                           reinterpret_cast<const BYTE*>(quoted.c_str()),
+                           (DWORD)((quoted.size() + 1) * sizeof(wchar_t)));
+            RegCloseKey(hRunKey);
+        }
+    }
 
     SetTimer(g_window, kTimerReloadSettings, kSettingsPollMs, nullptr);
     if (g_auto_check_update) {
         SetTimer(g_window, kTimerBackgroundUpdateCheck, kUpdateCheckDelayMs, nullptr);
     }
+
+    g_osk.Initialize(instance, nullptr);
+    g_topbar.SetVirtualKeyboard(&g_osk);
+    g_topbar.Initialize(instance, nullptr);
+    g_candidate_window.Initialize(instance);
+    g_candidate_window.SetSelectionCallback([](size_t index) {
+        CommitCandidateByIndex(index);
+    });
+    g_candidate_window.SetConversionModeCallback([](bangla_tsf::CandidateWindow::ConversionTarget mode) {
+        if (mode == bangla_tsf::CandidateWindow::ConversionTarget::kEnglish) {
+            likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kBanglaToEnglish);
+        } else {
+            likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kBangla);
+        }
+        likhi::ModeTarget m = likhi::ModeIpc::Instance().GetMode();
+        g_topbar.UpdateMode(m);
+        UpdateTray();
+    });
+    int screen_w = GetSystemMetrics(SM_CXSCREEN);
+    if (g_topbar_x < 0 || g_topbar_x > screen_w - 50) {
+        g_topbar_x = (screen_w - 242) / 2;
+    }
+    if (g_topbar_y < 0 || g_topbar_y > 100) {
+        g_topbar_y = 6;
+    }
+    // If Kontho is active at the screen top, position Likhi right below it so both are visible
+    HWND hKontho = FindWindowW(nullptr, L"Nms Voice pad");
+    if (!hKontho) hKontho = FindWindowW(nullptr, L"Kontho");
+    if (hKontho) {
+        RECT rk = {0};
+        GetWindowRect(hKontho, &rk);
+        if (rk.top <= 10 && rk.bottom > 10) {
+            g_topbar_y = rk.bottom + 6;
+        }
+    }
+    g_topbar.SetPosition(g_topbar_x, g_topbar_y);
+    g_show_topbar = true;
+    g_topbar.Show(true);
+    g_topbar.ExpandBar();
 
     g_keyboard_hook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHookProc, instance, 0);
     g_mouse_hook = SetWindowsHookExW(WH_MOUSE_LL, MouseHookProc, instance, 0);
@@ -745,8 +1442,21 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command_line, int) {
     if (g_keyboard_hook) UnhookWindowsHookEx(g_keyboard_hook);
     if (g_mouse_hook) UnhookWindowsHookEx(g_mouse_hook);
     if (g_tray_added) Shell_NotifyIconW(NIM_DELETE, &tray);
+    if (g_tray_icon) {
+        DestroyIcon(g_tray_icon);
+        g_tray_icon = nullptr;
+    }
+    g_candidate_window.Destroy();
+    g_osk.Destroy();
+    g_topbar.Destroy();
+    if (g_badge_window) {
+        DestroyWindow(g_badge_window);
+        g_badge_window = nullptr;
+    }
     UnregisterHotKey(g_window, kHotkeyToggle);
     UnregisterHotKey(g_window, kHotkeyToggleConversion);
+    UnregisterHotKey(g_window, kHotkeyToggleSpace);
+    UnregisterHotKey(g_window, kHotkeyToggleVoice);
     g_translation_service.Stop();
     KillTimer(g_window, kTimerReloadSettings);
     if (g_engine) BanglaEngine_Destroy(g_engine);

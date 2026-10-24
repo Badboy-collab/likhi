@@ -17,19 +17,9 @@ const UINT kVoiceResultMsg = WM_APP + 0x6B;
 // Translation result from worker thread to UI thread
 const UINT kTranslationResultMsg = WM_APP + 0x6C;
 
-// Bengali numerals (U+09E6..U+09EF) for the candidate index. The strip is a
-// vertical IME list, so numbering uses the user's own script.
-const wchar_t* kBengaliDigits = L"\u09E6\u09E7\u09E8\u09E9\u09EA\u09EB\u09EC\u09ED\u09EE\u09EF";
 
 std::wstring IndexLabel(size_t one_based) {
-    std::wstring digits;
-    size_t n = one_based;
-    do {
-        digits.insert(digits.begin(), kBengaliDigits[n % 10]);
-        n /= 10;
-    } while (n > 0);
-    digits += L".";
-    return digits;
+    return std::to_wstring(one_based) + L".";
 }
 
 // Selection uses number keys 1..9, so the strip never shows more rows.
@@ -107,6 +97,8 @@ CandidateWindow::CandidateWindow()
       last_width_(0),
       last_height_(0),
       conversion_mode_(ConversionTarget::kBangla),
+      bn_hovered_(false),
+      en_hovered_(false),
       voice_state_(VoiceState::Off) {
     memset(&caret_rect_, 0, sizeof(RECT));
     memset(&mode_bar_rect_, 0, sizeof(RECT));
@@ -409,47 +401,103 @@ void CandidateWindow::OnPaint(HWND hWnd) {
     if (mode_bar_rect_.bottom > mode_bar_rect_.top) {
         SetBkMode(memDC, TRANSPARENT);
 
-        // Draw বাংলা pill button
+        // Draw segmented pill capsule background
+        RECT capsule_rect = mode_bar_rect_;
+        capsule_rect.left += 4;
+        capsule_rect.right -= 4;
+        capsule_rect.top += 1;
+        capsule_rect.bottom -= 1;
+
+        HBRUSH capsule_bg = CreateSolidBrush(RGB(241, 243, 244)); // Google Light Gray Capsule
+        HPEN capsule_pen = CreatePen(PS_SOLID, 1, RGB(232, 234, 237));
+        HGDIOBJ old_bg = SelectObject(memDC, capsule_bg);
+        HGDIOBJ old_pn = SelectObject(memDC, capsule_pen);
+        RoundRect(memDC, capsule_rect.left, capsule_rect.top, capsule_rect.right, capsule_rect.bottom, 14, 14);
+        SelectObject(memDC, old_bg);
+        SelectObject(memDC, old_pn);
+        DeleteObject(capsule_bg);
+        DeleteObject(capsule_pen);
+
         bool bn_active = (conversion_mode_ == ConversionTarget::kBangla);
+        bool en_active = (conversion_mode_ == ConversionTarget::kEnglish);
+
+        // --- Draw বাংলা Pill Button ---
+        RECT bn_r = bn_btn_rect_;
         if (bn_active) {
-            HBRUSH btn_bg = CreateSolidBrush(RGB(232, 240, 254)); // Soft Google Blue
-            HPEN btn_pen = CreatePen(PS_SOLID, 1, RGB(168, 199, 250));
+            // Google Primary Blue solid pill with crisp white text
+            COLORREF fill_color = bn_hovered_ ? RGB(24, 102, 209) : RGB(26, 115, 232);
+            HBRUSH btn_bg = CreateSolidBrush(fill_color);
+            HPEN btn_pen = CreatePen(PS_SOLID, 1, fill_color);
             HGDIOBJ old_b = SelectObject(memDC, btn_bg);
             HGDIOBJ old_p = SelectObject(memDC, btn_pen);
-            RoundRect(memDC, bn_btn_rect_.left, bn_btn_rect_.top, bn_btn_rect_.right, bn_btn_rect_.bottom, 6, 6);
+            RoundRect(memDC, bn_r.left, bn_r.top, bn_r.right, bn_r.bottom, 12, 12);
             SelectObject(memDC, old_b);
             SelectObject(memDC, old_p);
             DeleteObject(btn_bg);
             DeleteObject(btn_pen);
-        }
-        SelectObject(memDC, hfont_bengali_);
-        SetTextColor(memDC, bn_active ? RGB(26, 115, 232) : RGB(95, 99, 104));
-        RECT bn_text_rect = bn_btn_rect_;
-        DrawTextW(memDC, L"বাংলা", -1, &bn_text_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-        // Draw middle arrow ⇄
+            SelectObject(memDC, hfont_bengali_);
+            SetTextColor(memDC, RGB(255, 255, 255));
+        } else {
+            if (bn_hovered_) {
+                HBRUSH btn_bg = CreateSolidBrush(RGB(232, 234, 237));
+                HPEN btn_pen = CreatePen(PS_SOLID, 1, RGB(218, 220, 224));
+                HGDIOBJ old_b = SelectObject(memDC, btn_bg);
+                HGDIOBJ old_p = SelectObject(memDC, btn_pen);
+                RoundRect(memDC, bn_r.left, bn_r.top, bn_r.right, bn_r.bottom, 12, 12);
+                SelectObject(memDC, old_b);
+                SelectObject(memDC, old_p);
+                DeleteObject(btn_bg);
+                DeleteObject(btn_pen);
+                SetTextColor(memDC, RGB(32, 33, 36));
+            } else {
+                SetTextColor(memDC, RGB(95, 99, 104));
+            }
+            SelectObject(memDC, hfont_bengali_);
+        }
+        DrawTextW(memDC, L"বাংলা", -1, &bn_r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+        // --- Draw Middle Arrow ⇄ ---
         SelectObject(memDC, hfont_mode_);
         SetTextColor(memDC, RGB(128, 134, 139));
         RECT arrow_rect = {bn_btn_rect_.right, mode_bar_rect_.top, en_btn_rect_.left, mode_bar_rect_.bottom};
         DrawTextW(memDC, L"⇄", -1, &arrow_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-        // Draw English pill button
-        bool en_active = (conversion_mode_ == ConversionTarget::kEnglish);
+        // --- Draw English Pill Button ---
+        RECT en_r = en_btn_rect_;
         if (en_active) {
-            HBRUSH btn_bg = CreateSolidBrush(RGB(232, 240, 254));
-            HPEN btn_pen = CreatePen(PS_SOLID, 1, RGB(168, 199, 250));
+            // Google Primary Blue solid pill with crisp white text
+            COLORREF fill_color = en_hovered_ ? RGB(24, 102, 209) : RGB(26, 115, 232);
+            HBRUSH btn_bg = CreateSolidBrush(fill_color);
+            HPEN btn_pen = CreatePen(PS_SOLID, 1, fill_color);
             HGDIOBJ old_b = SelectObject(memDC, btn_bg);
             HGDIOBJ old_p = SelectObject(memDC, btn_pen);
-            RoundRect(memDC, en_btn_rect_.left, en_btn_rect_.top, en_btn_rect_.right, en_btn_rect_.bottom, 6, 6);
+            RoundRect(memDC, en_r.left, en_r.top, en_r.right, en_r.bottom, 12, 12);
             SelectObject(memDC, old_b);
             SelectObject(memDC, old_p);
             DeleteObject(btn_bg);
             DeleteObject(btn_pen);
+
+            SelectObject(memDC, hfont_mode_);
+            SetTextColor(memDC, RGB(255, 255, 255));
+        } else {
+            if (en_hovered_) {
+                HBRUSH btn_bg = CreateSolidBrush(RGB(232, 234, 237));
+                HPEN btn_pen = CreatePen(PS_SOLID, 1, RGB(218, 220, 224));
+                HGDIOBJ old_b = SelectObject(memDC, btn_bg);
+                HGDIOBJ old_p = SelectObject(memDC, btn_pen);
+                RoundRect(memDC, en_r.left, en_r.top, en_r.right, en_r.bottom, 12, 12);
+                SelectObject(memDC, old_b);
+                SelectObject(memDC, old_p);
+                DeleteObject(btn_bg);
+                DeleteObject(btn_pen);
+                SetTextColor(memDC, RGB(32, 33, 36));
+            } else {
+                SetTextColor(memDC, RGB(95, 99, 104));
+            }
+            SelectObject(memDC, hfont_mode_);
         }
-        SelectObject(memDC, hfont_mode_);
-        SetTextColor(memDC, en_active ? RGB(26, 115, 232) : RGB(95, 99, 104));
-        RECT en_text_rect = en_btn_rect_;
-        DrawTextW(memDC, L"English", -1, &en_text_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        DrawTextW(memDC, L"English", -1, &en_r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
         // Subtle hairline separator below mode bar
         HPEN sep_pen = CreatePen(PS_SOLID, 1, RGB(232, 234, 237));
@@ -466,9 +514,9 @@ void CandidateWindow::OnPaint(HWND hWnd) {
         bool is_selected = (i == selected_index_);
 
         if (is_selected) {
-            // Highlight Pill
-            HBRUSH highlight_brush = CreateSolidBrush(RGB(232, 240, 254)); // Soft Google Blue highlight
-            HPEN highlight_pen = CreatePen(PS_SOLID, 1, RGB(168, 199, 250));
+            // Vibrant Cyan/Blue Solid Pill (Matching Kontho / Modern Likhi)
+            HBRUSH highlight_brush = CreateSolidBrush(RGB(0, 168, 240));
+            HPEN highlight_pen = CreatePen(PS_SOLID, 1, RGB(0, 150, 220));
             HGDIOBJ old_brush = SelectObject(memDC, highlight_brush);
             HGDIOBJ old_pen = SelectObject(memDC, highlight_pen);
 
@@ -482,18 +530,18 @@ void CandidateWindow::OnPaint(HWND hWnd) {
 
         SetBkMode(memDC, TRANSPARENT);
 
-        // Draw index number (Bengali numerals, vertically centered in its row)
+        // Draw index number (Standard digits 1., 2., vertically centered in its row)
         SelectObject(memDC, hfont_number_);
-        SetTextColor(memDC, is_selected ? RGB(26, 115, 232) : RGB(95, 99, 104));
+        SetTextColor(memDC, is_selected ? RGB(235, 248, 255) : RGB(108, 117, 125));
         const std::wstring num_str = IndexLabel(i + 1);
         RECT num_rect = item_rect;
         num_rect.left += 8;
         DrawTextW(memDC, num_str.c_str(), (int)num_str.size(), &num_rect,
                   DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
 
-        // Draw Bengali/English Candidate Word (own column -> all words align)
+        // Draw Bengali/English Candidate Word (Crisp pure white on cyan when selected)
         SelectObject(memDC, hfont_bengali_);
-        SetTextColor(memDC, is_selected ? RGB(26, 115, 232) : RGB(32, 33, 36));
+        SetTextColor(memDC, is_selected ? RGB(255, 255, 255) : RGB(32, 33, 36));
         RECT text_rect = item_rect;
         text_rect.left += kNumColW;
         DrawTextW(memDC, candidates_[i].c_str(), (int)candidates_[i].size(), &text_rect,
@@ -596,15 +644,29 @@ void CandidateWindow::OnLButtonDown(HWND hWnd, int x, int y) {
 }
 
 void CandidateWindow::OnMouseMove(HWND hWnd, int x, int y) {
-    for (size_t i = 0; i < candidate_item_rects_.size(); i++) {
-        if (PtInRect(&candidate_item_rects_[i], POINT{x, y})) {
-            if (selected_index_ != i) {
-                selected_index_ = i;
-                InvalidateRect(hWnd, NULL, FALSE);
-            }
-            break;
-        }
+    POINT pt = {x, y};
+    bool bn_h = PtInRect(&bn_btn_rect_, pt) != FALSE;
+    bool en_h = PtInRect(&en_btn_rect_, pt) != FALSE;
+
+    bool needs_redraw = false;
+    if (bn_h != bn_hovered_) {
+        bn_hovered_ = bn_h;
+        needs_redraw = true;
     }
+    if (en_h != en_hovered_) {
+        en_hovered_ = en_h;
+        needs_redraw = true;
+    }
+
+    // Hover must not change active candidate index
+
+    if (needs_redraw) {
+        InvalidateRect(hWnd, NULL, FALSE);
+    }
+
+    // Track mouse leave to reset button hovers when cursor exits candidate window
+    TRACKMOUSEEVENT tme = {sizeof(TRACKMOUSEEVENT), TME_LEAVE, hWnd, 0};
+    TrackMouseEvent(&tme);
 }
 
 std::wstring CandidateWindow::VoiceLabel() const {
@@ -676,6 +738,13 @@ LRESULT CALLBACK CandidateWindow::WndProc(HWND hWnd, UINT message, WPARAM wParam
                 return 0;
             case WM_MOUSEMOVE:
                 pThis->OnMouseMove(hWnd, (int)(short)LOWORD(lParam), (int)(short)HIWORD(lParam));
+                return 0;
+            case WM_MOUSELEAVE:
+                if (pThis->bn_hovered_ || pThis->en_hovered_) {
+                    pThis->bn_hovered_ = false;
+                    pThis->en_hovered_ = false;
+                    InvalidateRect(hWnd, NULL, FALSE);
+                }
                 return 0;
             case kVoiceResultMsg: {
                 VoiceResultPayload* p = reinterpret_cast<VoiceResultPayload*>(lParam);

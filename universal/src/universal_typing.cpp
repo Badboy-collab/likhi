@@ -181,6 +181,18 @@ Decision UniversalTyping::Feed(const KeyEvent& event) {
             return Boundary(std::wstring(1, event.ch));
 
         case KeyClass::kBoundary: {
+            if (event.ch == L'.' && !event.shift) {
+                if (roman_.empty()) {
+                    // Idle dot: key is eaten by hook, type '।' directly with 0 erasures
+                    decision.kind = ActionKind::kReplace;
+                    decision.erase_chars = 0;
+                    decision.trailing = L"\u0964";
+                    return decision;
+                } else {
+                    const wchar_t out = L'\u0964';
+                    return Boundary(std::wstring(1, out));
+                }
+            }
             if (roman_.empty() || event.ch < 0x21 || event.ch > 0x7E) {
                 return decision;
             }

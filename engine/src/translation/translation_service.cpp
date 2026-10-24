@@ -135,12 +135,49 @@ void PolishEnglishSentence(std::string& text) {
 
     if (text.empty()) return;
 
-    // Capitalize first character
+    // 1. Remove space before punctuation: "word ." -> "word.", "word ?" -> "word?"
+    for (size_t i = 1; i < text.size(); ) {
+        if ((text[i] == '.' || text[i] == '?' || text[i] == '!' || text[i] == ',' || text[i] == ';') &&
+            text[i - 1] == ' ') {
+            text.erase(i - 1, 1);
+        } else {
+            ++i;
+        }
+    }
+
+    // 2. Ensure single space after punctuation if immediately followed by letter
+    for (size_t i = 0; i + 1 < text.size(); ++i) {
+        if ((text[i] == '.' || text[i] == '?' || text[i] == '!' || text[i] == ',') &&
+            text[i + 1] != ' ' && text[i + 1] != '"' && text[i + 1] != '\'') {
+            text.insert(i + 1, " ");
+            ++i;
+        }
+    }
+
+    // 3. Collapse multiple spaces
+    for (size_t i = 0; i + 1 < text.size(); ) {
+        if (text[i] == ' ' && text[i + 1] == ' ') {
+            text.erase(i + 1, 1);
+        } else {
+            ++i;
+        }
+    }
+
+    // 4. Capitalize first character
     if (text[0] >= 'a' && text[0] <= 'z') {
         text[0] = static_cast<char>(text[0] - 'a' + 'A');
     }
 
-    // Capitalize standalone " i " or " i'" -> " I " or " I'"
+    // 5. Capitalize character after sentence-ending punctuation (. ? !)
+    for (size_t i = 0; i + 2 < text.size(); ++i) {
+        if ((text[i] == '.' || text[i] == '?' || text[i] == '!') && text[i + 1] == ' ') {
+            if (text[i + 2] >= 'a' && text[i + 2] <= 'z') {
+                text[i + 2] = static_cast<char>(text[i + 2] - 'a' + 'A');
+            }
+        }
+    }
+
+    // 6. Capitalize standalone " i " or " i'" -> " I " or " I'"
     for (size_t i = 0; i < text.size(); ++i) {
         if (text[i] == 'i') {
             bool left_boundary = (i == 0 || text[i - 1] == ' ' || text[i - 1] == '"' || text[i - 1] == '(');
@@ -150,6 +187,42 @@ void PolishEnglishSentence(std::string& text) {
             if (left_boundary && right_boundary) {
                 text[i] = 'I';
             }
+        }
+    }
+
+    // 7. Intelligent auto-punctuation:
+    // If the sentence does not end with any terminal punctuation (. ! ?),
+    // check if it starts with an interrogative/question starter or modal verb.
+    char last_ch = text.back();
+    if (last_ch != '.' && last_ch != '?' && last_ch != '!') {
+        // Find the first lowercase word
+        std::string first_word;
+        for (char c : text) {
+            if (c == ' ' || c == '\'' || c == ',') break;
+            first_word += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        }
+
+        static const char* kQuestionStarters[] = {
+            "what", "why", "how", "when", "where", "who", "whom", "whose", "which",
+            "are", "is", "am", "was", "were", "can", "could", "will", "would", "shall", "should",
+            "do", "does", "did", "have", "has", "had", "may", "might",
+            "aren't", "isn't", "wasn't", "weren't", "can't", "couldn't", "won't", "wouldn't",
+            "don't", "doesn't", "didn't", "haven't", "hasn't", "hadn't", "shouldn't"
+        };
+
+        bool is_question = false;
+        for (const char* q : kQuestionStarters) {
+            if (first_word == q) {
+                is_question = true;
+                break;
+            }
+        }
+
+        if (is_question) {
+            text += '?';
+        } else if (text.find(' ') != std::string::npos) {
+            // Multi-word declarative sentence gets a period
+            text += '.';
         }
     }
 }

@@ -36,6 +36,11 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 WEBSITE_DIR = os.path.join(REPO_ROOT, "website")
 THEME_DIR = os.path.join(WEBSITE_DIR, "wordpress-theme", "likhi")
+if not os.path.isdir(THEME_DIR):
+    alt_theme = r"E:\Pervez\PC Bangla Typing App\website\wordpress-theme\likhi"
+    if os.path.isdir(alt_theme):
+        WEBSITE_DIR = r"E:\Pervez\PC Bangla Typing App\website"
+        THEME_DIR = alt_theme
 MANIFEST_FILE = os.path.join(WEBSITE_DIR, ".deploy_manifest.json")
 BACKUPS_DIR = os.path.join(WEBSITE_DIR, "backups", "theme-deploy")
 LOG_FILE = os.path.join(REPO_ROOT, "logs", "theme-deploy.log")

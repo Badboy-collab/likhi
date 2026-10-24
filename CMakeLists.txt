@@ -43,6 +43,13 @@ add_custom_command(
     COMMENT "Compiling TSF Resource"
 )
 
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/universal_rc.obj
+    COMMAND windres -i "${CMAKE_CURRENT_SOURCE_DIR}/tools/universal/universal.rc" -o "${CMAKE_CURRENT_BINARY_DIR}/universal_rc.obj"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/universal/universal.rc" "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon.ico"
+    COMMENT "Compiling Universal Resource"
+)
+
 # TSF Framework Source Files
 #
 # Network boundary (decision 2026-09-14): cloud_translit.cpp IS linked in on
@@ -154,6 +161,7 @@ add_executable(test_tsf_integration
     tsf/src/edit_session.cpp
     tsf/src/cloud_translit.cpp
     tsf/src/voice_input.cpp
+    tsf/src/candidate_window.cpp
 )
 target_link_libraries(test_tsf_integration PRIVATE
     winmm
@@ -244,9 +252,15 @@ target_link_libraries(test_translation_service PRIVATE
 # reach (UWP/Store apps, Java UIs, games, remote sessions).
 add_executable(likhi_universal WIN32
     tools/universal/likhi_universal.cpp
+    tools/universal/topbar_window.cpp
+    tools/universal/virtual_keyboard_window.cpp
+    tsf/src/voice_input.cpp
+    tsf/src/candidate_window.cpp
+    ${CMAKE_CURRENT_BINARY_DIR}/universal_rc.obj
 )
 # UNICODE/_UNICODE: IDI_APPLICATION and friends must resolve to the wide variants.
 target_compile_definitions(likhi_universal PRIVATE UNICODE _UNICODE)
+target_include_directories(likhi_universal PRIVATE tsf/include engine/include universal/include)
 target_link_libraries(likhi_universal PRIVATE
     likhi_universal_core
     bangla_engine_static
@@ -254,9 +268,13 @@ target_link_libraries(likhi_universal PRIVATE
     likhi_update_service
     user32
     gdi32
+    gdiplus
     shell32
+    comctl32
     advapi32
     psapi
+    winmm
+    winhttp
 )
 
 # Native Settings App Target

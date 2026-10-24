@@ -35,6 +35,7 @@
 #include <string>
 #include <vector>
 #include <cstdio>
+#include <fstream>
 #include <tlhelp32.h>   // process enumeration: stop a running universal host
 
 #include "bangla_tsf_clsid.h"
@@ -90,21 +91,28 @@ static void StopUniversalHost() {
 static void WriteUniversalAutostart(const std::wstring& installDir, bool dry) {
     std::wstring exe = installDir + L"\\likhi_universal.exe";
     if (dry) { LogF(L"  [dry] would set autostart -> %ls", exe.c_str()); return; }
-    HKEY key = nullptr;
-    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, kUniversalRunKey, 0, nullptr, 0,
-                        KEY_SET_VALUE, nullptr, &key, nullptr) != ERROR_SUCCESS) {
-        Log(L"  [warn] cannot write the autostart key — Universal Mode will not start automatically");
-        return;
-    }
     const std::wstring quoted = L"\"" + exe + L"\"";
-    if (RegSetValueExW(key, kUniversalRunValue, 0, REG_SZ,
+
+    // Write to HKCU (always succeeds in user context)
+    HKEY keyU = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, nullptr, 0,
+                        KEY_SET_VALUE, nullptr, &keyU, nullptr) == ERROR_SUCCESS) {
+        RegSetValueExW(keyU, L"LikhiUniversal", 0, REG_SZ,
                        reinterpret_cast<const BYTE*>(quoted.c_str()),
-                       (DWORD)((quoted.size() + 1) * sizeof(wchar_t))) == ERROR_SUCCESS) {
-        Log(L"  Universal Mode will start with Windows (apps without TSF support)");
-    } else {
-        Log(L"  [warn] cannot write the autostart value");
+                       (DWORD)((quoted.size() + 1) * sizeof(wchar_t)));
+        RegCloseKey(keyU);
+        Log(L"  Universal Mode will start with Windows (HKCU)");
     }
-    RegCloseKey(key);
+
+    // Also attempt HKLM for system-wide autostart
+    HKEY keyM = nullptr;
+    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, kUniversalRunKey, 0, nullptr, 0,
+                        KEY_SET_VALUE, nullptr, &keyM, nullptr) == ERROR_SUCCESS) {
+        RegSetValueExW(keyM, kUniversalRunValue, 0, REG_SZ,
+                       reinterpret_cast<const BYTE*>(quoted.c_str()),
+                       (DWORD)((quoted.size() + 1) * sizeof(wchar_t)));
+        RegCloseKey(keyM);
+    }
 }
 
 static void RemoveUniversalAutostart(bool dry) {
@@ -410,8 +418,15 @@ static bool CreateShortcuts(const std::wstring& installDir) {
     std::wstring dir = StartMenuDir();
     if (dir.empty()) return false;
     if (!g_dry) CreateDirectoryW(dir.c_str(), nullptr);
+    CreateShortcut(installDir + L"\\likhi_universal.exe", dir + L"\\Likhi.lnk",
+                   installDir, L"Likhi Bangla Typing");
     CreateShortcut(installDir + L"\\bangla_settings.exe", dir + L"\\Likhi Settings.lnk",
                    installDir, L"Likhi settings");
+
+    wchar_t desktop[MAX_PATH] = {0};
+    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_DESKTOPDIRECTORY, nullptr, 0, desktop))) {
+        CreateShortcut(installDir + L"\\likhi_universal.exe", std::wstring(desktop) + L"\\Likhi.lnk", installDir, L"Likhi Bangla Typing");
+    }
     CreateShortcut(installDir + L"\\LikhiSetup.exe", dir + L"\\Uninstall Likhi.lnk",
                    installDir, L"Uninstall Likhi");
     Log(L"  start-menu shortcuts created");
@@ -550,6 +565,11 @@ static int DoInstall() {
             CopyFileW((dir + L"\\bangla_settings.exe").c_str(), appdataSettings.c_str(), FALSE);
             Log(L"  synchronized appdata settings copy");
         }
+        std::wstring appdataUniversal = std::wstring(appdata) + L"\\PC-Bangla-Typing-App\\likhi_universal.exe";
+        if (GetFileAttributesW(appdataUniversal.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            CopyFileW((dir + L"\\likhi_universal.exe").c_str(), appdataUniversal.c_str(), FALSE);
+            Log(L"  synchronized appdata universal copy");
+        }
     }
 
     // If an older localappdata copy exists (e.g. from legacy Inno Setup build), keep it synchronized
@@ -596,7 +616,56 @@ static int DoInstall() {
     int removed = CleanCompetingKeyboards();
     LogF(L"  removed %d other Bengali keyboard(s)", removed);
     PurgeStaleLangidKeys(false); // empty TIP keys left by RemoveLanguageProfile
-    SetLikhiDefaultBengaliProfile();
+
+    // Clean Windows User Profile Language list so Likhi stays in pure Standalone Icon Mode (Kontho/Avro style)
+    HKEY hKey = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Control Panel\\International\\User Profile", 0, KEY_ALL_ACCESS, &hKey) == ERROR_SUCCESS) {
+        wchar_t buf[1024] = {0};
+        DWORD sz = sizeof(buf);
+        if (RegQueryValueExW(hKey, L"Languages", nullptr, nullptr, (LPBYTE)buf, &sz) == ERROR_SUCCESS) {
+            std::vector<std::wstring> langs;
+            const wchar_t* p = buf;
+            while (*p) {
+                std::wstring s(p);
+                if (s != L"bn-BD" && s != L"bn" && s != L"bn-IN") {
+                    langs.push_back(s);
+                }
+                p += s.length() + 1;
+            }
+            if (langs.empty()) langs.push_back(L"en-US");
+            std::vector<wchar_t> multi_sz;
+            for (const auto& l : langs) {
+                for (wchar_t c : l) multi_sz.push_back(c);
+                multi_sz.push_back(L'\0');
+            }
+            multi_sz.push_back(L'\0');
+            RegSetValueExW(hKey, L"Languages", 0, REG_MULTI_SZ, (const BYTE*)multi_sz.data(), (DWORD)(multi_sz.size() * sizeof(wchar_t)));
+        }
+        RegCloseKey(hKey);
+    }
+    RegDeleteTreeW(HKEY_CURRENT_USER, L"Control Panel\\International\\User Profile\\bn-BD");
+
+    // Write default settings to guarantee TopBar is visible and not auto-hidden
+    wchar_t conf_appdata[MAX_PATH] = {0};
+    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, conf_appdata))) {
+        std::wstring confDir = std::wstring(conf_appdata) + L"\\PC-Bangla-Typing-App";
+        CreateDirectoryW(confDir.c_str(), nullptr);
+        std::wstring confPath = confDir + L"\\settings.json";
+        std::ifstream inTest(confPath.c_str());
+        if (!inTest.good()) {
+            std::ofstream outSet(confPath.c_str());
+            if (outSet.good()) {
+                outSet << "{\n"
+                       << "  \"enable_likhi\": true,\n"
+                       << "  \"launch_startup\": true,\n"
+                       << "  \"auto_check_update\": true,\n"
+                       << "  \"show_topbar\": true,\n"
+                       << "  \"topbar_autohide\": false,\n"
+                       << "  \"input_mode\": \"universal\"\n"
+                       << "}\n";
+            }
+        }
+    }
 
     // 4. shell integration
     Log(L"[4/5] shortcuts");

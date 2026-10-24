@@ -1,17 +1,15 @@
 {
-  "version": "1.0.1",
-  "release_date": "2026-09-28",
+  "version": "1.1.0",
+  "release_date": "2026-10-24",
   "download_url": "https://getlikhi.com/downloads/LikhiSetup.exe",
-  "sha256": "dd31916316bf5c190359575fb69e2a01c73473a04df762d6edd7ce3c411d9399",
-  "file_size": 18096764,
+  "sha256": "d878dce86bce17ef93023b7b77648c8f23dec9a6480d85fcbb21786d5e424a28",
+  "file_size": 21099783,
   "changelog": [
-    "Added complete 'Why Likhi' (কেন লিখি) product information, architecture, and philosophy page with interactive navigation",
-    "Added auto-update check toggle and silenced background update notifications to prevent typing interruptions",
-    "Refactored Settings & Dashboard UI: eliminated text clipping, improved Bengali typography padding, and added modern owner-drawn controls",
-    "Improved context-aware candidate ranking for conversational phrases",
-    "Eliminated candidate popup flicker during rapid typing",
-    "Added confirmation dialog before resetting personal learning data",
-    "Corrected privacy wording for online suggestions",
-    "Maintained full 80,289-word lexicon"
+    "Sleek 24px Kontho-matched Floating TopBar with Full (242px) and Compact (126px) view modes",
+    "Right-Side Screen Edge Snap Docking and Smooth Auto-Hide (ডান পাশে অটো-হাইড)",
+    "Live Caret Candidate Suggestions Strip with numbered words (1..5), keyboard navigation, and instant commit",
+    "Unified Global Keyboard Shortcut Ctrl+Alt+Space to instantly switch between Bangla and English",
+    "Independent Standalone Notification Tray with real-time [BN] / [EN] visual status indicator",
+    "100% Offline-first privacy and personal learning cache"
   ]
 }

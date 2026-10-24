@@ -41,11 +41,8 @@ struct StartupSettings {
 StartupSettings ApplySettingsFile(CompositionManager& mgr) {
     StartupSettings out;
 
-    if (RunningInAppContainer()) {
-        out.cloud_suggestions = false;
-        mgr.SetCloudTranslitEnabled(false);
-        return out;
-    }
+    // Note: CloudTranslit runs on an isolated background thread with silent offline fallback,
+    // so we keep cloud suggestions enabled by default across all hosts.
 
     wchar_t appdata[MAX_PATH] = {0};
     if (FAILED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appdata))) return out;

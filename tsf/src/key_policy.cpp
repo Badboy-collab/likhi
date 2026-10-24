@@ -199,12 +199,10 @@ KeyDecision DecideKey(const KeyState& s) {
         return d;
     }
 
-    // 15. Period → Bengali Dāri (।) while composing.
-    if (s.vk == VK_OEM_PERIOD) {
-        if (s.composing) {
-            d.eat = true;
-            d.action = KeyAction::kProcessPeriod;
-        }
+    // 15. Period → Bengali Dāri (।) in Bangla mode
+    if (s.vk == VK_OEM_PERIOD && !s.shift) {
+        d.eat = true;
+        d.action = KeyAction::kProcessPeriod;
         return d;
     }
 

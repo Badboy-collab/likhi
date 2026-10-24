@@ -289,6 +289,9 @@ bool Voice_ParseTranscript(const std::string& provider, const std::string& body,
 static std::wstring VoiceConfigPath(const std::wstring& appdata_dir) {
     std::wstring dir = appdata_dir;
     if (!dir.empty() && dir.back() != L'\\') dir += L'\\';
+    if (dir.find(L"PC-Bangla-Typing-App") != std::wstring::npos) {
+        return dir + L"voice.json";
+    }
     return dir + L"PC-Bangla-Typing-App\\voice.json";
 }
 

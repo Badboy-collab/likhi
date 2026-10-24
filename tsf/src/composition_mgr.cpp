@@ -2,6 +2,7 @@
 #include "../include/text_service.h"
 #include "../include/tsf_utils.h"
 #include "../include/edit_session.h"
+#include "likhi_mode_ipc.h"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -267,19 +268,36 @@ void CompositionManager::SetSuggestionsEnabled(bool enabled) {
     }
 }
 
+void CompositionManager::SyncConversionTargetFromIpc() {
+    likhi::ModeTarget shared_mode = likhi::ModeIpc::Instance().GetMode();
+    CandidateWindow::ConversionTarget expected = (shared_mode == likhi::ModeTarget::kEnglish)
+        ? CandidateWindow::ConversionTarget::kEnglish
+        : CandidateWindow::ConversionTarget::kBangla;
+    if (conversion_target_ != expected) {
+        conversion_target_ = expected;
+        candidate_window_.SetConversionMode(expected);
+        if (is_composing_) {
+            UpdateCompositionAndUI(current_context_);
+        }
+    }
+}
+
 void CompositionManager::SetConversionTarget(CandidateWindow::ConversionTarget target) {
     if (conversion_target_ == target) return;
     conversion_target_ = target;
     candidate_window_.SetConversionMode(target);
+    likhi::ModeIpc::Instance().SetMode(
+        target == CandidateWindow::ConversionTarget::kEnglish
+            ? likhi::ModeTarget::kEnglish
+            : likhi::ModeTarget::kBangla);
     if (is_composing_) {
         UpdateCompositionAndUI(current_context_);
     }
 }
 
 void CompositionManager::ToggleConversionTarget() {
-    SetConversionTarget(conversion_target_ == CandidateWindow::ConversionTarget::kBangla
-                            ? CandidateWindow::ConversionTarget::kEnglish
-                            : CandidateWindow::ConversionTarget::kBangla);
+    likhi::ModeIpc::Instance().ToggleMode();
+    SyncConversionTargetFromIpc();
 }
 
 void CompositionManager::SetEnglishTranslationEnabled(bool enabled) {
@@ -606,14 +624,9 @@ void CompositionManager::UpdateCompositionAndUI(ITfContext* pContext) {
 
         RECT anchor = {};
         if (this->ReadTextExtInSession(ec, pContext, anchor)) {
-            bool moved = !this->caret_rect_valid_ ||
-                         anchor.left   != this->caret_rect_.left ||
-                         anchor.top    != this->caret_rect_.top ||
-                         anchor.right  != this->caret_rect_.right ||
-                         anchor.bottom != this->caret_rect_.bottom;
             this->caret_rect_ = anchor;
             this->caret_rect_valid_ = true;
-            if (moved && !this->current_candidates_w_.empty()) {
+            if (this->suggestions_enabled_ && !this->current_candidates_w_.empty()) {
                 this->candidate_window_.ShowCandidates(this->current_candidates_w_,
                                                        this->selected_candidate_idx_,
                                                        this->caret_rect_);
@@ -638,6 +651,7 @@ void CompositionManager::UpdateCompositionAndUI(ITfContext* pContext) {
 }
 
 bool CompositionManager::OnCharacter(ITfContext* pContext, char ch) {
+    SyncConversionTargetFromIpc();
     roman_buffer_.push_back(ch);
     UpdateCompositionAndUI(pContext);
     return true;
@@ -662,7 +676,12 @@ bool CompositionManager::OnSpace(ITfContext* pContext) {
     if (!is_composing_) {
         return false;
     }
+    SyncConversionTargetFromIpc();
     if (conversion_target_ == CandidateWindow::ConversionTarget::kEnglish) {
+        // Double-space completes and commits the English sentence immediately without needing to pick any candidate
+        if (!roman_buffer_.empty() && roman_buffer_.back() == ' ') {
+            return CommitCurrentComposition(pContext, selected_candidate_idx_, L" ");
+        }
         roman_buffer_.push_back(' ');
         UpdateCompositionAndUI(pContext);
         return true;
@@ -740,19 +759,42 @@ bool CompositionManager::OnDigit(ITfContext* pContext, char ascii_digit) {
 }
 
 bool CompositionManager::OnPunctuation(ITfContext* pContext, char punct) {
-    // Only reached while composing (policy step 15 eats '.' only then).
-    // Commit the word with the Bengali Dāri (।) attached as the trailing
-    // text of the SAME composition-range SetText — never via a separate
-    // post-EndComposition insert (which could delete the word in some hosts).
-    if (!is_composing_) {
+    if (conversion_target_ == CandidateWindow::ConversionTarget::kEnglish) {
+        if (is_composing_) {
+            if (selected_candidate_idx_ < current_candidates_w_.size()) {
+                std::wstring& cand = current_candidates_w_[selected_candidate_idx_];
+                while (!cand.empty() && (cand.back() == L'.' || cand.back() == L'?' || cand.back() == L'!')) {
+                    cand.pop_back();
+                }
+            }
+            std::wstring trailing = std::wstring(1, (wchar_t)punct);
+            return CommitCurrentComposition(pContext, selected_candidate_idx_, trailing);
+        }
         return false;
     }
-    if (conversion_target_ == CandidateWindow::ConversionTarget::kEnglish) {
-        std::wstring trailing = std::wstring(1, (wchar_t)punct);
+
+    std::wstring trailing = (punct == '.') ? L"।" : std::wstring(1, (wchar_t)punct);
+    if (is_composing_) {
         return CommitCurrentComposition(pContext, selected_candidate_idx_, trailing);
     }
-    std::wstring trailing = (punct == '.') ? L"।" : std::wstring(1, (wchar_t)punct);
-    return CommitCurrentComposition(pContext, selected_candidate_idx_, trailing);
+
+    // Idle state: insert Bengali Dāri (।) directly at current selection
+    if (!pContext || !service_) return false;
+    ITfEditSession* punctSession = new ActionEditSession(pContext,
+        [this, trailing, pContext](TfEditCookie ec) -> HRESULT {
+            ITfInsertAtSelection* pInsertAtSelection = nullptr;
+            if (SUCCEEDED(pContext->QueryInterface(IID_ITfInsertAtSelection, (void**)&pInsertAtSelection))) {
+                ITfRange* pRange = nullptr;
+                pInsertAtSelection->InsertTextAtSelection(ec, 0, trailing.c_str(), (LONG)trailing.length(), &pRange);
+                if (pRange) pRange->Release();
+                pInsertAtSelection->Release();
+            }
+            return S_OK;
+        });
+    HRESULT hr = E_FAIL;
+    pContext->RequestEditSession(service_->GetClientId(), punctSession, TF_ES_SYNC | TF_ES_READWRITE, &hr);
+    punctSession->Release();
+    return SUCCEEDED(hr);
 }
 
 bool CompositionManager::OnBengaliDigit(ITfContext* pContext, wchar_t bengali_digit) {

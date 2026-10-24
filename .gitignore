@@ -49,3 +49,6 @@ logs/
 _backup_*/
 website_backup_*/
 _theme_backup_*/
+
+*.pyc
+__pycache__/

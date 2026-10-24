@@ -105,6 +105,7 @@ public:
     void SetConversionTarget(CandidateWindow::ConversionTarget target);
     CandidateWindow::ConversionTarget GetConversionTarget() const { return conversion_target_; }
     void ToggleConversionTarget();
+    void SyncConversionTargetFromIpc();
     void SetEnglishTranslationEnabled(bool enabled);
     bool IsEnglishTranslationEnabled() const { return translation_enabled_; }
     void OnTranslationResult(const std::wstring& bengali_source,

@@ -412,7 +412,8 @@ int main() {
     Section("Period -> Bengali Dāri");
     {
         KeyDecision idle = DecideKey(St(VK_OEM_PERIOD));
-        Check(!idle.eat, "Period not eaten when idle");
+        Check(idle.eat && idle.action == KeyAction::kProcessPeriod,
+              "Period eaten when idle -> Bengali Dāri (।)");
 
         KeyState comp = St(VK_OEM_PERIOD);
         comp.composing = true;
@@ -478,7 +479,7 @@ int main() {
             VK_ADD, VK_SUBTRACT, VK_MULTIPLY, VK_DIVIDE, VK_DECIMAL, VK_SEPARATOR,
             VK_NUMPAD0, VK_NUMPAD1, VK_NUMPAD2, VK_NUMPAD3, VK_NUMPAD4,
             VK_NUMPAD5, VK_NUMPAD6, VK_NUMPAD7, VK_NUMPAD8, VK_NUMPAD9,
-            VK_OEM_PERIOD, VK_OEM_COMMA, VK_OEM_MINUS, VK_OEM_PLUS,
+            VK_OEM_COMMA, VK_OEM_MINUS, VK_OEM_PLUS,
             VK_OEM_1, VK_OEM_2, VK_OEM_3, VK_OEM_4, VK_OEM_5, VK_OEM_6, VK_OEM_7,
             '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
             VK_CONTROL, VK_MENU, VK_SHIFT, VK_LWIN, VK_RWIN, VK_APPS

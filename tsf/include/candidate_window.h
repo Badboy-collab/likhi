@@ -22,6 +22,7 @@ public:
     void ShowCandidates(const std::vector<std::wstring>& candidates, size_t selected_index, const RECT& caret_rect);
     void Hide();
     bool IsVisible() const { return is_visible_; }
+    HWND GetHwnd() const { return hwnd_; }
 
     void SetSelectionCallback(SelectionCallback cb) { selection_callback_ = cb; }
     size_t GetSelectedIndex() const { return selected_index_; }
@@ -110,6 +111,8 @@ private:
     RECT mode_bar_rect_;
     RECT bn_btn_rect_;
     RECT en_btn_rect_;
+    bool bn_hovered_;
+    bool en_hovered_;
 
     // Voice (microphone) state. Declared last so the constructor's init list
     // order matches the declaration order.

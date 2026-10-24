@@ -213,7 +213,9 @@ int main() {
 
         KeyEvent dot = Letter(L'.');
         dot.kind = KeyClass::kBoundary;
-        Check(IsPass(ut.Feed(dot)), "decimal point / IP address case: untouched");
+        Decision d_dot = ut.Feed(dot);
+        Check(IsReplace(d_dot) && d_dot.trailing == L"\u0964" && d_dot.erase_chars == 0,
+              "standalone period converts to Bengali Dāri (।)");
     }
     {
         // Two spaces in a row: exactly one commit, the second is native.

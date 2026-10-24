@@ -127,7 +127,7 @@ struct BanglaEngine {
             // backup, and the marker file below keeps this from ever running
             // again - normal learning is untouched from then on.
             if (trust_filter_enabled_) {
-                const std::string marker = DirOf(user_dict_path_) + "learned_repaired_v1.flag";
+                const std::string marker = DirOf(user_dict_path_) + "learned_repaired_v2.flag";
                 std::ifstream marker_in(marker);
                 if (!marker_in.is_open()) {
                     std::vector<std::pair<std::string, std::string>> drop;
@@ -569,13 +569,8 @@ void BanglaEngine_GetCandidates(BanglaEngine* engine, CandidateList* out_list) {
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     std::vector<std::string> override_texts;
 
-    // Prioritize morphology overrides first (Google-er -> গুগলের, pele-o -> পেলেও, etc.)
-    for (const auto& mo : morphology_overrides) {
-        if (std::find(override_texts.begin(), override_texts.end(), mo) == override_texts.end()) {
-            override_texts.push_back(mo);
-        }
-    }
-
+    // 5a. Curated whole-word override dictionary wins first: any lexicon entry flagged as an
+    //     override that exactly matches the typed roman key is emitted first.
     if (!lower_composition.empty()) {
         auto exact = engine->lexicon.SearchRoman(lower_composition, 8);
         for (const auto& rm : exact) {
@@ -583,6 +578,13 @@ void BanglaEngine_GetCandidates(BanglaEngine* engine, CandidateList* out_list) {
             if (std::find(override_texts.begin(), override_texts.end(), rm.bengali_word) == override_texts.end()) {
                 override_texts.push_back(rm.bengali_word);
             }
+        }
+    }
+
+    // 5b. Then morphology overrides (Google-er -> গুগলের, pele-o -> পেলেও, etc.)
+    for (const auto& mo : morphology_overrides) {
+        if (std::find(override_texts.begin(), override_texts.end(), mo) == override_texts.end()) {
+            override_texts.push_back(mo);
         }
     }
 
