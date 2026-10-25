@@ -107,7 +107,9 @@ private:
     enum ButtonId {
         kBtnNone = 0,
         kBtnMic,
-        kBtnMode,
+        kBtnModeBn,      // 1-Click Bangla [বাং]
+        kBtnModeEn,      // 1-Click English [EN]
+        kBtnModeTrans,   // 1-Click Banglish -> English Translation [বা⇄En]
         kBtnPause,
         kBtnDict,
         kBtnOsk,
@@ -120,7 +122,9 @@ private:
 
     // Layout rectangles
     RECT rc_mic_;
-    RECT rc_mode_;
+    RECT rc_mode_bn_;
+    RECT rc_mode_en_;
+    RECT rc_mode_trans_;
     RECT rc_pause_;
     RECT rc_dict_;
     RECT rc_osk_;

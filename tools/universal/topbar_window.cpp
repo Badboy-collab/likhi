@@ -19,8 +19,8 @@ namespace {
 
 const wchar_t kTopBarClassName[] = L"LikhiFloatingTopBar";
 const UINT_PTR kTimerAutoHide = 101;
-const int kNormalWidth = 242;
-const int kCollapsedWidth = 126;
+const int kNormalWidth = 262;
+const int kCollapsedWidth = 158;
 const int kNormalHeight = 24;
 
 std::wstring GetAppDataPath() {
@@ -235,8 +235,8 @@ TopBarWindow::TopBarWindow()
       width_(kNormalWidth),
       height_(kNormalHeight),
       pos_x_(-1),
-      pos_y_(10),
-      normal_y_(10),
+      pos_y_(12),
+      normal_y_(12),
       is_visible_(true),
       auto_hide_enabled_(false),
       is_collapsed_(false),
@@ -251,15 +251,17 @@ TopBarWindow::TopBarWindow()
       font_bengali_small_(nullptr),
       font_english_small_(nullptr) {
 
-    // Kontho-exact 8-Button Suite (Image 1: w=242, h=24)
-    rc_mic_      = {2,   1, 26,  23}; // w: 24, h: 22
-    rc_mode_     = {27,  3, 114, 21}; // w: 87, h: 18
-    rc_pause_    = {116, 1, 136, 23}; // w: 20, h: 22
-    rc_dict_     = {137, 1, 158, 23}; // w: 21, h: 22
-    rc_osk_      = {159, 1, 179, 23}; // w: 20, h: 22
-    rc_script_   = {180, 1, 200, 23}; // w: 20, h: 22
-    rc_settings_ = {201, 1, 221, 23}; // w: 20, h: 22
-    rc_power_    = {222, 1, 241, 23}; // w: 19, h: 22
+    // Likhi 1-Click Segmented Suite (w=262, h=24)
+    rc_mic_        = {2,   1, 26,  23}; // w: 24, h: 22
+    rc_mode_bn_    = {28,  2, 60,  22}; // w: 32, h: 20 [বাং]
+    rc_mode_en_    = {61,  2, 92,  22}; // w: 31, h: 20 [EN]
+    rc_mode_trans_ = {93,  2, 133, 22}; // w: 40, h: 20 [বা⇄En]
+    rc_pause_      = {135, 1, 155, 23}; // w: 20, h: 22
+    rc_dict_       = {156, 1, 176, 23}; // w: 20, h: 22
+    rc_osk_        = {177, 1, 197, 23}; // w: 20, h: 22
+    rc_script_     = {198, 1, 218, 23}; // w: 20, h: 22
+    rc_settings_   = {219, 1, 239, 23}; // w: 20, h: 22
+    rc_power_      = {240, 1, 260, 23}; // w: 20, h: 22
 }
 
 TopBarWindow::~TopBarWindow() {
@@ -285,8 +287,8 @@ bool TopBarWindow::Initialize(HINSTANCE hInstance, HWND parentHwnd) {
     if (pos_x_ < 0 || pos_x_ > screen_w - 50) {
         pos_x_ = (screen_w - width_) / 2;
     }
-    if (normal_y_ < 0 || normal_y_ > screen_h - 40) {
-        normal_y_ = 6;
+    if (normal_y_ < 6 || normal_y_ > screen_h - 40) {
+        normal_y_ = 12;
     }
     pos_y_ = normal_y_;
 
@@ -386,6 +388,9 @@ void TopBarWindow::Show(bool show) {
     is_visible_ = show;
     if (hwnd_) {
         if (show) {
+            is_collapsed_ = false;
+            if (normal_y_ < 6) normal_y_ = 12;
+            pos_y_ = normal_y_;
             HRGN rgn = CreateRoundRectRgn(0, 0, width_ + 1, height_ + 1, 6, 6);
             SetWindowRgn(hwnd_, rgn, TRUE);
             ShowWindow(hwnd_, SW_SHOWNA);
@@ -407,13 +412,14 @@ bool TopBarWindow::IsVisible() const {
 void TopBarWindow::UpdateMode(likhi::ModeTarget mode) {
     current_mode_ = mode;
     if (hwnd_) {
-        InvalidateRect(hwnd_, &rc_mode_, FALSE);
+        InvalidateRect(hwnd_, nullptr, FALSE);
         UpdateWindow(hwnd_);
     }
 }
 
 void TopBarWindow::SetPosition(int x, int y) {
     pos_x_ = x;
+    if (y < 6) y = 12;
     normal_y_ = y;
     pos_y_ = y;
     if (hwnd_) {
@@ -466,21 +472,22 @@ void TopBarWindow::ExpandToFull() {
     width_ = kNormalWidth;
     height_ = kNormalHeight;
     int screen_w = GetSystemMetrics(SM_CXSCREEN);
+    if (normal_y_ < 6) normal_y_ = 12;
+    pos_y_ = normal_y_;
     if (dock_pos_ == kDockRight) {
         pos_x_ = screen_w - width_;
-        pos_y_ = normal_y_;
-    } else {
-        pos_y_ = normal_y_;
     }
 
-    rc_mic_      = {2,   1, 26,  23}; // w: 24, h: 22
-    rc_mode_     = {27,  3, 114, 21}; // w: 87, h: 18
-    rc_pause_    = {116, 1, 136, 23}; // w: 20, h: 22
-    rc_dict_     = {137, 1, 158, 23}; // w: 21, h: 22
-    rc_osk_      = {159, 1, 179, 23}; // w: 20, h: 22
-    rc_script_   = {180, 1, 200, 23}; // w: 20, h: 22
-    rc_settings_ = {201, 1, 221, 23}; // w: 20, h: 22
-    rc_power_    = {222, 1, 241, 23}; // w: 19, h: 22
+    rc_mic_        = {2,   1, 26,  23}; // w: 24, h: 22
+    rc_mode_bn_    = {28,  2, 60,  22}; // w: 32, h: 20 [বাং]
+    rc_mode_en_    = {61,  2, 92,  22}; // w: 31, h: 20 [EN]
+    rc_mode_trans_ = {93,  2, 133, 22}; // w: 40, h: 20 [বা⇄En]
+    rc_pause_      = {135, 1, 155, 23}; // w: 20, h: 22
+    rc_dict_       = {156, 1, 176, 23}; // w: 20, h: 22
+    rc_osk_        = {177, 1, 197, 23}; // w: 20, h: 22
+    rc_script_     = {198, 1, 218, 23}; // w: 20, h: 22
+    rc_settings_   = {219, 1, 239, 23}; // w: 20, h: 22
+    rc_power_      = {240, 1, 260, 23}; // w: 20, h: 22
 
     if (hwnd_) {
         HRGN rgn = CreateRoundRectRgn(0, 0, width_ + 1, height_ + 1, 6, 6);
@@ -494,16 +501,19 @@ void TopBarWindow::ExpandToFull() {
 void TopBarWindow::CollapseToCompact() {
     width_ = kCollapsedWidth;
     height_ = kNormalHeight;
+    if (normal_y_ < 6) normal_y_ = 12;
     pos_y_ = normal_y_;
 
-    rc_mic_   = {2,   1, 26,  23};
-    rc_mode_  = {27,  3, 102, 21};
-    rc_power_ = {104, 1, 125, 23};
-    rc_pause_ = {0, 0, 0, 0};
-    rc_dict_ = {0, 0, 0, 0};
-    rc_osk_ = {0, 0, 0, 0};
-    rc_script_ = {0, 0, 0, 0};
-    rc_settings_ = {0, 0, 0, 0};
+    rc_mic_        = {2,   1, 26,  23};
+    rc_mode_bn_    = {28,  2, 60,  22};
+    rc_mode_en_    = {61,  2, 92,  22};
+    rc_mode_trans_ = {93,  2, 133, 22};
+    rc_power_      = {135, 1, 155, 23};
+    rc_pause_      = {0, 0, 0, 0};
+    rc_dict_       = {0, 0, 0, 0};
+    rc_osk_        = {0, 0, 0, 0};
+    rc_script_     = {0, 0, 0, 0};
+    rc_settings_   = {0, 0, 0, 0};
 
     if (hwnd_) {
         HRGN rgn = CreateRoundRectRgn(0, 0, width_ + 1, height_ + 1, 6, 6);
@@ -642,6 +652,12 @@ LRESULT CALLBACK TopBarWindow::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
 
 LRESULT TopBarWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     if (msg == likhi::ModeIpc::GetShowTopBarMessage()) {
+        int screen_w = GetSystemMetrics(SM_CXSCREEN);
+        if (pos_x_ < 0 || pos_x_ > screen_w - 50) {
+            pos_x_ = (screen_w - width_) / 2;
+        }
+        if (normal_y_ < 6) normal_y_ = 12;
+        pos_y_ = normal_y_;
         Show(true);
         ExpandBar();
         SetAutoHide(false);
@@ -714,8 +730,8 @@ LRESULT TopBarWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 dock_pos_ = kDockTop;
                 pos_x_ = rc.left;
                 normal_y_ = rc.top;
-                if (normal_y_ < 15 && normal_y_ > -10) {
-                    normal_y_ = 0;
+                if (normal_y_ < 15) {
+                    normal_y_ = 12;
                 }
                 pos_y_ = normal_y_;
             }
@@ -756,19 +772,23 @@ void TopBarWindow::OnPaint(HWND hwnd) {
         g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
         g.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
 
-        // 1. Vibrant Cyan/Blue Gradient (Kontho Theme: Image 1)
+        // 1. Signature Likhi Dark Slate / Midnight Obsidian Gradient
         Gdiplus::Rect gRc(0, 0, cr.right, cur_h);
         Gdiplus::LinearGradientBrush bgBrush(
             gRc,
-            Gdiplus::Color(255, 0, 172, 255),
-            Gdiplus::Color(255, 0, 122, 240),
+            Gdiplus::Color(255, 15, 23, 42),   // #0F172A Slate 900
+            Gdiplus::Color(255, 30, 41, 59),   // #1E293B Slate 800
             Gdiplus::LinearGradientModeVertical
         );
         g.FillRectangle(&bgBrush, gRc);
 
-        // 1px Subtle bottom accent
-        Gdiplus::Pen borderPen(Gdiplus::Color(180, 0, 95, 200), 1.0f);
+        // Subtle frosted border
+        Gdiplus::Pen borderPen(Gdiplus::Color(90, 148, 163, 184), 1.0f);
         g.DrawRectangle(&borderPen, 0, 0, cr.right - 1, cur_h - 1);
+
+        // Subtle top sheen line
+        Gdiplus::Pen sheenPen(Gdiplus::Color(45, 255, 255, 255), 1.0f);
+        g.DrawLine(&sheenPen, 2, 1, cr.right - 3, 1);
 
         {
             // === FULL KONTHO-MATCHED EXPANDED BAR (Image 1 or Compact Image 2) ===
@@ -805,36 +825,71 @@ void TopBarWindow::OnPaint(HWND hwnd) {
                 g.DrawLine(&whitePen, cx - 3.0f, cy + 7.2f, cx + 3.0f, cy + 7.2f);
             }
 
-            // 2. Mode Pill (rc_mode_)
+            // 2. Segmented Mode Controls ([বাং], [EN], [বা⇄En]) - Zero 3-click cycling!
             {
-                Gdiplus::RectF modeRc(
-                    (float)rc_mode_.left, (float)rc_mode_.top,
-                    (float)(rc_mode_.right - rc_mode_.left), (float)(rc_mode_.bottom - rc_mode_.top)
+                // Container background for segmented bar
+                Gdiplus::RectF segContRc(
+                    (float)rc_mode_bn_.left - 1.0f, (float)rc_mode_bn_.top - 1.0f,
+                    (float)(rc_mode_trans_.right - rc_mode_bn_.left + 2.0f),
+                    (float)(rc_mode_bn_.bottom - rc_mode_bn_.top + 2.0f)
                 );
+                Gdiplus::SolidBrush segBgBrush(Gdiplus::Color(160, 10, 15, 28));
+                Gdiplus::Pen segBorderPen(Gdiplus::Color(50, 148, 163, 184), 1.0f);
+                Gdiplus::GraphicsPath segPath;
+                segPath.AddArc(segContRc.X, segContRc.Y, 4.0f, 4.0f, 180, 90);
+                segPath.AddArc(segContRc.GetRight() - 4.0f, segContRc.Y, 4.0f, 4.0f, 270, 90);
+                segPath.AddArc(segContRc.GetRight() - 4.0f, segContRc.GetBottom() - 4.0f, 4.0f, 4.0f, 0, 90);
+                segPath.AddArc(segContRc.X, segContRc.GetBottom() - 4.0f, 4.0f, 4.0f, 90, 90);
+                segPath.CloseFigure();
+                g.FillPath(&segBgBrush, &segPath);
+                g.DrawPath(&segBorderPen, &segPath);
 
-                Gdiplus::SolidBrush pillBrush(Gdiplus::Color(255, 255, 255, 255));
-                Gdiplus::Pen pillPen(Gdiplus::Color(hovered_btn_ == kBtnMode ? 100 : 40, 0, 0, 0), 1.0f);
+                auto DrawPill = [&](const RECT& r, bool active, ButtonId btnId,
+                                    COLORREF activeTop, COLORREF activeBottom,
+                                    const wchar_t* label, HFONT hFont) {
+                    Gdiplus::RectF pillRc((float)r.left, (float)r.top, (float)(r.right - r.left), (float)(r.bottom - r.top));
+                    Gdiplus::GraphicsPath pPath;
+                    float radius = 3.0f;
+                    pPath.AddArc(pillRc.X, pillRc.Y, radius * 2, radius * 2, 180, 90);
+                    pPath.AddArc(pillRc.GetRight() - radius * 2, pillRc.Y, radius * 2, radius * 2, 270, 90);
+                    pPath.AddArc(pillRc.GetRight() - radius * 2, pillRc.GetBottom() - radius * 2, radius * 2, radius * 2, 0, 90);
+                    pPath.AddArc(pillRc.X, pillRc.GetBottom() - radius * 2, radius * 2, radius * 2, 90, 90);
+                    pPath.CloseFigure();
 
-                Gdiplus::GraphicsPath path;
-                float r = 3.0f;
-                path.AddArc(modeRc.X, modeRc.Y, r * 2, r * 2, 180, 90);
-                path.AddArc(modeRc.GetRight() - r * 2, modeRc.Y, r * 2, r * 2, 270, 90);
-                path.AddArc(modeRc.GetRight() - r * 2, modeRc.GetBottom() - r * 2, r * 2, r * 2, 0, 90);
-                path.AddArc(modeRc.X, modeRc.GetBottom() - r * 2, r * 2, r * 2, 90, 90);
-                path.CloseFigure();
+                    if (active) {
+                        Gdiplus::LinearGradientBrush pBrush(
+                            pillRc,
+                            Gdiplus::Color(255, GetRValue(activeTop), GetGValue(activeTop), GetBValue(activeTop)),
+                            Gdiplus::Color(255, GetRValue(activeBottom), GetGValue(activeBottom), GetBValue(activeBottom)),
+                            Gdiplus::LinearGradientModeVertical
+                        );
+                        g.FillPath(&pBrush, &pPath);
+                        Gdiplus::Pen pPen(Gdiplus::Color(180, 255, 255, 255), 1.0f);
+                        g.DrawPath(&pPen, &pPath);
+                    } else if (hovered_btn_ == btnId) {
+                        Gdiplus::SolidBrush hBrush(Gdiplus::Color(55, 255, 255, 255));
+                        g.FillPath(&hBrush, &pPath);
+                    }
 
-                g.FillPath(&pillBrush, &path);
-                g.DrawPath(&pillPen, &path);
+                    SelectObject(memDC, hFont);
+                    SetBkMode(memDC, TRANSPARENT);
+                    SetTextColor(memDC, active ? RGB(255, 255, 255) : (hovered_btn_ == btnId ? RGB(241, 245, 249) : RGB(148, 163, 184)));
+                    RECT tr = r;
+                    DrawTextW(memDC, label, -1, &tr, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                };
 
                 bool is_bn = (current_mode_ == likhi::ModeTarget::kBangla);
-                SelectObject(memDC, is_bn ? font_bengali_ : font_english_);
-                SetBkMode(memDC, TRANSPARENT);
-                SetTextColor(memDC, RGB(0, 0, 0));
-                RECT tr = rc_mode_;
-                const wchar_t* lbl = (current_mode_ == likhi::ModeTarget::kEnglish) ? L"English"
-                                   : (current_mode_ == likhi::ModeTarget::kBanglaToEnglish) ? L"BN-EN"
-                                   : L"বাংলা";
-                DrawTextW(memDC, lbl, -1, &tr, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                bool is_en = (current_mode_ == likhi::ModeTarget::kEnglish);
+                bool is_tr = (current_mode_ == likhi::ModeTarget::kBanglaToEnglish);
+
+                // 1. [বাং] - Emerald Green (#10B981 -> #059669)
+                DrawPill(rc_mode_bn_, is_bn, kBtnModeBn, RGB(16, 185, 129), RGB(5, 150, 105), L"বাং", font_bengali_);
+
+                // 2. [EN] - Sapphire Royal Blue (#3B82F6 -> #1D4ED8)
+                DrawPill(rc_mode_en_, is_en, kBtnModeEn, RGB(59, 130, 246), RGB(29, 78, 216), L"EN", font_english_);
+
+                // 3. [বা⇄En] - Electric Violet / Amethyst (#8B5CF6 -> #6D28D9)
+                DrawPill(rc_mode_trans_, is_tr, kBtnModeTrans, RGB(139, 92, 246), RGB(109, 40, 217), L"বা⇄En", font_bengali_small_);
             }
 
             if (!is_collapsed_ && !is_compact_mode_) {
@@ -955,7 +1010,7 @@ void TopBarWindow::OnPaint(HWND hwnd) {
                     }
 
                     // Center clear hole
-                    Gdiplus::Pen holePen(Gdiplus::Color(255, 0, 140, 245), 1.0f);
+                    Gdiplus::Pen holePen(Gdiplus::Color(255, 20, 28, 44), 1.0f);
                     g.DrawEllipse(&holePen, cx - 1.6f, cy - 1.6f, 3.2f, 3.2f);
                 }
             }
@@ -1023,12 +1078,28 @@ void TopBarWindow::OnLButtonDown(HWND hwnd, int x, int y) {
         LaunchVoiceInput();
         return;
     }
-    if (PtInRect(&rc_mode_, pt)) {
-        pressed_btn_ = kBtnMode;
-        likhi::ModeIpc::Instance().ToggleMode();
-        current_mode_ = likhi::ModeIpc::Instance().GetMode();
-        PlaySoundEffect(current_mode_ == likhi::ModeTarget::kEnglish ? 2 : 1);
-        InvalidateRect(hwnd, &rc_mode_, FALSE);
+    if (PtInRect(&rc_mode_bn_, pt)) {
+        pressed_btn_ = kBtnModeBn;
+        likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kBangla);
+        current_mode_ = likhi::ModeTarget::kBangla;
+        PlaySoundEffect(1);
+        InvalidateRect(hwnd, nullptr, FALSE);
+        return;
+    }
+    if (PtInRect(&rc_mode_en_, pt)) {
+        pressed_btn_ = kBtnModeEn;
+        likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kEnglish);
+        current_mode_ = likhi::ModeTarget::kEnglish;
+        PlaySoundEffect(2);
+        InvalidateRect(hwnd, nullptr, FALSE);
+        return;
+    }
+    if (PtInRect(&rc_mode_trans_, pt)) {
+        pressed_btn_ = kBtnModeTrans;
+        likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kBanglaToEnglish);
+        current_mode_ = likhi::ModeTarget::kBanglaToEnglish;
+        PlaySoundEffect(2);
+        InvalidateRect(hwnd, nullptr, FALSE);
         return;
     }
     if (!is_collapsed_ && !is_compact_mode_) {
@@ -1091,8 +1162,12 @@ void TopBarWindow::OnMouseMove(HWND hwnd, int x, int y) {
 
     if (PtInRect(&rc_mic_, pt)) {
         new_hover = kBtnMic;
-    } else if (PtInRect(&rc_mode_, pt)) {
-        new_hover = kBtnMode;
+    } else if (PtInRect(&rc_mode_bn_, pt)) {
+        new_hover = kBtnModeBn;
+    } else if (PtInRect(&rc_mode_en_, pt)) {
+        new_hover = kBtnModeEn;
+    } else if (PtInRect(&rc_mode_trans_, pt)) {
+        new_hover = kBtnModeTrans;
     } else if (!is_collapsed_ && !is_compact_mode_) {
         if (PtInRect(&rc_pause_, pt)) {
             new_hover = kBtnPause;
@@ -2146,14 +2221,16 @@ void TopBarWindow::InitTooltips(HWND hwnd) {
         SendMessageW(hwnd_tooltip_, TTM_ADDTOOLW, 0, (LPARAM)&ti);
     };
 
-    AddTool(rc_mic_,      1, L"🎙️ বাংলা ভয়েস টাইপিং (Bangla Voice Typing) [Ctrl+Alt+V]");
-    AddTool(rc_mode_,     2, L"ভাষা পরিবর্তন (বাংলা / English) [Ctrl+Alt+Space]");
-    AddTool(rc_pause_,    3, L"সাজেশন বিরতি / চালু (Typing Mode / Suggestions)");
-    AddTool(rc_dict_,     4, L"শব্দ ম্যানেজার ও ডিকশনারি (Word Manager)");
-    AddTool(rc_osk_,      5, L"অন-স্ক্রিন কিবোর্ড (Virtual Keyboard)");
-    AddTool(rc_script_,   6, L"ইউনিকোড ⇄ বিজয় কনভার্টার (Converter)");
-    AddTool(rc_settings_, 7, L"সেটিংস ও শর্টকাট (Likhi Settings)");
-    AddTool(rc_power_,    8, L"অ্যাপ অপশন মেনু ও বন্ধ (App Menu / Exit)");
+    AddTool(rc_mic_,        1, L"🎙️ বাংলা ভয়েস টাইপিং (Bangla Voice Typing) [Ctrl+Alt+V]");
+    AddTool(rc_mode_bn_,    2, L"বাংলা মোড [১-ক্লিক সুইচ]");
+    AddTool(rc_mode_en_,    3, L"English Mode [1-Click Switch]");
+    AddTool(rc_mode_trans_, 4, L"বাংলিশ থেকে ইংরেজি অনুবাদ (Banglish -> English) [Ctrl+Alt+E]");
+    AddTool(rc_pause_,      5, L"সাজেশন বিরতি / চালু (Typing Mode / Suggestions)");
+    AddTool(rc_dict_,       6, L"শব্দ ম্যানেজার ও ডিকশনারি (Word Manager)");
+    AddTool(rc_osk_,        7, L"অন-স্ক্রিন কিবোর্ড (Virtual Keyboard)");
+    AddTool(rc_script_,     8, L"ইউনিকোড ⇄ বিজয় কনভার্টার (Converter)");
+    AddTool(rc_settings_,   9, L"সেটিংস ও শর্টকাট (Likhi Settings)");
+    AddTool(rc_power_,     10, L"অ্যাপ অপশন মেনু ও বন্ধ (App Menu / Exit)");
 }
 
 } // namespace universal

@@ -137,9 +137,10 @@ static HBRUSH hBrushCard = NULL;
 static HBRUSH hBrushActiveNav = NULL;
 static HBRUSH hBrushHoverNav = NULL;
 static HBRUSH hBrushAccent = NULL;
+static HBRUSH hBrushInput = NULL;
 
 const wchar_t* g_navLabels[SEC_COUNT] = {
-    L"  🏠  সাধারণ (General)",
+    L"  🎛️  ড্যাশবোর্ড (Dashboard)",
     L"  ⌨️  টাইপিং (Typing)",
     L"  💡  সাজেশন (Suggestions)",
     L"  🌐  বাংলিশ (Banglish)",
@@ -304,31 +305,31 @@ static void DrawModernButton(LPDRAWITEMSTRUCT pDIS, const wchar_t* text, HFONT h
 
     if (isPrimary) {
         if (isDisabled) {
-            bgColor = RGB(148, 163, 184); // Slate 400
-            textColor = RGB(241, 245, 249);
+            bgColor = RGB(71, 85, 105);
+            textColor = RGB(148, 163, 184);
             borderColor = bgColor;
         } else if (isPressed) {
-            bgColor = RGB(29, 78, 216);  // Royal Blue 700
+            bgColor = RGB(67, 56, 202);  // Deep Indigo
             textColor = RGB(255, 255, 255);
-            borderColor = bgColor;
+            borderColor = RGB(99, 102, 241);
         } else {
-            bgColor = RGB(37, 99, 235);  // Royal Blue 600
+            bgColor = RGB(79, 70, 229);  // Royal Indigo
             textColor = RGB(255, 255, 255);
-            borderColor = bgColor;
+            borderColor = RGB(99, 102, 241);
         }
     } else {
         if (isDisabled) {
-            bgColor = RGB(241, 245, 249);
-            textColor = RGB(148, 163, 184);
-            borderColor = RGB(226, 232, 240);
+            bgColor = RGB(30, 41, 59);
+            textColor = RGB(100, 116, 139);
+            borderColor = RGB(51, 65, 85);
         } else if (isPressed) {
-            bgColor = RGB(226, 232, 240); // Slate 200
-            textColor = RGB(15, 23, 42);
-            borderColor = RGB(203, 213, 225);
+            bgColor = RGB(30, 41, 59);
+            textColor = RGB(255, 255, 255);
+            borderColor = RGB(71, 85, 105);
         } else {
-            bgColor = RGB(255, 255, 255); // Crisp White
-            textColor = RGB(30, 41, 59);  // Slate 800
-            borderColor = RGB(203, 213, 225); // Slate 300
+            bgColor = RGB(51, 65, 85);   // Elevated Slate
+            textColor = RGB(241, 245, 249);
+            borderColor = RGB(71, 85, 105);
         }
     }
 
@@ -388,13 +389,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             hFontCredit = CreateFontW(-15, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
             hFontBtn = CreateFontW(-12, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Nirmala UI");
 
-            // Color Palette
-            hBrushBg = CreateSolidBrush(RGB(248, 250, 252));        // Light surface
-            hBrushSidebar = CreateSolidBrush(RGB(241, 245, 249));   // Soft sidebar blue-gray
-            hBrushCard = CreateSolidBrush(RGB(255, 255, 255));      // Pure white card
-            hBrushActiveNav = CreateSolidBrush(RGB(37, 99, 235));   // Royal Blue
-            hBrushHoverNav = CreateSolidBrush(RGB(226, 232, 240));   // Soft hover
-            hBrushAccent = CreateSolidBrush(RGB(14, 165, 233));      // Cyan accent
+            // Color Palette - Likhi Midnight Obsidian & Royal Indigo Theme
+            hBrushBg = CreateSolidBrush(RGB(15, 23, 42));         // #0F172A Deep Slate 900
+            hBrushSidebar = CreateSolidBrush(RGB(17, 24, 39));    // #111827 Midnight Navy
+            hBrushCard = CreateSolidBrush(RGB(30, 41, 59));       // #1E293B Elevated Slate Glass
+            hBrushInput = CreateSolidBrush(RGB(15, 23, 42));      // #0F172A Dark Input
+            hBrushActiveNav = CreateSolidBrush(RGB(79, 70, 229)); // #4F46E5 Royal Indigo
+            hBrushHoverNav = CreateSolidBrush(RGB(30, 41, 59));    // #1E293B
+            hBrushAccent = CreateSolidBrush(RGB(16, 185, 129));   // #10B981 Emerald Accent
+
+            // Enable Immersive Dark Mode for window frame on Windows 10/11
+            BOOL darkMode = TRUE;
+            DwmSetWindowAttribute(hWnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &darkMode, sizeof(darkMode));
 
             // ==============================================================
             // OWNER-DRAWN SIDEBAR NAVIGATION BUTTONS
@@ -410,37 +416,38 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
             // ==============================================================
             // ==============================================================
-            // SECTION 0: GENERAL
+            // SECTION 0: SMART DASHBOARD & CONTROL CENTER
             // ==============================================================
-            HWND hG_Title = CreateWindowW(L"STATIC", L"Likhi — সাধারণ পছন্দসমূহ", WS_CHILD | SS_LEFT, 265, 30, 510, 32, hWnd, NULL, NULL, NULL);
+            HWND hG_Title = CreateWindowW(L"STATIC", L"Likhi — স্মার্ট কন্ট্রোল সেন্টার ও ড্যাশবোর্ড", WS_CHILD | SS_LEFT, 265, 26, 510, 32, hWnd, NULL, NULL, NULL);
             SendMessage(hG_Title, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
 
-            HWND hG_Status = CreateWindowW(L"STATIC", L"🟢 Likhi স্ট্যাটাস: সক্রিয় ও প্রস্তুত (Active & Ready)", WS_CHILD | SS_LEFT, 265, 75, 510, 28, hWnd, NULL, NULL, NULL);
+            HWND hG_Status = CreateWindowW(L"STATIC", L"🟢 লাইভ ইঞ্জিন সক্রিয় • Zero Latency (0.2ms) • ৮৬,০০০+ শব্দভাণ্ডার প্রস্তুত", WS_CHILD | SS_LEFT, 265, 68, 510, 26, hWnd, NULL, NULL, NULL);
             SendMessage(hG_Status, WM_SETFONT, (WPARAM)hFontBold, TRUE);
 
-            HWND hChkLikhi = CreateWindowW(L"BUTTON", L"Likhi টাইপিং ইঞ্জিন সক্রিয় রাখুন (Enable Likhi Service)", WS_CHILD | BS_AUTOCHECKBOX, 265, 115, 510, 28, hWnd, (HMENU)IDC_CHK_ENABLE_LIKHI, NULL, NULL);
+            HWND hChkLikhi = CreateWindowW(L"BUTTON", L"Likhi টাইপিং ইঞ্জিন সক্রিয় রাখুন (Enable Engine)", WS_CHILD | BS_AUTOCHECKBOX, 265, 102, 510, 26, hWnd, (HMENU)IDC_CHK_ENABLE_LIKHI, NULL, NULL);
             SendMessage(hChkLikhi, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkLikhi, BM_SETCHECK, g_settings.enable_likhi ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hChkStart = CreateWindowW(L"BUTTON", L"উইন্ডোজ চালুর সাথে Likhi চালু করুন (Start with Windows)", WS_CHILD | BS_AUTOCHECKBOX, 265, 155, 510, 28, hWnd, (HMENU)IDC_CHK_STARTUP, NULL, NULL);
+            HWND hChkStart = CreateWindowW(L"BUTTON", L"উইন্ডোজ চালুর সাথে Likhi ব্যাকগ্রাউন্ডে চালু করুন (Start with Windows)", WS_CHILD | BS_AUTOCHECKBOX, 265, 136, 510, 26, hWnd, (HMENU)IDC_CHK_STARTUP, NULL, NULL);
             SendMessage(hChkStart, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkStart, BM_SETCHECK, g_settings.launch_startup ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hChkAutoUpd = CreateWindowW(L"BUTTON", L"স্বয়ংক্রিয়ভাবে নতুন আপডেট পরীক্ষা করুন (Auto Check for Updates)", WS_CHILD | BS_AUTOCHECKBOX, 265, 195, 510, 28, hWnd, (HMENU)IDC_CHK_AUTO_UPDATE, NULL, NULL);
+            HWND hChkAutoUpd = CreateWindowW(L"BUTTON", L"স্বয়ংক্রিয়ভাবে নতুন আপডেট পরীক্ষা করুন (Auto Check Updates)", WS_CHILD | BS_AUTOCHECKBOX, 265, 170, 510, 26, hWnd, (HMENU)IDC_CHK_AUTO_UPDATE, NULL, NULL);
             SendMessage(hChkAutoUpd, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkAutoUpd, BM_SETCHECK, g_settings.auto_check_update ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hBtnShowTopBar = CreateWindowW(L"BUTTON", L"🪟 টপবার খুলুন (Open TopBar)", WS_CHILD | BS_OWNERDRAW, 265, 235, 255, 36, hWnd, (HMENU)IDC_BTN_SHOW_TOPBAR, NULL, NULL);
-            HWND hBtnResetTopBar = CreateWindowW(L"BUTTON", L"🔄 টপবার রিসেট (Reset)", WS_CHILD | BS_OWNERDRAW, 528, 235, 247, 36, hWnd, (HMENU)IDC_BTN_RESET_TOPBAR, NULL, NULL);
+            // Floating TopBar Quick Launch & Reset buttons
+            HWND hBtnShowTopBar = CreateWindowW(L"BUTTON", L"🪟 টপবার স্ক্রিনে আনুন (Show TopBar)", WS_CHILD | BS_OWNERDRAW, 265, 210, 255, 38, hWnd, (HMENU)IDC_BTN_SHOW_TOPBAR, NULL, NULL);
+            HWND hBtnResetTopBar = CreateWindowW(L"BUTTON", L"🔄 মাঝখানে রিসেট করুন (Reset Center)", WS_CHILD | BS_OWNERDRAW, 528, 210, 247, 38, hWnd, (HMENU)IDC_BTN_RESET_TOPBAR, NULL, NULL);
 
-            HWND hChkAlwaysTopBar = CreateWindowW(L"BUTTON", L"টপবার সর্বদা স্ক্রিনে দৃশ্যমান রাখুন (Auto-Hide বন্ধ রাখুন)", WS_CHILD | BS_AUTOCHECKBOX, 265, 278, 510, 26, hWnd, (HMENU)IDC_CHK_ALWAYS_TOPBAR, NULL, NULL);
+            HWND hChkAlwaysTopBar = CreateWindowW(L"BUTTON", L"টপবার সর্বদা স্ক্রিনে দৃশ্যমান রাখুন (Auto-Hide বন্ধ রাখুন)", WS_CHILD | BS_AUTOCHECKBOX, 265, 258, 510, 26, hWnd, (HMENU)IDC_CHK_ALWAYS_TOPBAR, NULL, NULL);
             SendMessage(hChkAlwaysTopBar, WM_SETFONT, (WPARAM)hFontBody, TRUE);
             SendMessage(hChkAlwaysTopBar, BM_SETCHECK, !g_settings.topbar_autohide ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            HWND hG_ModeCard = CreateWindowW(L"STATIC", L"💡 কণ্ঠ-এর মতো স্বাধীন অ্যাপ ও ট্রে মোড (Standalone Icon Mode):\nLikhi নোটিফিকেশন ট্রে ও টপবারে সম্পূর্ণ স্বাধীনভাবে চলে। উইন্ডোজের Win+Space কীবোর্ড তালিকা থেকে Likhi সরিয়ে ক্লিন ট্রে আইকন মোডে রাখতে নিচের বাটনটি চাপুন।", WS_CHILD | SS_LEFT, 265, 312, 510, 52, hWnd, NULL, NULL, NULL);
+            HWND hG_ModeCard = CreateWindowW(L"STATIC", L"💡 স্বতন্ত্র নোটিফিকেশন ট্রে ও টপবার কন্ট্রোল সেন্টার:\nLikhi সম্পূর্ণ ব্যাকগ্রাউন্ডে স্বাধীনভাবে চলে। উইন্ডোজের Win+Space কীবোর্ড তালিকা থেকে Likhi সরিয়ে ক্লিন ট্রে আইকন মোডে রাখতে নিচের বাটনটি চাপুন।", WS_CHILD | SS_LEFT, 265, 296, 510, 48, hWnd, NULL, NULL, NULL);
             SendMessage(hG_ModeCard, WM_SETFONT, (WPARAM)hFontSub, TRUE);
 
-            HWND hBtnRemoveTsf = CreateWindowW(L"BUTTON", L"🧹 উইন্ডোজ কীবোর্ড লেআউট তালিকা থেকে সরান (Remove Layout)", WS_CHILD | BS_OWNERDRAW, 265, 370, 510, 36, hWnd, (HMENU)IDC_BTN_REMOVE_TSF, NULL, NULL);
+            HWND hBtnRemoveTsf = CreateWindowW(L"BUTTON", L"🧹 উইন্ডোজ কীবোর্ড লেআউট তালিকা থেকে সরান (Clean Layout)", WS_CHILD | BS_OWNERDRAW, 265, 354, 510, 36, hWnd, (HMENU)IDC_BTN_REMOVE_TSF, NULL, NULL);
 
             g_section_controls[SEC_GENERAL].push_back(hG_Title);
             g_section_controls[SEC_GENERAL].push_back(hG_Status);
@@ -728,10 +735,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     SetTextColor(hdc, RGB(255, 255, 255));
                 } else if (pDIS->itemState & ODS_SELECTED) {
                     FillRect(hdc, &rc, hBrushHoverNav);
-                    SetTextColor(hdc, RGB(37, 99, 235));
+                    SetTextColor(hdc, RGB(165, 180, 252));
                 } else {
                     FillRect(hdc, &rc, hBrushSidebar);
-                    SetTextColor(hdc, RGB(51, 65, 85));
+                    SetTextColor(hdc, RGB(148, 163, 184));
                 }
 
                 SetBkMode(hdc, TRANSPARENT);
@@ -802,23 +809,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 DrawIconEx(hdc, 18, 18, hAppIcon, 48, 48, 0, NULL, DI_NORMAL);
             }
             SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(30, 58, 138)); // Deep Royal Blue
+            SetTextColor(hdc, RGB(248, 250, 252)); // High-contrast White
             SelectObject(hdc, hFontTitle);
             TextOutW(hdc, 76, 18, L"Likhi (লিখি)", 12);
 
-            SetTextColor(hdc, RGB(100, 116, 139));
+            SetTextColor(hdc, RGB(148, 163, 184)); // Slate 400
             SelectObject(hdc, hFontSub);
             TextOutW(hdc, 76, 46, L"বাংলা লিখুন, সহজেই।", 19);
 
             // 4. Draw Vertical Divider
-            HPEN hPenDivider = CreatePen(PS_SOLID, 1, RGB(226, 232, 240));
+            HPEN hPenDivider = CreatePen(PS_SOLID, 1, RGB(30, 41, 59));
             SelectObject(hdc, hPenDivider);
             MoveToEx(hdc, 235, 0, NULL);
             LineTo(hdc, 235, rcClient.bottom);
             DeleteObject(hPenDivider);
 
             // 5. Draw Content Card Area (Modern rounded card)
-            HPEN hPenCard = CreatePen(PS_SOLID, 1, RGB(226, 232, 240));
+            HPEN hPenCard = CreatePen(PS_SOLID, 1, RGB(51, 65, 85));
             HBRUSH hOldBr = (HBRUSH)SelectObject(hdc, hBrushCard);
             HPEN hOldPen = (HPEN)SelectObject(hdc, hPenCard);
             RoundRect(hdc, 245, 15, 815, 475, 12, 12);
@@ -833,6 +840,41 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
             EndPaint(hWnd, &ps);
             break;
+        }
+
+        case WM_CTLCOLORSTATIC: {
+            HDC hdcStatic = (HDC)wParam;
+            HWND hCtrl = (HWND)lParam;
+            SetBkMode(hdcStatic, TRANSPARENT);
+            if (hCtrl == hLblStatus) {
+                SetTextColor(hdcStatic, RGB(148, 163, 184));
+                return (INT_PTR)hBrushBg;
+            }
+            SetTextColor(hdcStatic, RGB(241, 245, 249));
+            return (INT_PTR)hBrushCard;
+        }
+
+        case WM_CTLCOLOREDIT: {
+            HDC hdcEdit = (HDC)wParam;
+            SetBkMode(hdcEdit, OPAQUE);
+            SetBkColor(hdcEdit, RGB(15, 23, 42));
+            SetTextColor(hdcEdit, RGB(255, 255, 255));
+            return (INT_PTR)hBrushInput;
+        }
+
+        case WM_CTLCOLORLISTBOX: {
+            HDC hdcLb = (HDC)wParam;
+            SetBkMode(hdcLb, OPAQUE);
+            SetBkColor(hdcLb, RGB(15, 23, 42));
+            SetTextColor(hdcLb, RGB(241, 245, 249));
+            return (INT_PTR)hBrushInput;
+        }
+
+        case WM_CTLCOLORBTN: {
+            HDC hdcBtn = (HDC)wParam;
+            SetBkMode(hdcBtn, TRANSPARENT);
+            SetTextColor(hdcBtn, RGB(241, 245, 249));
+            return (INT_PTR)hBrushCard;
         }
 
         case WM_COMMAND: {
@@ -1215,25 +1257,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         }
 
-        case WM_CTLCOLORSTATIC: {
-            HDC hdc = (HDC)wParam;
-            HWND hCtl = (HWND)lParam;
-            SetBkMode(hdc, TRANSPARENT);
-            
-            // Check if the control is the status label on the bottom bar
-            if (hCtl == hLblStatus) {
-                SetTextColor(hdc, RGB(71, 85, 105)); // Slate 600
-                return (LRESULT)hBrushBg;
-            }
 
-            // Highlight credit in Royal Blue
-            if (GetDlgCtrlID(hCtl) == 0 && g_active_section == SEC_ABOUT) {
-                SetTextColor(hdc, RGB(2, 132, 199)); // Bright Sky Blue
-            } else {
-                SetTextColor(hdc, RGB(30, 41, 59));
-            }
-            return (LRESULT)hBrushCard;
-        }
 
         case WM_DESTROY:
             if (hFontTitle) DeleteObject(hFontTitle);
@@ -1249,6 +1273,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (hBrushActiveNav) DeleteObject(hBrushActiveNav);
             if (hBrushHoverNav) DeleteObject(hBrushHoverNav);
             if (hBrushAccent) DeleteObject(hBrushAccent);
+            if (hBrushInput) DeleteObject(hBrushInput);
             PostQuitMessage(0);
             break;
 
@@ -1296,7 +1321,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wcex.hInstance = hInstance;
     wcex.hIcon = hIconBig;
     wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wcex.hbrBackground = CreateSolidBrush(RGB(248, 250, 252));
+    wcex.hbrBackground = CreateSolidBrush(RGB(15, 23, 42));
     wcex.lpszClassName = L"LikhiFluentSettingsClass";
     wcex.hIconSm = hIconSm;
 

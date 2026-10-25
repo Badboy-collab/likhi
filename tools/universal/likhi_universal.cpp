@@ -1109,21 +1109,41 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
         return 0;
     }
     if (message == likhi::ModeIpc::GetShowTopBarMessage()) {
+        int screen_w = GetSystemMetrics(SM_CXSCREEN);
+        g_topbar_x = (screen_w - 262) / 2;
+        g_topbar_y = 12;
+        g_topbar.SetPosition(g_topbar_x, g_topbar_y);
         g_show_topbar = true;
         g_topbar.Show(true);
         g_topbar.ExpandBar();
         g_topbar.SetAutoHide(false);
         g_topbar.SaveCoordinates();
+        HWND hTopBar = g_topbar.GetHwnd();
+        if (hTopBar) {
+            SetWindowPos(hTopBar, HWND_TOPMOST, g_topbar_x, g_topbar_y, 262, 24, SWP_SHOWWINDOW);
+            ShowWindow(hTopBar, SW_SHOWNORMAL);
+            BringWindowToTop(hTopBar);
+            SetForegroundWindow(hTopBar);
+        }
         return 0;
     }
     if (message == likhi::ModeIpc::GetResetTopBarMessage()) {
         int screen_w = GetSystemMetrics(SM_CXSCREEN);
-        g_topbar.SetPosition((screen_w - 266) / 2, 10);
+        g_topbar_x = (screen_w - 262) / 2;
+        g_topbar_y = 12;
+        g_topbar.SetPosition(g_topbar_x, g_topbar_y);
         g_show_topbar = true;
         g_topbar.Show(true);
         g_topbar.ExpandBar();
         g_topbar.SetAutoHide(false);
         g_topbar.SaveCoordinates();
+        HWND hTopBar = g_topbar.GetHwnd();
+        if (hTopBar) {
+            SetWindowPos(hTopBar, HWND_TOPMOST, g_topbar_x, g_topbar_y, 262, 24, SWP_SHOWWINDOW);
+            ShowWindow(hTopBar, SW_SHOWNORMAL);
+            BringWindowToTop(hTopBar);
+            SetForegroundWindow(hTopBar);
+        }
         return 0;
     }
 
@@ -1310,11 +1330,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command_line, int) {
         if (hRunning) {
             PostMessageW(hRunning, likhi::ModeIpc::GetShowTopBarMessage(), 0, 0);
         }
-        HWND hTopBar = FindWindowW(L"LikhiFloatingTopBar", L"Likhi TopBar");
+        HWND hTopBar = FindWindowW(L"LikhiFloatingTopBar", nullptr);
         if (hTopBar) {
+            int screen_w = GetSystemMetrics(SM_CXSCREEN);
             PostMessageW(hTopBar, likhi::ModeIpc::GetShowTopBarMessage(), 0, 0);
-            ShowWindow(hTopBar, SW_SHOW);
-            SetWindowPos(hTopBar, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+            SetWindowPos(hTopBar, HWND_TOPMOST, (screen_w - 262) / 2, 12, 262, 24, SWP_SHOWWINDOW);
+            ShowWindow(hTopBar, SW_SHOWNORMAL);
+            BringWindowToTop(hTopBar);
+            SetForegroundWindow(hTopBar);
         }
         if (g_engine) BanglaEngine_Destroy(g_engine);
         if (single) CloseHandle(single);
@@ -1409,10 +1432,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command_line, int) {
     });
     int screen_w = GetSystemMetrics(SM_CXSCREEN);
     if (g_topbar_x < 0 || g_topbar_x > screen_w - 50) {
-        g_topbar_x = (screen_w - 242) / 2;
+        g_topbar_x = (screen_w - 262) / 2;
     }
-    if (g_topbar_y < 0 || g_topbar_y > 100) {
-        g_topbar_y = 6;
+    if (g_topbar_y < 6 || g_topbar_y > 100) {
+        g_topbar_y = 12;
     }
     // If Kontho is active at the screen top, position Likhi right below it so both are visible
     HWND hKontho = FindWindowW(nullptr, L"Nms Voice pad");
