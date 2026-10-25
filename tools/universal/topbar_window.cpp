@@ -19,8 +19,8 @@ namespace {
 
 const wchar_t kTopBarClassName[] = L"LikhiFloatingTopBar";
 const UINT_PTR kTimerAutoHide = 101;
-const int kNormalWidth = 260;
-const int kCollapsedWidth = 154;
+const int kNormalWidth = 262;
+const int kCollapsedWidth = 160;
 const int kNormalHeight = 24;
 
 std::wstring GetAppDataPath() {
@@ -227,8 +227,7 @@ void TypeUnicodeText(const std::wstring& text) {
 
 TopBarWindow::ButtonId TopBarWindow::HitTestButton(POINT pt) const {
     if (PtInRect(&rc_mic_, pt)) return kBtnMic;
-    if (PtInRect(&rc_mode_bn_, pt)) return kBtnModeBn;
-    if (PtInRect(&rc_mode_en_, pt)) return kBtnModeEn;
+    if (PtInRect(&rc_mode_pill_, pt)) return kBtnModePill;
     if (PtInRect(&rc_mode_trans_, pt)) return kBtnModeTrans;
     if (!is_collapsed_ && !is_compact_mode_) {
         if (PtInRect(&rc_pause_, pt)) return kBtnPause;
@@ -267,17 +266,16 @@ TopBarWindow::TopBarWindow()
       font_bengali_small_(nullptr),
       font_english_small_(nullptr) {
 
-    // Likhi Red/Orange Theme (w=260, h=24)
-    rc_mic_        = {2,   1, 26,  23}; // w: 24, h: 22
-    rc_mode_bn_    = {28,  2, 60,  22}; // w: 32, h: 20 [বাং]
-    rc_mode_en_    = {61,  2, 92,  22}; // w: 31, h: 20 [EN]
-    rc_mode_trans_ = {93,  2, 127, 22}; // w: 34, h: 20 [🌐 অনুবাদ]
-    rc_pause_      = {129, 1, 149, 23}; // w: 20, h: 22
-    rc_dict_       = {150, 1, 170, 23}; // w: 20, h: 22
-    rc_osk_        = {171, 1, 191, 23}; // w: 20, h: 22
-    rc_script_     = {192, 1, 212, 23}; // w: 20, h: 22
-    rc_settings_   = {213, 1, 233, 23}; // w: 20, h: 22
-    rc_power_      = {234, 1, 258, 23}; // w: 24, h: 22
+    // Soft Sky Blue Theme (w=262, h=24)
+    rc_mic_        = {2,   1, 24,  23}; // w: 22, h: 22
+    rc_mode_pill_  = {26,  2, 102, 22}; // w: 76, h: 20 [English] / [বাংলা]
+    rc_mode_trans_ = {105, 1, 129, 23}; // w: 24, h: 22 [🌐]
+    rc_pause_      = {131, 1, 151, 23}; // w: 20, h: 22
+    rc_dict_       = {152, 1, 172, 23}; // w: 20, h: 22
+    rc_osk_        = {173, 1, 193, 23}; // w: 20, h: 22
+    rc_script_     = {194, 1, 214, 23}; // w: 20, h: 22
+    rc_settings_   = {215, 1, 235, 23}; // w: 20, h: 22
+    rc_power_      = {237, 1, 260, 23}; // w: 23, h: 22
 }
 
 TopBarWindow::~TopBarWindow() {
@@ -297,10 +295,10 @@ bool TopBarWindow::Initialize(HINSTANCE hInstance, HWND parentHwnd) {
     wc.lpszClassName = kTopBarClassName;
     RegisterClassExW(&wc);
 
-    // Initial positioning at top center of primary monitor
+    LoadCoordinates();
     int screen_w = GetSystemMetrics(SM_CXSCREEN);
     int screen_h = GetSystemMetrics(SM_CYSCREEN);
-    if (pos_x_ < 0 || pos_x_ > screen_w - 50) {
+    if (pos_x_ < -50 || pos_x_ > screen_w - 30) {
         pos_x_ = (screen_w - width_) / 2;
     }
     if (normal_y_ < 6 || normal_y_ > screen_h - 40) {
@@ -451,18 +449,17 @@ void TopBarWindow::GetPosition(int& x, int& y) const {
 
 void TopBarWindow::SetDockPosition(DockPosition pos) {
     dock_pos_ = pos;
-    auto_hide_enabled_ = true;
     int screen_w = GetSystemMetrics(SM_CXSCREEN);
     if (dock_pos_ == kDockRight) {
         pos_x_ = screen_w - width_;
         if (normal_y_ < 20 || normal_y_ > 400) normal_y_ = 50;
         pos_y_ = normal_y_;
-    } else {
-        pos_x_ = (screen_w - width_) / 2;
-        normal_y_ = 6;
-        pos_y_ = 6;
+        if (hwnd_) {
+            SetWindowPos(hwnd_, HWND_TOPMOST, pos_x_, pos_y_, width_, height_,
+                         SWP_NOSIZE | SWP_NOACTIVATE);
+        }
     }
-    ExpandToFull();
+    // If dock_pos_ == kDockTop, keep custom user position!
     SaveCoordinates();
 }
 
@@ -494,16 +491,15 @@ void TopBarWindow::ExpandToFull() {
         pos_x_ = screen_w - width_;
     }
 
-    rc_mic_        = {2,   1, 26,  23}; // w: 24, h: 22
-    rc_mode_bn_    = {28,  2, 60,  22}; // w: 32, h: 20 [বাং]
-    rc_mode_en_    = {61,  2, 92,  22}; // w: 31, h: 20 [EN]
-    rc_mode_trans_ = {93,  2, 127, 22}; // w: 34, h: 20 [🌐 অনুবাদ]
-    rc_pause_      = {129, 1, 149, 23}; // w: 20, h: 22
-    rc_dict_       = {150, 1, 170, 23}; // w: 20, h: 22
-    rc_osk_        = {171, 1, 191, 23}; // w: 20, h: 22
-    rc_script_     = {192, 1, 212, 23}; // w: 20, h: 22
-    rc_settings_   = {213, 1, 233, 23}; // w: 20, h: 22
-    rc_power_      = {234, 1, 258, 23}; // w: 24, h: 22
+    rc_mic_        = {2,   1, 24,  23}; // w: 22, h: 22
+    rc_mode_pill_  = {26,  2, 102, 22}; // w: 76, h: 20 [English] / [বাংলা]
+    rc_mode_trans_ = {105, 1, 129, 23}; // w: 24, h: 22 [🌐]
+    rc_pause_      = {131, 1, 151, 23}; // w: 20, h: 22
+    rc_dict_       = {152, 1, 172, 23}; // w: 20, h: 22
+    rc_osk_        = {173, 1, 193, 23}; // w: 20, h: 22
+    rc_script_     = {194, 1, 214, 23}; // w: 20, h: 22
+    rc_settings_   = {215, 1, 235, 23}; // w: 20, h: 22
+    rc_power_      = {237, 1, 260, 23}; // w: 23, h: 22
 
     if (hwnd_) {
         HRGN rgn = CreateRoundRectRgn(0, 0, width_ + 1, height_ + 1, 6, 6);
@@ -516,17 +512,16 @@ void TopBarWindow::ExpandToFull() {
 
 void TopBarWindow::CollapseToCompact() {
     is_collapsed_ = true;
-    width_ = kCollapsedWidth; // 154px
+    width_ = kCollapsedWidth; // 160px
     height_ = kNormalHeight;
     if (normal_y_ < 6) normal_y_ = 12;
     pos_y_ = normal_y_;
 
-    // The 4 essential buttons ALWAYS stay visible!
-    rc_mic_        = {2,   1, 26,  23};
-    rc_mode_bn_    = {28,  2, 60,  22};
-    rc_mode_en_    = {61,  2, 92,  22};
-    rc_mode_trans_ = {93,  2, 127, 22};
-    rc_power_      = {129, 1, 152, 23}; // displays '>>' to expand
+    // Essential buttons ALWAYS stay visible!
+    rc_mic_        = {2,   1, 24,  23};
+    rc_mode_pill_  = {26,  2, 102, 22};
+    rc_mode_trans_ = {105, 1, 129, 23};
+    rc_power_      = {132, 1, 158, 23}; // displays '>>' to expand
 
     // Secondary tools hide horizontally into the bar!
     rc_pause_      = {0, 0, 0, 0};
@@ -541,6 +536,53 @@ void TopBarWindow::CollapseToCompact() {
         SetWindowPos(hwnd_, HWND_TOPMOST, pos_x_, pos_y_, width_, height_,
                      SWP_NOACTIVATE | SWP_SHOWWINDOW);
         InvalidateRect(hwnd_, nullptr, TRUE);
+    }
+}
+
+void TopBarWindow::LoadCoordinates() {
+    std::wstring app_data = GetAppDataPath();
+    if (app_data.empty()) return;
+
+    std::wstring path = app_data + L"\\settings.json";
+    std::ifstream in(path.c_str());
+    if (!in) return;
+    std::stringstream ss;
+    ss << in.rdbuf();
+    std::string content = ss.str();
+
+    auto parse_int = [&](const std::string& key) -> int {
+        size_t p = content.find("\"" + key + "\":");
+        if (p == std::string::npos) return -9999;
+        size_t colon = content.find(':', p);
+        if (colon == std::string::npos) return -9999;
+        size_t start = content.find_first_of("-0123456789", colon);
+        if (start == std::string::npos) return -9999;
+        return std::stoi(content.substr(start));
+    };
+
+    int x = parse_int("topbar_x");
+    int y = parse_int("topbar_y");
+    int screen_w = GetSystemMetrics(SM_CXSCREEN);
+    int screen_h = GetSystemMetrics(SM_CYSCREEN);
+
+    if (x >= -50 && x <= screen_w - 30) {
+        pos_x_ = x;
+    }
+    if (y >= 0 && y <= screen_h - 40) {
+        normal_y_ = y;
+        pos_y_ = y;
+    }
+
+    if (content.find("\"topbar_autohide\": false") != std::string::npos) {
+        auto_hide_enabled_ = false;
+    } else if (content.find("\"topbar_autohide\": true") != std::string::npos) {
+        auto_hide_enabled_ = true;
+    }
+
+    if (content.find("\"show_topbar\": false") != std::string::npos) {
+        is_visible_ = false;
+    } else if (content.find("\"show_topbar\": true") != std::string::npos) {
+        is_visible_ = true;
     }
 }
 
@@ -833,71 +875,65 @@ void TopBarWindow::OnPaint(HWND hwnd) {
                 g.DrawLine(&whitePen, cx - 3.0f, cy + 7.2f, cx + 3.0f, cy + 7.2f);
             }
 
-            // 2. Segmented Mode Controls ([বাং], [EN], [বা⇄En]) - Zero 3-click cycling!
+            // 2. Pure White Language Capsule Pill ([English] / [বাংলা]) & Translation Icon ([🌐])
             {
-                // Container background for segmented bar
-                Gdiplus::RectF segContRc(
-                    (float)rc_mode_bn_.left - 1.0f, (float)rc_mode_bn_.top - 1.0f,
-                    (float)(rc_mode_trans_.right - rc_mode_bn_.left + 2.0f),
-                    (float)(rc_mode_bn_.bottom - rc_mode_bn_.top + 2.0f)
-                );
-                Gdiplus::SolidBrush segBgBrush(Gdiplus::Color(90, 100, 10, 25));
-                Gdiplus::Pen segBorderPen(Gdiplus::Color(90, 255, 255, 255), 1.0f);
-                Gdiplus::GraphicsPath segPath;
-                segPath.AddArc(segContRc.X, segContRc.Y, 4.0f, 4.0f, 180, 90);
-                segPath.AddArc(segContRc.GetRight() - 4.0f, segContRc.Y, 4.0f, 4.0f, 270, 90);
-                segPath.AddArc(segContRc.GetRight() - 4.0f, segContRc.GetBottom() - 4.0f, 4.0f, 4.0f, 0, 90);
-                segPath.AddArc(segContRc.X, segContRc.GetBottom() - 4.0f, 4.0f, 4.0f, 90, 90);
-                segPath.CloseFigure();
-                g.FillPath(&segBgBrush, &segPath);
-                g.DrawPath(&segBorderPen, &segPath);
+                // A. Language Pill (rc_mode_pill_)
+                Gdiplus::RectF pillRc((float)rc_mode_pill_.left, (float)rc_mode_pill_.top,
+                                      (float)(rc_mode_pill_.right - rc_mode_pill_.left),
+                                      (float)(rc_mode_pill_.bottom - rc_mode_pill_.top));
+                Gdiplus::GraphicsPath pPath;
+                float radius = 4.0f;
+                pPath.AddArc(pillRc.X, pillRc.Y, radius * 2, radius * 2, 180, 90);
+                pPath.AddArc(pillRc.GetRight() - radius * 2, pillRc.Y, radius * 2, radius * 2, 270, 90);
+                pPath.AddArc(pillRc.GetRight() - radius * 2, pillRc.GetBottom() - radius * 2, radius * 2, radius * 2, 0, 90);
+                pPath.AddArc(pillRc.X, pillRc.GetBottom() - radius * 2, radius * 2, radius * 2, 90, 90);
+                pPath.CloseFigure();
 
-                auto DrawPill = [&](const RECT& r, bool active, ButtonId btnId,
-                                    COLORREF activeTop, COLORREF activeBottom,
-                                    const wchar_t* label, HFONT hFont) {
-                    Gdiplus::RectF pillRc((float)r.left, (float)r.top, (float)(r.right - r.left), (float)(r.bottom - r.top));
-                    Gdiplus::GraphicsPath pPath;
-                    float radius = 3.0f;
-                    pPath.AddArc(pillRc.X, pillRc.Y, radius * 2, radius * 2, 180, 90);
-                    pPath.AddArc(pillRc.GetRight() - radius * 2, pillRc.Y, radius * 2, radius * 2, 270, 90);
-                    pPath.AddArc(pillRc.GetRight() - radius * 2, pillRc.GetBottom() - radius * 2, radius * 2, radius * 2, 0, 90);
-                    pPath.AddArc(pillRc.X, pillRc.GetBottom() - radius * 2, radius * 2, radius * 2, 90, 90);
-                    pPath.CloseFigure();
+                COLORREF pillBgColor = (hovered_btn_ == kBtnModePill) ? RGB(241, 245, 249) : RGB(255, 255, 255);
+                if (pressed_btn_ == kBtnModePill) pillBgColor = RGB(226, 232, 240);
+                Gdiplus::SolidBrush pillBg(Gdiplus::Color(255, GetRValue(pillBgColor), GetGValue(pillBgColor), GetBValue(pillBgColor)));
+                g.FillPath(&pillBg, &pPath);
+                Gdiplus::Pen pillBorder(Gdiplus::Color(140, 255, 255, 255), 1.0f);
+                g.DrawPath(&pillBorder, &pPath);
 
-                    if (active) {
-                        Gdiplus::LinearGradientBrush pBrush(
-                            pillRc,
-                            Gdiplus::Color(255, GetRValue(activeTop), GetGValue(activeTop), GetBValue(activeTop)),
-                            Gdiplus::Color(255, GetRValue(activeBottom), GetGValue(activeBottom), GetBValue(activeBottom)),
-                            Gdiplus::LinearGradientModeVertical
-                        );
-                        g.FillPath(&pBrush, &pPath);
-                        Gdiplus::Pen pPen(Gdiplus::Color(180, 255, 255, 255), 1.0f);
-                        g.DrawPath(&pPen, &pPath);
-                    } else if (hovered_btn_ == btnId) {
-                        Gdiplus::SolidBrush hBrush(Gdiplus::Color(55, 255, 255, 255));
-                        g.FillPath(&hBrush, &pPath);
-                    }
+                bool is_eng = (current_mode_ == likhi::ModeTarget::kEnglish);
+                const wchar_t* mode_text = is_eng ? L"English" : L"\u09ac\u09be\u0982\u09b2\u09be";
+                HFONT hPillFont = is_eng ? font_english_ : font_bengali_;
 
-                    SelectObject(memDC, hFont);
-                    SetBkMode(memDC, TRANSPARENT);
-                    SetTextColor(memDC, active ? RGB(255, 255, 255) : (hovered_btn_ == btnId ? RGB(241, 245, 249) : RGB(254, 226, 226)));
-                    RECT tr = r;
-                    DrawTextW(memDC, label, -1, &tr, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-                };
+                SelectObject(memDC, hPillFont);
+                SetBkMode(memDC, TRANSPARENT);
+                SetTextColor(memDC, RGB(15, 23, 42)); // Crisp bold dark text
+                RECT tr = rc_mode_pill_;
+                DrawTextW(memDC, mode_text, -1, &tr, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-                bool is_bn = (current_mode_ == likhi::ModeTarget::kBangla);
-                bool is_en = (current_mode_ == likhi::ModeTarget::kEnglish);
+                // B. Separate Translation Icon Button (rc_mode_trans_)
+                float tcx = (rc_mode_trans_.left + rc_mode_trans_.right) / 2.0f;
+                float tcy = (rc_mode_trans_.top + rc_mode_trans_.bottom) / 2.0f;
                 bool is_tr = (current_mode_ == likhi::ModeTarget::kBanglaToEnglish);
 
-                // 1. [বাং] - Emerald Green (#10B981 -> #059669)
-                DrawPill(rc_mode_bn_, is_bn, kBtnModeBn, RGB(16, 185, 129), RGB(5, 150, 105), L"বাং", font_bengali_);
+                if (is_tr) {
+                    // Active translation mode: white rounded capsule background
+                    Gdiplus::RectF trRc((float)rc_mode_trans_.left, (float)rc_mode_trans_.top + 1.0f,
+                                        (float)(rc_mode_trans_.right - rc_mode_trans_.left),
+                                        (float)(rc_mode_trans_.bottom - rc_mode_trans_.top - 2.0f));
+                    Gdiplus::GraphicsPath trPath;
+                    trPath.AddArc(trRc.X, trRc.Y, 6.0f, 6.0f, 180, 90);
+                    trPath.AddArc(trRc.GetRight() - 6.0f, trRc.Y, 6.0f, 6.0f, 270, 90);
+                    trPath.AddArc(trRc.GetRight() - 6.0f, trRc.GetBottom() - 6.0f, 6.0f, 6.0f, 0, 90);
+                    trPath.AddArc(trRc.X, trRc.GetBottom() - 6.0f, 6.0f, 6.0f, 90, 90);
+                    trPath.CloseFigure();
+                    Gdiplus::SolidBrush actBrush(Gdiplus::Color(255, 255, 255, 255));
+                    g.FillPath(&actBrush, &trPath);
+                } else if (hovered_btn_ == kBtnModeTrans) {
+                    Gdiplus::SolidBrush hBrush(Gdiplus::Color(pressed_btn_ == kBtnModeTrans ? 80 : 45, 255, 255, 255));
+                    g.FillEllipse(&hBrush, tcx - 9.0f, tcy - 9.0f, 18.0f, 18.0f);
+                }
 
-                // 2. [EN] - Sapphire Royal Blue (#3B82F6 -> #1D4ED8)
-                DrawPill(rc_mode_en_, is_en, kBtnModeEn, RGB(59, 130, 246), RGB(29, 78, 216), L"EN", font_english_);
-
-                // 3. [বা⇄En] - Electric Violet / Amethyst (#8B5CF6 -> #6D28D9)
-                DrawPill(rc_mode_trans_, is_tr, kBtnModeTrans, RGB(139, 92, 246), RGB(109, 40, 217), L"বা⇄En", font_bengali_small_);
+                // Vector Globe Icon
+                Gdiplus::Pen globePen(is_tr ? Gdiplus::Color(255, 10, 130, 230) : Gdiplus::Color(255, 255, 255, 255), 1.5f);
+                g.DrawEllipse(&globePen, tcx - 6.0f, tcy - 6.0f, 12.0f, 12.0f);
+                g.DrawLine(&globePen, tcx - 6.0f, tcy, tcx + 6.0f, tcy);
+                g.DrawEllipse(&globePen, tcx - 2.8f, tcy - 6.0f, 5.6f, 12.0f);
             }
 
             if (!is_collapsed_ && !is_compact_mode_) {
@@ -1115,24 +1151,29 @@ void TopBarWindow::OnLButtonUp(HWND hwnd, int x, int y) {
         LaunchVoiceInput();
         return;
     }
-    if (clicked == kBtnModeBn) {
-        likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kBangla);
-        current_mode_ = likhi::ModeTarget::kBangla;
-        PlaySoundEffect(1);
-        InvalidateRect(hwnd, nullptr, FALSE);
-        return;
-    }
-    if (clicked == kBtnModeEn) {
-        likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kEnglish);
-        current_mode_ = likhi::ModeTarget::kEnglish;
-        PlaySoundEffect(2);
+    if (clicked == kBtnModePill) {
+        if (current_mode_ == likhi::ModeTarget::kBangla) {
+            likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kEnglish);
+            current_mode_ = likhi::ModeTarget::kEnglish;
+            PlaySoundEffect(2);
+        } else {
+            likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kBangla);
+            current_mode_ = likhi::ModeTarget::kBangla;
+            PlaySoundEffect(1);
+        }
         InvalidateRect(hwnd, nullptr, FALSE);
         return;
     }
     if (clicked == kBtnModeTrans) {
-        likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kBanglaToEnglish);
-        current_mode_ = likhi::ModeTarget::kBanglaToEnglish;
-        PlaySoundEffect(2);
+        if (current_mode_ == likhi::ModeTarget::kBanglaToEnglish) {
+            likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kBangla);
+            current_mode_ = likhi::ModeTarget::kBangla;
+            PlaySoundEffect(1);
+        } else {
+            likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kBanglaToEnglish);
+            current_mode_ = likhi::ModeTarget::kBanglaToEnglish;
+            PlaySoundEffect(2);
+        }
         InvalidateRect(hwnd, nullptr, FALSE);
         return;
     }
@@ -1196,12 +1237,13 @@ void TopBarWindow::OnMouseMove(HWND hwnd, int x, int y) {
         }
     }
 
-    // Expand immediately on mouse hover if collapsed or in compact mode
-    if (is_collapsed_ || width_ < kNormalWidth) {
-        ExpandToFull();
+    if (x >= 0 && x <= width_ && y >= 0 && y <= height_) {
+        if (is_collapsed_ || width_ < kNormalWidth) {
+            ExpandToFull();
+        }
+        is_hovered_ = true;
+        mouse_leave_time_ = 0;
     }
-    is_hovered_ = true;
-    mouse_leave_time_ = 0;
 
     POINT pt = {x, y};
     ButtonId new_hover = HitTestButton(pt);
@@ -2242,16 +2284,15 @@ void TopBarWindow::InitTooltips(HWND hwnd) {
         SendMessageW(hwnd_tooltip_, TTM_ADDTOOLW, 0, (LPARAM)&ti);
     };
 
-    AddTool(rc_mic_,        1, L"🎙️ বাংলা ভয়েস টাইপিং (Bangla Voice Typing) [Ctrl+Alt+V]");
-    AddTool(rc_mode_bn_,    2, L"বাংলা মোড [১-ক্লিক সুইচ]");
-    AddTool(rc_mode_en_,    3, L"English Mode [1-Click Switch]");
-    AddTool(rc_mode_trans_, 4, L"বাংলিশ থেকে ইংরেজি অনুবাদ (Banglish -> English) [Ctrl+Alt+E]");
-    AddTool(rc_pause_,      5, L"সাজেশন বিরতি / চালু (Typing Mode / Suggestions)");
-    AddTool(rc_dict_,       6, L"শব্দ ম্যানেজার ও ডিকশনারি (Word Manager)");
-    AddTool(rc_osk_,        7, L"অন-স্ক্রিন কিবোর্ড (Virtual Keyboard)");
-    AddTool(rc_script_,     8, L"ইউনিকোড ⇄ বিজয় কনভার্টার (Converter)");
-    AddTool(rc_settings_,   9, L"সেটিংস ও শর্টকাট (Likhi Settings)");
-    AddTool(rc_power_,     10, L"অ্যাপ অপশন মেনু ও বন্ধ (App Menu / Exit)");
+    AddTool(rc_mic_,        1, L"\u23fa \u09ac\u09be\u0982\u09b2\u09be \u09ad\u09af\u09bc\u09c7\u09b8 \u099f\u09be\u0987\u09aa\u09bf\u0982 (Bangla Voice Typing) [Ctrl+Alt+V]");
+    AddTool(rc_mode_pill_,  2, L"\u09ad\u09be\u09b7\u09be \u09aa\u09b0\u09bf\u09ac\u09b0\u09cd\u09a4\u09a8: \u09ac\u09be\u0982\u09b2\u09be \u21c4 English [Ctrl+Alt+Space]");
+    AddTool(rc_mode_trans_, 3, L"\u09ac\u09be\u0982\u09b2\u09bf\u09b6 \u2794 \u0987\u0982\u09b0\u09c7\u099c\u09bf \u0985\u09a8\u09c1\u09ac\u09be\u09a6 (Banglish to English) [Ctrl+Alt+E]");
+    AddTool(rc_pause_,      4, L"\u09b8\u09be\u099c\u09c7\u09b6\u09a8 \u09ac\u09bf\u09b0\u09a4\u09bf / \u099a\u09be\u09b2\u09c1 (Typing Mode / Suggestions)");
+    AddTool(rc_dict_,       5, L"\u09b6\u09ac\u09cd\u09a6 \u09ae\u09cd\u09af\u09be\u09a8\u09c7\u099c\u09be\u09b0 \u0993 \u09a1\u09bf\u0995\u09b6\u09a8\u09be\u09b0\u09bf (Word Manager)");
+    AddTool(rc_osk_,        6, L"\u0985\u09a8-\u09b8\u09cd\u0995\u09cd\u09b0\u09c0\u09a8 \u0995\u09bf\u09ac\u094b\u09b0\u09cd\u09a1 (Virtual Keyboard)");
+    AddTool(rc_script_,     7, L"\u0987\u0981\u0989\u09a8\u09bf\u0995\u09cb\u09a1 \u21c4 \u09ac\u09bf\u099c\u09af\u09bc \u0995\u09a8\u09ad\u09be\u09b0\u09cd\u099f\u09be\u09b0 (Converter)");
+    AddTool(rc_settings_,   8, L"\u09b8\u09c7\u099f\u09bf\u0982\u09b8 \u0993 \u09b6\u09b0\u09cd\u099f\u0995\u09be\u099f (Likhi Settings)");
+    AddTool(rc_power_,      9, L"\u0985\u09cd\u09af\u09be\u09aa \u0985\u09aa\u09b6\u09a8 \u09ae\u09c7\u09a8\u09c1 \u0993 \u09ac\u09a8\u09cd\u09a7 (App Menu / Exit)");
 }
 
 } // namespace universal

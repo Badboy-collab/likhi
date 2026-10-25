@@ -73,6 +73,7 @@ const UINT_PTR kBengaliLangId = 0x0845;
 // --- tray / window plumbing --------------------------------------------------
 const wchar_t kWindowClass[] = L"LikhiUniversalModeWindow";
 const UINT kTrayMessage = WM_APP + 1;
+const UINT kTrayPinMessage = WM_APP + 3;
 const int kHotkeyToggle = 0xA1;
 const int kHotkeyToggleConversion = 0xA2;
 const int kHotkeyToggleSpace = 0xA3;
@@ -99,7 +100,10 @@ bool g_auto_check_update = true;   // settings.json "auto_check_update" (enabled
 bool g_english_translation_enabled = true; // settings.json "english_translation"
 likhi::ConversionTarget g_conversion_target = likhi::ConversionTarget::kBangla;
 likhi::TranslationService g_translation_service;
-bool g_tray_added = false;
+bool g_tray1_added = false;
+bool g_tray2_added = false;
+HICON g_tray_hotkey_icon = nullptr;
+HICON g_tray_pin_icon = nullptr;
 likhi::universal::TopBarWindow g_topbar;
 likhi::universal::VirtualKeyboardWindow g_osk;
 bangla_tsf::CandidateWindow g_candidate_window;
@@ -203,8 +207,7 @@ void LoadSettings() {
     if (text.find("\"show_topbar\": true") != std::string::npos) g_show_topbar = true;
     if (text.find("\"topbar_autohide\": true") != std::string::npos) g_topbar.SetAutoHide(true);
     if (text.find("\"topbar_autohide\": false") != std::string::npos) g_topbar.SetAutoHide(false);
-    if (text.find("\"topbar_dock\": \"right\"") != std::string::npos) g_topbar.SetDockPosition(likhi::universal::TopBarWindow::kDockRight);
-    if (text.find("\"topbar_dock\": \"top\"") != std::string::npos) g_topbar.SetDockPosition(likhi::universal::TopBarWindow::kDockTop);
+    // Dock position kept as customized by user without 3s polling reset
     g_translation_service.SetConsentEnabled(g_english_translation_enabled);
 
     if (g_engine) BanglaEngine_SetLearningEnabled(g_engine, g_personal_learning);
@@ -975,29 +978,172 @@ void ShowTransientBadge(bool is_english) {
     SetTimer(g_badge_window, kTimerHideBadge, 1200, nullptr);
 }
 
-void UpdateTray() {
-    if (!g_window || !g_tray_added) return;
-    NOTIFYICONDATAW data = {0};
-    data.cbSize = sizeof(data);
-    data.hWnd = g_window;
-    data.uID = 1;
-    data.uFlags = NIF_TIP | NIF_ICON;
-
-    likhi::ModeTarget mode = likhi::ModeIpc::Instance().GetMode();
-    bool is_english = (mode == likhi::ModeTarget::kEnglish);
-    HICON new_icon = CreateModeIcon(mode);
-    if (new_icon) {
-        if (g_tray_icon) DestroyIcon(g_tray_icon);
-        g_tray_icon = new_icon;
-        data.hIcon = g_tray_icon;
+HICON CreateHotkeyTrayIcon() {
+    std::wstring exe_dir = ExeDir();
+    std::vector<std::wstring> candidates = {
+        exe_dir + L"\\icon.ico",
+        exe_dir + L"\\assets\\icon.ico",
+        exe_dir + L"\\..\\assets\\icon.ico",
+        L"C:\\Program Files\\Likhi\\icon.ico"
+    };
+    for (const auto& path : candidates) {
+        HICON h = (HICON)LoadImageW(nullptr, path.c_str(), IMAGE_ICON, 16, 16, LR_LOADFROMFILE);
+        if (h) return h;
     }
 
-    const wchar_t* mode_title = is_english ? L"Likhi (লিখি) — [EN] English অনুবাদ"
-                                            : L"Likhi (লিখি) — [BN] বাংলা মোড";
-    wchar_t tip[128] = {0};
-    wsprintfW(tip, L"%ls\n(ক্লিক করুন বা Ctrl+Alt+E চাপুন)", mode_title);
-    wcsncpy(data.szTip, tip, 127);
-    Shell_NotifyIconW(NIM_MODIFY, &data);
+    int cx = 16, cy = 16;
+    HDC screen_dc = GetDC(nullptr);
+    HDC mem_dc = CreateCompatibleDC(screen_dc);
+
+    BITMAPINFO bmi = {0};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = cx;
+    bmi.bmiHeader.biHeight = -cy;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* bits = nullptr;
+    HBITMAP color_bmp = CreateDIBSection(mem_dc, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!color_bmp || !bits) {
+        DeleteDC(mem_dc);
+        ReleaseDC(nullptr, screen_dc);
+        return nullptr;
+    }
+
+    HGDIOBJ old_color = SelectObject(mem_dc, color_bmp);
+    memset(bits, 0, cx * cy * 4);
+
+    COLORREF bg_color = RGB(15, 23, 42); // Deep Slate
+    HBRUSH brand_bg = CreateSolidBrush(bg_color);
+    HPEN brand_pen = CreatePen(PS_SOLID, 1, RGB(56, 189, 248)); // Cyan border
+    HGDIOBJ ob = SelectObject(mem_dc, brand_bg);
+    HGDIOBJ op = SelectObject(mem_dc, brand_pen);
+    RoundRect(mem_dc, 0, 0, cx, cy, 4, 4);
+    SelectObject(mem_dc, ob);
+    SelectObject(mem_dc, op);
+    DeleteObject(brand_bg);
+    DeleteObject(brand_pen);
+
+    SetBkMode(mem_dc, TRANSPARENT);
+    SetTextColor(mem_dc, RGB(56, 189, 248));
+    HFONT font = CreateFontW(-11, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    HGDIOBJ of = SelectObject(mem_dc, font);
+    RECT tr = {0, 0, cx, cy};
+    DrawTextW(mem_dc, L"L", -1, &tr, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    SelectObject(mem_dc, of);
+    DeleteObject(font);
+
+    GdiFlush();
+
+    uint32_t* px = static_cast<uint32_t*>(bits);
+    std::vector<uint8_t> mask_bits((((cx + 15) / 16) * 2) * cy, 0);
+    int mask_stride = ((cx + 15) / 16) * 2;
+
+    for (int y = 0; y < cy; ++y) {
+        for (int x = 0; x < cx; ++x) {
+            int idx = y * cx + x;
+            if ((px[idx] & 0x00FFFFFF) != 0) {
+                px[idx] |= 0xFF000000;
+            } else {
+                mask_bits[y * mask_stride + (x / 8)] |= (0x80 >> (x % 8));
+            }
+        }
+    }
+
+    HBITMAP mask_bmp = CreateBitmap(cx, cy, 1, 1, mask_bits.data());
+    ICONINFO ii = {0};
+    ii.fIcon = TRUE;
+    ii.hbmMask = mask_bmp;
+    ii.hbmColor = color_bmp;
+    HICON icon = CreateIconIndirect(&ii);
+
+    DeleteObject(mask_bmp);
+    SelectObject(mem_dc, old_color);
+    DeleteObject(color_bmp);
+    DeleteDC(mem_dc);
+    ReleaseDC(nullptr, screen_dc);
+    return icon;
+}
+
+void ShowLanguagePinMenu() {
+    HMENU menu = CreatePopupMenu();
+    likhi::ModeTarget m = likhi::ModeIpc::Instance().GetMode();
+    AppendMenuW(menu, MF_STRING | (m == likhi::ModeTarget::kBangla ? MF_CHECKED : 0),
+                201, L"\u09ac\u09be\u0982\u09b2\u09be (Bangla) [Ctrl+Alt+Space]");
+    AppendMenuW(menu, MF_STRING | (m == likhi::ModeTarget::kEnglish ? MF_CHECKED : 0),
+                202, L"English [Ctrl+Alt+Space]");
+    AppendMenuW(menu, MF_STRING | (m == likhi::ModeTarget::kBanglaToEnglish ? MF_CHECKED : 0),
+                203, L"\u09ac\u09be\u0982\u09b2\u09bf\u09b6 \u2794 English \u0985\u09a8\u09c1\u09ac\u09be\u09a6 [Ctrl+Alt+E]");
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, 204, g_topbar.IsVisible() ? L"\u099f\u09aa\u09ac\u09be\u09b0 \u09b2\u09c1\u0995\u09be\u09a8 (Hide TopBar)" : L"\u099f\u09aa\u09ac\u09be\u09b0 \u09a6\u09c7\u0996\u09be\u09a8 (Show TopBar)");
+
+    POINT cursor = {0};
+    GetCursorPos(&cursor);
+    SetForegroundWindow(g_window);
+    const UINT cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON,
+                                    cursor.x, cursor.y, 0, g_window, nullptr);
+    DestroyMenu(menu);
+    if (cmd == 201) {
+        likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kBangla);
+        g_topbar.UpdateMode(likhi::ModeTarget::kBangla);
+        UpdateTray();
+    } else if (cmd == 202) {
+        likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kEnglish);
+        g_topbar.UpdateMode(likhi::ModeTarget::kEnglish);
+        UpdateTray();
+    } else if (cmd == 203) {
+        likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kBanglaToEnglish);
+        g_topbar.UpdateMode(likhi::ModeTarget::kBanglaToEnglish);
+        UpdateTray();
+    } else if (cmd == 204) {
+        g_show_topbar = !g_topbar.IsVisible();
+        g_topbar.Show(g_show_topbar);
+        if (g_show_topbar) g_topbar.ExpandToFull();
+        g_topbar.SaveCoordinates();
+    }
+}
+
+void UpdateTray() {
+    if (!g_window) return;
+
+    // --- Tray 1: Likhi Hotkeys ---
+    if (g_tray1_added) {
+        NOTIFYICONDATAW data1 = {0};
+        data1.cbSize = sizeof(data1);
+        data1.hWnd = g_window;
+        data1.uID = 1;
+        data1.uFlags = NIF_TIP;
+        wcscpy_s(data1.szTip, L"Likhi (\u09b2\u09bf\u0996\u09bf) Hotkeys \u2014 [Ctrl+Alt+Space] [Ctrl+Alt+E]");
+        Shell_NotifyIconW(NIM_MODIFY, &data1);
+    }
+
+    // --- Tray 2: Likhi Language Pin ---
+    if (g_tray2_added) {
+        NOTIFYICONDATAW data2 = {0};
+        data2.cbSize = sizeof(data2);
+        data2.hWnd = g_window;
+        data2.uID = 2;
+        data2.uFlags = NIF_TIP | NIF_ICON;
+
+        likhi::ModeTarget mode = likhi::ModeIpc::Instance().GetMode();
+        HICON new_icon = CreateModeIcon(mode);
+        if (new_icon) {
+            if (g_tray_pin_icon) DestroyIcon(g_tray_pin_icon);
+            g_tray_pin_icon = new_icon;
+            data2.hIcon = g_tray_pin_icon;
+        }
+
+        const wchar_t* mode_desc = (mode == likhi::ModeTarget::kEnglish) ? L"[EN] English"
+                                 : (mode == likhi::ModeTarget::kBanglaToEnglish) ? L"[Tr] Banglish->English \u0985\u09a8\u09c1\u09ac\u09be\u09a6"
+                                 : L"[\u09ac\u09be\u0982] \u09ac\u09be\u0982\u09b2\u09be \u09ae\u09cb\u09a1";
+        wchar_t tip[128] = {0};
+        wsprintfW(tip, L"Likhi Language Pin: %ls\n(\u0995\u09cd\u09b2\u09bf\u0995 \u0995\u09b0\u09c7 \u09ad\u09be\u09b7\u09be \u09aa\u09b0\u09bf\u09ac\u09b0\u09cd\u09a4\u09a8 \u0995\u09b0\u09c1\u09a8)", mode_desc);
+        wcsncpy(data2.szTip, tip, 127);
+        Shell_NotifyIconW(NIM_MODIFY, &data2);
+    }
 }
 
 void ShowTrayMenu() {
@@ -1112,10 +1258,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
         return 0;
     }
     if (message == likhi::ModeIpc::GetShowTopBarMessage()) {
+        int cur_x = 0, cur_y = 0;
+        g_topbar.GetPosition(cur_x, cur_y);
         int screen_w = GetSystemMetrics(SM_CXSCREEN);
-        g_topbar_x = (screen_w - 262) / 2;
-        g_topbar_y = 12;
-        g_topbar.SetPosition(g_topbar_x, g_topbar_y);
+        if (cur_x < -50 || cur_x > screen_w - 30) {
+            cur_x = (screen_w - 262) / 2;
+            cur_y = 12;
+            g_topbar.SetPosition(cur_x, cur_y);
+        }
         g_show_topbar = true;
         g_topbar.Show(true);
         g_topbar.ExpandBar();
@@ -1123,7 +1273,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
         g_topbar.SaveCoordinates();
         HWND hTopBar = g_topbar.GetHwnd();
         if (hTopBar) {
-            SetWindowPos(hTopBar, HWND_TOPMOST, g_topbar_x, g_topbar_y, 262, 24, SWP_SHOWWINDOW);
+            SetWindowPos(hTopBar, HWND_TOPMOST, cur_x, cur_y, 262, 24, SWP_SHOWWINDOW);
             ShowWindow(hTopBar, SW_SHOWNORMAL);
             BringWindowToTop(hTopBar);
             SetForegroundWindow(hTopBar);
@@ -1166,19 +1316,20 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
                 g_topbar.LaunchVoiceInput();
             }
             return 0;
-        case kTrayMessage:
+        case kTrayMessage: // Tray Icon 1: Likhi Hotkeys
             if (LOWORD(lparam) == WM_LBUTTONUP) {
-                // Single left-click on tray icon: if TopBar is hidden, restore it immediately!
                 if (!g_topbar.IsVisible()) {
                     g_show_topbar = true;
                     g_topbar.Show(true);
                     g_topbar.ExpandToFull();
                     g_topbar.SaveCoordinates();
-                } else {
-                    TriggerModeToggle();
+                }
+                HWND hTb = g_topbar.GetHwnd();
+                if (hTb) {
+                    SetWindowPos(hTb, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                    SetForegroundWindow(hTb);
                 }
             } else if (LOWORD(lparam) == WM_LBUTTONDBLCLK) {
-                // Double-click toggles TopBar visibility
                 g_show_topbar = !g_topbar.IsVisible();
                 g_topbar.Show(g_show_topbar);
                 if (g_show_topbar) g_topbar.ExpandToFull();
@@ -1187,6 +1338,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
                 ShowTrayMenu();
             } else if (LOWORD(lparam) == 0x0405 /* NIN_BALLOONUSERCLICK */) {
                 likhi::UpdateService::LaunchOfficialUpdateFlow(g_latest_update_url);
+            }
+            return 0;
+        case kTrayPinMessage: // Tray Icon 2: Language Pin
+            if (LOWORD(lparam) == WM_LBUTTONUP) {
+                TriggerModeToggle();
+            } else if (LOWORD(lparam) == WM_RBUTTONUP || LOWORD(lparam) == WM_CONTEXTMENU) {
+                ShowLanguagePinMenu();
             }
             return 0;
         case kMsgUpdateCheckResult: {
@@ -1382,19 +1540,36 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command_line, int) {
             pChangeFilter(g_window, likhi::ModeIpc::GetShowTopBarMessage(), 1 /* MSGFLT_ALLOW */, nullptr);
             pChangeFilter(g_window, likhi::ModeIpc::GetResetTopBarMessage(), 1 /* MSGFLT_ALLOW */, nullptr);
             pChangeFilter(g_window, kTrayMessage, 1 /* MSGFLT_ALLOW */, nullptr);
+            pChangeFilter(g_window, kTrayPinMessage, 1 /* MSGFLT_ALLOW */, nullptr);
             pChangeFilter(g_window, WM_COMMAND, 1 /* MSGFLT_ALLOW */, nullptr);
         }
     }
 
-    NOTIFYICONDATAW tray = {0};
-    tray.cbSize = sizeof(tray);
-    tray.hWnd = g_window;
-    tray.uID = 1;
-    tray.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
-    tray.uCallbackMessage = kTrayMessage;
-    tray.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
-    wcscpy_s(tray.szTip, L"Likhi Universal Mode");
-    g_tray_added = Shell_NotifyIconW(NIM_ADD, &tray) != FALSE;
+    // Tray 1: Likhi Hotkeys
+    NOTIFYICONDATAW tray1 = {0};
+    tray1.cbSize = sizeof(tray1);
+    tray1.hWnd = g_window;
+    tray1.uID = 1;
+    tray1.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+    tray1.uCallbackMessage = kTrayMessage;
+    g_tray_hotkey_icon = CreateHotkeyTrayIcon();
+    tray1.hIcon = g_tray_hotkey_icon ? g_tray_hotkey_icon : LoadIconW(nullptr, IDI_APPLICATION);
+    wcscpy_s(tray1.szTip, L"Likhi (\u09b2\u09bf\u0996\u09bf) Hotkeys \u2014 [Ctrl+Alt+Space] [Ctrl+Alt+E]");
+    g_tray1_added = Shell_NotifyIconW(NIM_ADD, &tray1) != FALSE;
+
+    // Tray 2: Likhi Language Pin
+    NOTIFYICONDATAW tray2 = {0};
+    tray2.cbSize = sizeof(tray2);
+    tray2.hWnd = g_window;
+    tray2.uID = 2;
+    tray2.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+    tray2.uCallbackMessage = kTrayPinMessage;
+    likhi::ModeTarget initial_mode = likhi::ModeIpc::Instance().GetMode();
+    g_tray_pin_icon = CreateModeIcon(initial_mode);
+    tray2.hIcon = g_tray_pin_icon ? g_tray_pin_icon : LoadIconW(nullptr, IDI_APPLICATION);
+    wcscpy_s(tray2.szTip, L"Likhi Language Pin: [\u09ac\u09be\u0982] \u09ac\u09be\u0982\u09b2\u09be");
+    g_tray2_added = Shell_NotifyIconW(NIM_ADD, &tray2) != FALSE;
+
     UpdateTray();
     RegisterHotKey(g_window, kHotkeyToggle, MOD_CONTROL | MOD_ALT, 'L');
     RegisterHotKey(g_window, kHotkeyToggleConversion, MOD_CONTROL | MOD_ALT, 'E');
@@ -1439,24 +1614,25 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command_line, int) {
         g_topbar.UpdateMode(m);
         UpdateTray();
     });
+    int cur_x = 0, cur_y = 0;
+    g_topbar.GetPosition(cur_x, cur_y);
     int screen_w = GetSystemMetrics(SM_CXSCREEN);
-    if (g_topbar_x < 0 || g_topbar_x > screen_w - 50) {
-        g_topbar_x = (screen_w - 262) / 2;
+    if (cur_x < -50 || cur_x > screen_w - 30) {
+        cur_x = (screen_w - 262) / 2;
+        cur_y = 12;
+        g_topbar.SetPosition(cur_x, cur_y);
     }
-    if (g_topbar_y < 6 || g_topbar_y > 100) {
-        g_topbar_y = 12;
-    }
-    // If Kontho is active at the screen top, position Likhi right below it so both are visible
+    // If Kontho is active at the screen top and Likhi is at default y, shift below Kontho
     HWND hKontho = FindWindowW(nullptr, L"Nms Voice pad");
     if (!hKontho) hKontho = FindWindowW(nullptr, L"Kontho");
-    if (hKontho) {
+    if (hKontho && cur_y <= 12) {
         RECT rk = {0};
         GetWindowRect(hKontho, &rk);
         if (rk.top <= 10 && rk.bottom > 10) {
-            g_topbar_y = rk.bottom + 6;
+            cur_y = rk.bottom + 6;
+            g_topbar.SetPosition(cur_x, cur_y);
         }
     }
-    g_topbar.SetPosition(g_topbar_x, g_topbar_y);
     g_show_topbar = true;
     g_topbar.Show(true);
     g_topbar.ExpandBar();
@@ -1473,10 +1649,21 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command_line, int) {
 
     if (g_keyboard_hook) UnhookWindowsHookEx(g_keyboard_hook);
     if (g_mouse_hook) UnhookWindowsHookEx(g_mouse_hook);
-    if (g_tray_added) Shell_NotifyIconW(NIM_DELETE, &tray);
-    if (g_tray_icon) {
-        DestroyIcon(g_tray_icon);
-        g_tray_icon = nullptr;
+    if (g_tray1_added) {
+        NOTIFYICONDATAW d1 = {0}; d1.cbSize = sizeof(d1); d1.hWnd = g_window; d1.uID = 1;
+        Shell_NotifyIconW(NIM_DELETE, &d1);
+    }
+    if (g_tray2_added) {
+        NOTIFYICONDATAW d2 = {0}; d2.cbSize = sizeof(d2); d2.hWnd = g_window; d2.uID = 2;
+        Shell_NotifyIconW(NIM_DELETE, &d2);
+    }
+    if (g_tray_hotkey_icon) {
+        DestroyIcon(g_tray_hotkey_icon);
+        g_tray_hotkey_icon = nullptr;
+    }
+    if (g_tray_pin_icon) {
+        DestroyIcon(g_tray_pin_icon);
+        g_tray_pin_icon = nullptr;
     }
     g_candidate_window.Destroy();
     g_osk.Destroy();

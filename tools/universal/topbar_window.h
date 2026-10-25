@@ -27,6 +27,7 @@ public:
 
     void SetPosition(int x, int y);
     void GetPosition(int& x, int& y) const;
+    void LoadCoordinates();
     void SaveCoordinates();
 
     enum DockPosition {
@@ -37,9 +38,8 @@ public:
     enum ButtonId {
         kBtnNone = 0,
         kBtnMic,
-        kBtnModeBn,      // 1-Click Bangla [বাং]
-        kBtnModeEn,      // 1-Click English [EN]
-        kBtnModeTrans,   // 1-Click Banglish -> English Translation [বা⇄En]
+        kBtnModePill,    // 1-Click Toggle between English and Bangla [English] / [বাংলা]
+        kBtnModeTrans,   // 1-Click Banglish -> English Translation [বা⇄En] / [🌐]
         kBtnPause,
         kBtnDict,
         kBtnOsk,
@@ -132,8 +132,7 @@ private:
 
     // Layout rectangles
     RECT rc_mic_;
-    RECT rc_mode_bn_;
-    RECT rc_mode_en_;
+    RECT rc_mode_pill_;
     RECT rc_mode_trans_;
     RECT rc_pause_;
     RECT rc_dict_;

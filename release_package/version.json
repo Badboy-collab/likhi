@@ -2,14 +2,15 @@
   "version": "1.1.0",
   "release_date": "2026-10-25",
   "download_url": "https://getlikhi.com/downloads/LikhiSetup.exe",
-  "sha256": "b48ded8e4e60924aceffc6d2cb8a907369fc7aabaa1f9af4d44c076bc5ea3926",
+  "sha256": "e57d04aa049696710cfb58ac44e9875e7b05d45d15c69682b6fb798a99c28b1c",
   "file_size": 21105415,
   "changelog": [
     "Soft Modern Cyan & Azure Palette: Calming, eye-friendly, beautiful Sky Blue gradient inspired by contemporary controls, replacing harsh colors",
     "Anywhere Mouse Dragging: Click and drag anywhere on the floating bar to effortlessly move it to any location on screen",
     "1-Click Minimize to System Tray & 1-Click Taskbar Tray Restore: Instant tray toggle directly from the bar and Windows taskbar notification area",
-    "Dedicated 1-Click Translation Icon [বা⇄En]: Instant 1-click mode switching between Bangla, English, and Banglish->English translation (zero cycling)",
+    "Dedicated 1-Click Translation Icon [\u09ac\u09be\u21c4En]: Instant 1-click mode switching between Bangla, English, and Banglish->English translation (zero cycling)",
     "Horizontal Auto-Hide with Expand Arrow (>>): Keeps the 4 core controls (Mic, Bangla, English, Translation) permanently visible on screen while secondary tools collapse into the bar",
     "100% Offline-first local typing engine with zero telemetry"
-  ]
+  ],
+  "size": 21111559
 }
