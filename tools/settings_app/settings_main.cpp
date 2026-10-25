@@ -305,31 +305,31 @@ static void DrawModernButton(LPDRAWITEMSTRUCT pDIS, const wchar_t* text, HFONT h
 
     if (isPrimary) {
         if (isDisabled) {
-            bgColor = RGB(71, 85, 105);
-            textColor = RGB(148, 163, 184);
+            bgColor = RGB(254, 205, 211);
+            textColor = RGB(156, 163, 175);
             borderColor = bgColor;
         } else if (isPressed) {
-            bgColor = RGB(67, 56, 202);  // Deep Indigo
+            bgColor = RGB(190, 18, 60);  // Deep Ruby Red
             textColor = RGB(255, 255, 255);
-            borderColor = RGB(99, 102, 241);
+            borderColor = bgColor;
         } else {
-            bgColor = RGB(79, 70, 229);  // Royal Indigo
+            bgColor = RGB(225, 29, 72);  // Vibrant Sunset Crimson
             textColor = RGB(255, 255, 255);
-            borderColor = RGB(99, 102, 241);
+            borderColor = bgColor;
         }
     } else {
         if (isDisabled) {
-            bgColor = RGB(30, 41, 59);
-            textColor = RGB(100, 116, 139);
-            borderColor = RGB(51, 65, 85);
+            bgColor = RGB(243, 244, 246);
+            textColor = RGB(156, 163, 175);
+            borderColor = RGB(229, 231, 235);
         } else if (isPressed) {
-            bgColor = RGB(30, 41, 59);
-            textColor = RGB(255, 255, 255);
-            borderColor = RGB(71, 85, 105);
+            bgColor = RGB(254, 226, 226);
+            textColor = RGB(190, 18, 60);
+            borderColor = RGB(254, 205, 211);
         } else {
-            bgColor = RGB(51, 65, 85);   // Elevated Slate
-            textColor = RGB(241, 245, 249);
-            borderColor = RGB(71, 85, 105);
+            bgColor = RGB(255, 255, 255);
+            textColor = RGB(30, 41, 59);
+            borderColor = RGB(229, 231, 235);
         }
     }
 
@@ -389,17 +389,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             hFontCredit = CreateFontW(-15, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
             hFontBtn = CreateFontW(-12, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Nirmala UI");
 
-            // Color Palette - Likhi Midnight Obsidian & Royal Indigo Theme
-            hBrushBg = CreateSolidBrush(RGB(15, 23, 42));         // #0F172A Deep Slate 900
-            hBrushSidebar = CreateSolidBrush(RGB(17, 24, 39));    // #111827 Midnight Navy
-            hBrushCard = CreateSolidBrush(RGB(30, 41, 59));       // #1E293B Elevated Slate Glass
-            hBrushInput = CreateSolidBrush(RGB(15, 23, 42));      // #0F172A Dark Input
-            hBrushActiveNav = CreateSolidBrush(RGB(79, 70, 229)); // #4F46E5 Royal Indigo
-            hBrushHoverNav = CreateSolidBrush(RGB(30, 41, 59));    // #1E293B
-            hBrushAccent = CreateSolidBrush(RGB(16, 185, 129));   // #10B981 Emerald Accent
+            // Color Palette - Likhi Warm Rose & Sunset Crimson Theme
+            hBrushBg = CreateSolidBrush(RGB(254, 252, 251));      // Warm clean surface
+            hBrushSidebar = CreateSolidBrush(RGB(255, 241, 242)); // Soft warm rose sidebar
+            hBrushCard = CreateSolidBrush(RGB(255, 255, 255));    // Pure white elevated card
+            hBrushInput = CreateSolidBrush(RGB(255, 255, 255));   // Clean white input
+            hBrushActiveNav = CreateSolidBrush(RGB(225, 29, 72)); // #E11D48 Vibrant Ruby Red
+            hBrushHoverNav = CreateSolidBrush(RGB(254, 226, 226)); // Soft rose hover
+            hBrushAccent = CreateSolidBrush(RGB(249, 115, 22));   // #F97316 Sunset Orange Accent
 
-            // Enable Immersive Dark Mode for window frame on Windows 10/11
-            BOOL darkMode = TRUE;
+            // Disable dark frame to match bright warm aesthetic
+            BOOL darkMode = FALSE;
             DwmSetWindowAttribute(hWnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &darkMode, sizeof(darkMode));
 
             // ==============================================================
@@ -735,10 +735,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     SetTextColor(hdc, RGB(255, 255, 255));
                 } else if (pDIS->itemState & ODS_SELECTED) {
                     FillRect(hdc, &rc, hBrushHoverNav);
-                    SetTextColor(hdc, RGB(165, 180, 252));
+                    SetTextColor(hdc, RGB(225, 29, 72));
                 } else {
                     FillRect(hdc, &rc, hBrushSidebar);
-                    SetTextColor(hdc, RGB(148, 163, 184));
+                    SetTextColor(hdc, RGB(71, 85, 105));
                 }
 
                 SetBkMode(hdc, TRANSPARENT);
@@ -809,23 +809,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 DrawIconEx(hdc, 18, 18, hAppIcon, 48, 48, 0, NULL, DI_NORMAL);
             }
             SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(248, 250, 252)); // High-contrast White
+            SetTextColor(hdc, RGB(190, 18, 60)); // Vibrant Ruby Red
             SelectObject(hdc, hFontTitle);
             TextOutW(hdc, 76, 18, L"Likhi (লিখি)", 12);
 
-            SetTextColor(hdc, RGB(148, 163, 184)); // Slate 400
+            SetTextColor(hdc, RGB(100, 116, 139)); // Warm Slate
             SelectObject(hdc, hFontSub);
-            TextOutW(hdc, 76, 46, L"বাংলা লিখুন, সহজেই।", 19);
+            TextOutW(hdc, 76, 46, L"বাংলা লিখুন, স্বাচ্ছন্দ্যে।", 22);
 
             // 4. Draw Vertical Divider
-            HPEN hPenDivider = CreatePen(PS_SOLID, 1, RGB(30, 41, 59));
+            HPEN hPenDivider = CreatePen(PS_SOLID, 1, RGB(254, 205, 211));
             SelectObject(hdc, hPenDivider);
             MoveToEx(hdc, 235, 0, NULL);
             LineTo(hdc, 235, rcClient.bottom);
             DeleteObject(hPenDivider);
 
-            // 5. Draw Content Card Area (Modern rounded card)
-            HPEN hPenCard = CreatePen(PS_SOLID, 1, RGB(51, 65, 85));
+            // 5. Draw Content Card Area (Warm rounded card with delicate rose border)
+            HPEN hPenCard = CreatePen(PS_SOLID, 1, RGB(254, 205, 211));
             HBRUSH hOldBr = (HBRUSH)SelectObject(hdc, hBrushCard);
             HPEN hOldPen = (HPEN)SelectObject(hdc, hPenCard);
             RoundRect(hdc, 245, 15, 815, 475, 12, 12);
@@ -847,33 +847,33 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             HWND hCtrl = (HWND)lParam;
             SetBkMode(hdcStatic, TRANSPARENT);
             if (hCtrl == hLblStatus) {
-                SetTextColor(hdcStatic, RGB(148, 163, 184));
+                SetTextColor(hdcStatic, RGB(100, 116, 139));
                 return (INT_PTR)hBrushBg;
             }
-            SetTextColor(hdcStatic, RGB(241, 245, 249));
+            SetTextColor(hdcStatic, RGB(30, 41, 59));
             return (INT_PTR)hBrushCard;
         }
 
         case WM_CTLCOLOREDIT: {
             HDC hdcEdit = (HDC)wParam;
             SetBkMode(hdcEdit, OPAQUE);
-            SetBkColor(hdcEdit, RGB(15, 23, 42));
-            SetTextColor(hdcEdit, RGB(255, 255, 255));
+            SetBkColor(hdcEdit, RGB(255, 255, 255));
+            SetTextColor(hdcEdit, RGB(15, 23, 42));
             return (INT_PTR)hBrushInput;
         }
 
         case WM_CTLCOLORLISTBOX: {
             HDC hdcLb = (HDC)wParam;
             SetBkMode(hdcLb, OPAQUE);
-            SetBkColor(hdcLb, RGB(15, 23, 42));
-            SetTextColor(hdcLb, RGB(241, 245, 249));
+            SetBkColor(hdcLb, RGB(255, 255, 255));
+            SetTextColor(hdcLb, RGB(30, 41, 59));
             return (INT_PTR)hBrushInput;
         }
 
         case WM_CTLCOLORBTN: {
             HDC hdcBtn = (HDC)wParam;
             SetBkMode(hdcBtn, TRANSPARENT);
-            SetTextColor(hdcBtn, RGB(241, 245, 249));
+            SetTextColor(hdcBtn, RGB(30, 41, 59));
             return (INT_PTR)hBrushCard;
         }
 
@@ -1321,7 +1321,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wcex.hInstance = hInstance;
     wcex.hIcon = hIconBig;
     wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wcex.hbrBackground = CreateSolidBrush(RGB(15, 23, 42));
+    wcex.hbrBackground = CreateSolidBrush(RGB(254, 252, 251));
     wcex.lpszClassName = L"LikhiFluentSettingsClass";
     wcex.hIconSm = hIconSm;
 

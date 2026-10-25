@@ -19,8 +19,8 @@ namespace {
 
 const wchar_t kTopBarClassName[] = L"LikhiFloatingTopBar";
 const UINT_PTR kTimerAutoHide = 101;
-const int kNormalWidth = 262;
-const int kCollapsedWidth = 158;
+const int kNormalWidth = 260;
+const int kCollapsedWidth = 154;
 const int kNormalHeight = 24;
 
 std::wstring GetAppDataPath() {
@@ -251,17 +251,17 @@ TopBarWindow::TopBarWindow()
       font_bengali_small_(nullptr),
       font_english_small_(nullptr) {
 
-    // Likhi 1-Click Segmented Suite (w=262, h=24)
+    // Likhi Red/Orange Theme (w=260, h=24)
     rc_mic_        = {2,   1, 26,  23}; // w: 24, h: 22
     rc_mode_bn_    = {28,  2, 60,  22}; // w: 32, h: 20 [বাং]
     rc_mode_en_    = {61,  2, 92,  22}; // w: 31, h: 20 [EN]
-    rc_mode_trans_ = {93,  2, 133, 22}; // w: 40, h: 20 [বা⇄En]
-    rc_pause_      = {135, 1, 155, 23}; // w: 20, h: 22
-    rc_dict_       = {156, 1, 176, 23}; // w: 20, h: 22
-    rc_osk_        = {177, 1, 197, 23}; // w: 20, h: 22
-    rc_script_     = {198, 1, 218, 23}; // w: 20, h: 22
-    rc_settings_   = {219, 1, 239, 23}; // w: 20, h: 22
-    rc_power_      = {240, 1, 260, 23}; // w: 20, h: 22
+    rc_mode_trans_ = {93,  2, 127, 22}; // w: 34, h: 20 [🌐 অনুবাদ]
+    rc_pause_      = {129, 1, 149, 23}; // w: 20, h: 22
+    rc_dict_       = {150, 1, 170, 23}; // w: 20, h: 22
+    rc_osk_        = {171, 1, 191, 23}; // w: 20, h: 22
+    rc_script_     = {192, 1, 212, 23}; // w: 20, h: 22
+    rc_settings_   = {213, 1, 233, 23}; // w: 20, h: 22
+    rc_power_      = {234, 1, 258, 23}; // w: 24, h: 22
 }
 
 TopBarWindow::~TopBarWindow() {
@@ -481,13 +481,13 @@ void TopBarWindow::ExpandToFull() {
     rc_mic_        = {2,   1, 26,  23}; // w: 24, h: 22
     rc_mode_bn_    = {28,  2, 60,  22}; // w: 32, h: 20 [বাং]
     rc_mode_en_    = {61,  2, 92,  22}; // w: 31, h: 20 [EN]
-    rc_mode_trans_ = {93,  2, 133, 22}; // w: 40, h: 20 [বা⇄En]
-    rc_pause_      = {135, 1, 155, 23}; // w: 20, h: 22
-    rc_dict_       = {156, 1, 176, 23}; // w: 20, h: 22
-    rc_osk_        = {177, 1, 197, 23}; // w: 20, h: 22
-    rc_script_     = {198, 1, 218, 23}; // w: 20, h: 22
-    rc_settings_   = {219, 1, 239, 23}; // w: 20, h: 22
-    rc_power_      = {240, 1, 260, 23}; // w: 20, h: 22
+    rc_mode_trans_ = {93,  2, 127, 22}; // w: 34, h: 20 [🌐 অনুবাদ]
+    rc_pause_      = {129, 1, 149, 23}; // w: 20, h: 22
+    rc_dict_       = {150, 1, 170, 23}; // w: 20, h: 22
+    rc_osk_        = {171, 1, 191, 23}; // w: 20, h: 22
+    rc_script_     = {192, 1, 212, 23}; // w: 20, h: 22
+    rc_settings_   = {213, 1, 233, 23}; // w: 20, h: 22
+    rc_power_      = {234, 1, 258, 23}; // w: 24, h: 22
 
     if (hwnd_) {
         HRGN rgn = CreateRoundRectRgn(0, 0, width_ + 1, height_ + 1, 6, 6);
@@ -499,16 +499,20 @@ void TopBarWindow::ExpandToFull() {
 }
 
 void TopBarWindow::CollapseToCompact() {
-    width_ = kCollapsedWidth;
+    is_collapsed_ = true;
+    width_ = kCollapsedWidth; // 154px
     height_ = kNormalHeight;
     if (normal_y_ < 6) normal_y_ = 12;
     pos_y_ = normal_y_;
 
+    // The 4 essential buttons ALWAYS stay visible!
     rc_mic_        = {2,   1, 26,  23};
     rc_mode_bn_    = {28,  2, 60,  22};
     rc_mode_en_    = {61,  2, 92,  22};
-    rc_mode_trans_ = {93,  2, 133, 22};
-    rc_power_      = {135, 1, 155, 23};
+    rc_mode_trans_ = {93,  2, 127, 22};
+    rc_power_      = {129, 1, 152, 23}; // displays '>>' to expand
+
+    // Secondary tools hide horizontally into the bar!
     rc_pause_      = {0, 0, 0, 0};
     rc_dict_       = {0, 0, 0, 0};
     rc_osk_        = {0, 0, 0, 0};
@@ -573,20 +577,9 @@ void TopBarWindow::CheckAutoHide() {
 
     POINT pt;
     GetCursorPos(&pt);
-    int screen_w = GetSystemMetrics(SM_CXSCREEN);
 
-    bool mouse_in_zone = false;
-    if (dock_pos_ == kDockRight) {
-        if (is_collapsed_) {
-            mouse_in_zone = (pt.x >= screen_w - 24 && pt.y >= (pos_y_ - 15) && pt.y <= (pos_y_ + height_ + 20));
-        } else {
-            mouse_in_zone = (pt.x >= (pos_x_ - 15) && pt.x <= screen_w &&
-                             pt.y >= (pos_y_ - 8) && pt.y <= (pos_y_ + height_ + 10));
-        }
-    } else {
-        mouse_in_zone = (pt.y >= (pos_y_ - 8) && pt.y <= (pos_y_ + height_ + 10) &&
-                         pt.x >= (pos_x_ - 10) && pt.x <= (pos_x_ + width_ + 10));
-    }
+    bool mouse_in_zone = (pt.y >= (pos_y_ - 8) && pt.y <= (pos_y_ + height_ + 10) &&
+                          pt.x >= (pos_x_ - 10) && pt.x <= (pos_x_ + width_ + 10));
 
     if (mouse_in_zone) {
         if (is_collapsed_ || width_ < kNormalWidth) {
@@ -595,17 +588,14 @@ void TopBarWindow::CheckAutoHide() {
         is_hovered_ = true;
         mouse_leave_time_ = 0;
     } else {
-        if (is_hovered_) {
-            is_hovered_ = false;
+        is_hovered_ = false;
+        if (mouse_leave_time_ == 0) {
             mouse_leave_time_ = GetTickCount();
-        }
-        if (mouse_leave_time_ > 0 && (GetTickCount() - mouse_leave_time_ > 1000)) {
-            if (is_compact_mode_ && width_ >= kNormalWidth) {
-                CollapseToCompact();
-                mouse_leave_time_ = 0;
-            } else if (auto_hide_enabled_ && !is_collapsed_) {
-                CollapseBar();
-                mouse_leave_time_ = 0;
+        } else if (GetTickCount() - mouse_leave_time_ > 1200) {
+            if (auto_hide_enabled_ || is_compact_mode_) {
+                if (!is_collapsed_ || width_ > kCollapsedWidth) {
+                    CollapseToCompact();
+                }
             }
         }
     }
@@ -616,20 +606,7 @@ void TopBarWindow::ExpandBar() {
 }
 
 void TopBarWindow::CollapseBar() {
-    if (!auto_hide_enabled_) return;
-    if (is_collapsed_) return;
-    is_collapsed_ = true;
-    int screen_w = GetSystemMetrics(SM_CXSCREEN);
-    if (dock_pos_ == kDockRight) {
-        pos_x_ = screen_w - 6; // Hide to right border leaving 6px grab edge
-    } else {
-        pos_y_ = -height_ + 3; // Hide to top border
-    }
-    if (hwnd_) {
-        SetWindowPos(hwnd_, HWND_TOPMOST, pos_x_, pos_y_, width_, height_,
-                     SWP_NOACTIVATE | SWP_SHOWWINDOW);
-        InvalidateRect(hwnd_, nullptr, TRUE);
-    }
+    CollapseToCompact();
 }
 
 
@@ -772,22 +749,22 @@ void TopBarWindow::OnPaint(HWND hwnd) {
         g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
         g.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
 
-        // 1. Signature Likhi Dark Slate / Midnight Obsidian Gradient
+        // 1. Vibrant Sunset Orange & Ruby Crimson Gradient (Warm & Beautiful)
         Gdiplus::Rect gRc(0, 0, cr.right, cur_h);
         Gdiplus::LinearGradientBrush bgBrush(
             gRc,
-            Gdiplus::Color(255, 15, 23, 42),   // #0F172A Slate 900
-            Gdiplus::Color(255, 30, 41, 59),   // #1E293B Slate 800
+            Gdiplus::Color(255, 249, 115, 22),  // #F97316 Vibrant Sunset Orange
+            Gdiplus::Color(255, 225, 29, 72),   // #E11D48 Deep Ruby Crimson Red
             Gdiplus::LinearGradientModeVertical
         );
         g.FillRectangle(&bgBrush, gRc);
 
-        // Subtle frosted border
-        Gdiplus::Pen borderPen(Gdiplus::Color(90, 148, 163, 184), 1.0f);
+        // Subtle warm peach highlight border
+        Gdiplus::Pen borderPen(Gdiplus::Color(160, 255, 210, 190), 1.0f);
         g.DrawRectangle(&borderPen, 0, 0, cr.right - 1, cur_h - 1);
 
         // Subtle top sheen line
-        Gdiplus::Pen sheenPen(Gdiplus::Color(45, 255, 255, 255), 1.0f);
+        Gdiplus::Pen sheenPen(Gdiplus::Color(90, 255, 255, 255), 1.0f);
         g.DrawLine(&sheenPen, 2, 1, cr.right - 3, 1);
 
         {
@@ -833,8 +810,8 @@ void TopBarWindow::OnPaint(HWND hwnd) {
                     (float)(rc_mode_trans_.right - rc_mode_bn_.left + 2.0f),
                     (float)(rc_mode_bn_.bottom - rc_mode_bn_.top + 2.0f)
                 );
-                Gdiplus::SolidBrush segBgBrush(Gdiplus::Color(160, 10, 15, 28));
-                Gdiplus::Pen segBorderPen(Gdiplus::Color(50, 148, 163, 184), 1.0f);
+                Gdiplus::SolidBrush segBgBrush(Gdiplus::Color(90, 100, 10, 25));
+                Gdiplus::Pen segBorderPen(Gdiplus::Color(90, 255, 255, 255), 1.0f);
                 Gdiplus::GraphicsPath segPath;
                 segPath.AddArc(segContRc.X, segContRc.Y, 4.0f, 4.0f, 180, 90);
                 segPath.AddArc(segContRc.GetRight() - 4.0f, segContRc.Y, 4.0f, 4.0f, 270, 90);
@@ -873,7 +850,7 @@ void TopBarWindow::OnPaint(HWND hwnd) {
 
                     SelectObject(memDC, hFont);
                     SetBkMode(memDC, TRANSPARENT);
-                    SetTextColor(memDC, active ? RGB(255, 255, 255) : (hovered_btn_ == btnId ? RGB(241, 245, 249) : RGB(148, 163, 184)));
+                    SetTextColor(memDC, active ? RGB(255, 255, 255) : (hovered_btn_ == btnId ? RGB(241, 245, 249) : RGB(254, 226, 226)));
                     RECT tr = r;
                     DrawTextW(memDC, label, -1, &tr, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
                 };
@@ -1010,7 +987,7 @@ void TopBarWindow::OnPaint(HWND hwnd) {
                     }
 
                     // Center clear hole
-                    Gdiplus::Pen holePen(Gdiplus::Color(255, 20, 28, 44), 1.0f);
+                    Gdiplus::Pen holePen(Gdiplus::Color(255, 230, 40, 60), 1.0f);
                     g.DrawEllipse(&holePen, cx - 1.6f, cy - 1.6f, 3.2f, 3.2f);
                 }
             }
