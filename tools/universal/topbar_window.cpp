@@ -508,6 +508,7 @@ void TopBarWindow::ExpandToFull() {
                      SWP_NOACTIVATE | SWP_SHOWWINDOW);
         InvalidateRect(hwnd_, nullptr, TRUE);
     }
+    UpdateTooltipRects();
 }
 
 void TopBarWindow::CollapseToCompact() {
@@ -537,6 +538,7 @@ void TopBarWindow::CollapseToCompact() {
                      SWP_NOACTIVATE | SWP_SHOWWINDOW);
         InvalidateRect(hwnd_, nullptr, TRUE);
     }
+    UpdateTooltipRects();
 }
 
 void TopBarWindow::LoadCoordinates() {
@@ -727,13 +729,13 @@ LRESULT TopBarWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             OnTimer(hwnd, wp);
             return 0;
 
+        case WM_SETCURSOR: {
+            // Hand cursor across the entire topbar (both draggable area and buttons)
+            SetCursor(LoadCursorW(nullptr, IDC_HAND));
+            return TRUE;
+        }
+
         case WM_NCHITTEST: {
-            POINT pt = {LOWORD(lp), HIWORD(lp)};
-            ScreenToClient(hwnd, &pt);
-            ButtonId btn = HitTestButton(pt);
-            if (btn == kBtnNone) {
-                return HTCAPTION;
-            }
             return HTCLIENT;
         }
 
@@ -800,6 +802,9 @@ LRESULT TopBarWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
 void TopBarWindow::OnTimer(HWND hwnd, UINT_PTR timer_id) {
     if (timer_id == kTimerAutoHide) {
+        if (is_voice_recording_ && voice_recorder_ && voice_recorder_->IsAutoStopRequested()) {
+            LaunchVoiceInput();
+        }
         CheckAutoHide();
     }
 }
@@ -1216,6 +1221,11 @@ void TopBarWindow::OnMouseMove(HWND hwnd, int x, int y) {
     tme.dwFlags = TME_LEAVE;
     tme.hwndTrack = hwnd;
     TrackMouseEvent(&tme);
+
+    if (hwnd_tooltip_) {
+        MSG msg = {hwnd, WM_MOUSEMOVE, (WPARAM)0, MAKELPARAM(x, y), (DWORD)GetTickCount(), {x, y}};
+        SendMessageW(hwnd_tooltip_, TTM_RELAYEVENT, 0, (LPARAM)&msg);
+    }
 
     if (GetCapture() == hwnd) {
         POINT cur_cursor;
@@ -2273,6 +2283,13 @@ void TopBarWindow::InitTooltips(HWND hwnd) {
     SetWindowPos(hwnd_tooltip_, HWND_TOPMOST, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
+    // Instant tooltip popup settings (50ms)
+    SendMessageW(hwnd_tooltip_, TTM_SETDELAYTIME, TTDT_INITIAL, 50);
+    SendMessageW(hwnd_tooltip_, TTM_SETDELAYTIME, TTDT_RESHOW, 50);
+    SendMessageW(hwnd_tooltip_, TTM_SETDELAYTIME, TTDT_AUTOPOP, 8000);
+    SendMessageW(hwnd_tooltip_, TTM_SETMAXTIPWIDTH, 0, 420);
+    SendMessageW(hwnd_tooltip_, TTM_ACTIVATE, TRUE, 0);
+
     auto AddTool = [this, hwnd](RECT& rc, UINT_PTR id, const wchar_t* text) {
         TOOLINFOW ti = {0};
         ti.cbSize = sizeof(ti);
@@ -2284,15 +2301,40 @@ void TopBarWindow::InitTooltips(HWND hwnd) {
         SendMessageW(hwnd_tooltip_, TTM_ADDTOOLW, 0, (LPARAM)&ti);
     };
 
-    AddTool(rc_mic_,        1, L"\u23fa \u09ac\u09be\u0982\u09b2\u09be \u09ad\u09af\u09bc\u09c7\u09b8 \u099f\u09be\u0987\u09aa\u09bf\u0982 (Bangla Voice Typing) [Ctrl+Alt+V]");
-    AddTool(rc_mode_pill_,  2, L"\u09ad\u09be\u09b7\u09be \u09aa\u09b0\u09bf\u09ac\u09b0\u09cd\u09a4\u09a8: \u09ac\u09be\u0982\u09b2\u09be \u21c4 English [Ctrl+Alt+Space]");
-    AddTool(rc_mode_trans_, 3, L"\u09ac\u09be\u0982\u09b2\u09bf\u09b6 \u2794 \u0987\u0982\u09b0\u09c7\u099c\u09bf \u0985\u09a8\u09c1\u09ac\u09be\u09a6 (Banglish to English) [Ctrl+Alt+E]");
-    AddTool(rc_pause_,      4, L"\u09b8\u09be\u099c\u09c7\u09b6\u09a8 \u09ac\u09bf\u09b0\u09a4\u09bf / \u099a\u09be\u09b2\u09c1 (Typing Mode / Suggestions)");
-    AddTool(rc_dict_,       5, L"\u09b6\u09ac\u09cd\u09a6 \u09ae\u09cd\u09af\u09be\u09a8\u09c7\u099c\u09be\u09b0 \u0993 \u09a1\u09bf\u0995\u09b6\u09a8\u09be\u09b0\u09bf (Word Manager)");
-    AddTool(rc_osk_,        6, L"\u0985\u09a8-\u09b8\u09cd\u0995\u09cd\u09b0\u09c0\u09a8 \u0995\u09bf\u09ac\u094b\u09b0\u09cd\u09a1 (Virtual Keyboard)");
-    AddTool(rc_script_,     7, L"\u0987\u0981\u0989\u09a8\u09bf\u0995\u09cb\u09a1 \u21c4 \u09ac\u09bf\u099c\u09af\u09bc \u0995\u09a8\u09ad\u09be\u09b0\u09cd\u099f\u09be\u09b0 (Converter)");
-    AddTool(rc_settings_,   8, L"\u09b8\u09c7\u099f\u09bf\u0982\u09b8 \u0993 \u09b6\u09b0\u09cd\u099f\u0995\u09be\u099f (Likhi Settings)");
-    AddTool(rc_power_,      9, L"\u0985\u09cd\u09af\u09be\u09aa \u0985\u09aa\u09b6\u09a8 \u09ae\u09c7\u09a8\u09c1 \u0993 \u09ac\u09a8\u09cd\u09a7 (App Menu / Exit)");
+    AddTool(rc_mic_,        1, L"বাংলা ভয়েস টাইপিং [Ctrl+Alt+V]\nমাইক্রোফোনে কথা বলে সরাসরি নির্ভুল বাংলা লিখুন");
+    AddTool(rc_mode_pill_,  2, L"ভাষা পরিবর্তন [Ctrl+Alt+Space]\nক্লিক করে সরাসরি বাংলা ⇄ English মোড পরিবর্তন করুন");
+    AddTool(rc_mode_trans_, 3, L"বাংলিশ ➔ ইংরেজি অনুবাদ [Ctrl+Alt+E]\nবাংলিশ শব্দ লিখলে সরাসরি শুদ্ধ ইংরেজিতে রূপান্তর হবে");
+    AddTool(rc_pause_,      4, L"টাইপিং সাজেশন বিরতি / চালু [Pause]\nসাজেশন পপআপ উইন্ডো সাময়িক বিরতি বা চালু করুন");
+    AddTool(rc_dict_,       5, L"শব্দ ম্যানেজার ও অভিধান (Word Manager)\nনতুন বাংলা শব্দ যোগ করুন এবং ব্যক্তিগত অভিধান পরিচালনা করুন");
+    AddTool(rc_osk_,        6, L"অন-স্ক্রিন ভার্চুয়াল কিবোর্ড (On-Screen Keyboard)\nমাউস দিয়ে ক্লিক করে বাংলা টাইপ করার কিবোর্ড খুলুন");
+    AddTool(rc_script_,     7, L"ইউনিকোড ⇄ বিজয় কনভার্টার (Converter)\nবিজয় ও ইউনিকোড লেখার দ্রুত টেক্সট কনভার্টার");
+    AddTool(rc_settings_,   8, L"লাইখী সেটিংস ও শর্টকাট (Likhi Settings)\nকিবোর্ড লেআউট, ভয়েস ও সেটিংস উইন্ডো খুলুন");
+    AddTool(rc_power_,      9, L"মিনিমাইজ / অপশন মেনু (App Menu)\nটপবার হাইড করে সিস্টেম ট্রে-তে পাঠান অথবা অপশন মেনু দেখুন");
+
+    UpdateTooltipRects();
+}
+
+void TopBarWindow::UpdateTooltipRects() {
+    if (!hwnd_tooltip_ || !hwnd_) return;
+
+    auto SetToolRect = [this](UINT_PTR id, const RECT& rc) {
+        TOOLINFOW ti = {0};
+        ti.cbSize = sizeof(ti);
+        ti.hwnd = hwnd_;
+        ti.uId = id;
+        ti.rect = rc;
+        SendMessageW(hwnd_tooltip_, TTM_NEWTOOLRECTW, 0, (LPARAM)&ti);
+    };
+
+    SetToolRect(1, rc_mic_);
+    SetToolRect(2, rc_mode_pill_);
+    SetToolRect(3, rc_mode_trans_);
+    SetToolRect(4, rc_pause_);
+    SetToolRect(5, rc_dict_);
+    SetToolRect(6, rc_osk_);
+    SetToolRect(7, rc_script_);
+    SetToolRect(8, rc_settings_);
+    SetToolRect(9, rc_power_);
 }
 
 } // namespace universal

@@ -72,6 +72,11 @@ public:
     // Number of samples captured so far (UI can show a live duration).
     size_t SampleCount() const;
 
+    // VAD & Auto-Stop silence detection
+    bool IsAutoStopRequested() const;
+    bool HasDetectedSpeech() const;
+    void ResetAutoStop();
+
 private:
     static void CALLBACK WaveInProc(HWAVEIN hwi, UINT msg, DWORD_PTR instance,
                                     DWORD_PTR param1, DWORD_PTR param2);
@@ -87,9 +92,16 @@ private:
     bool recording_ = false;
     bool stopping_ = false;
     bool full_ = false;
+    bool speech_detected_ = false;
+    int speech_frames_ = 0;
+    int silent_frames_after_speech_ = 0;
+    bool auto_stop_requested_ = false;
     std::wstring error_;
     mutable std::mutex mu_;
 };
+
+// Trims excessive leading and trailing silence from recorded PCM audio to minimize network and API latency.
+std::vector<int16_t> Voice_TrimSilence(const std::vector<int16_t>& pcm);
 
 // One-shot: uploads the PCM and returns the recognized UTF-8 text.
 // Empty string on any failure; `error_out` receives a human-readable reason.

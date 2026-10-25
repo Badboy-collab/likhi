@@ -6,6 +6,7 @@
 #include <winhttp.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <sstream>
@@ -337,6 +338,10 @@ bool VoiceRecorder::Start() {
     error_.clear();
     stopping_ = false;
     full_ = false;
+    speech_detected_ = false;
+    speech_frames_ = 0;
+    silent_frames_after_speech_ = 0;
+    auto_stop_requested_ = false;
 
     WAVEFORMATEX fmt = {};
     fmt.wFormatTag = WAVE_FORMAT_PCM;
@@ -405,6 +410,30 @@ void VoiceRecorder::OnBuffer(WAVEHDR* hdr) {
         if (n > 0) {
             const int16_t* src = reinterpret_cast<const int16_t*>(hdr->lpData);
             pcm_.insert(pcm_.end(), src, src + n);
+
+            // Audio energy RMS calculation for VAD (Voice Activity Detection)
+            int64_t sum_sq = 0;
+            for (size_t i = 0; i < n; ++i) {
+                int32_t sample = src[i];
+                sum_sq += sample * sample;
+            }
+            int rms = static_cast<int>(sqrt(static_cast<double>(sum_sq / n)));
+
+            if (rms > 750) {
+                speech_frames_++;
+                if (speech_frames_ >= 2) {
+                    speech_detected_ = true;
+                }
+                silent_frames_after_speech_ = 0;
+            } else {
+                if (speech_detected_) {
+                    silent_frames_after_speech_++;
+                    // 6 buffers = ~600ms of silence after speaking -> trigger auto-stop!
+                    if (silent_frames_after_speech_ >= 6) {
+                        auto_stop_requested_ = true;
+                    }
+                }
+            }
         }
     }
 
@@ -434,7 +463,29 @@ std::vector<int16_t> VoiceRecorder::Stop() {
     hwave_ = nullptr;
     recording_ = false;
     stopping_ = false;
+    speech_detected_ = false;
+    speech_frames_ = 0;
+    silent_frames_after_speech_ = 0;
+    auto_stop_requested_ = false;
     return pcm_;
+}
+
+bool VoiceRecorder::IsAutoStopRequested() const {
+    std::lock_guard<std::mutex> lk(mu_);
+    return auto_stop_requested_;
+}
+
+bool VoiceRecorder::HasDetectedSpeech() const {
+    std::lock_guard<std::mutex> lk(mu_);
+    return speech_detected_;
+}
+
+void VoiceRecorder::ResetAutoStop() {
+    std::lock_guard<std::mutex> lk(mu_);
+    auto_stop_requested_ = false;
+    speech_detected_ = false;
+    speech_frames_ = 0;
+    silent_frames_after_speech_ = 0;
 }
 
 bool VoiceRecorder::IsRecording() const {
@@ -551,33 +602,51 @@ bool Voice_ParseGeminiResponse(const std::string& body, std::string& out_utf8) {
 // Gemini (Google AI Studio): the audio is sent inline as base64 and the answer
 // is read back from the <FINAL_TEXT> tag — the same contract the reference
 // engine uses (bangla_extracted_engine/gemini_voice_stt.js).
+std::vector<int16_t> Voice_TrimSilence(const std::vector<int16_t>& pcm) {
+    if (pcm.size() < 1600) return pcm; // <100ms, keep as is
+    const int16_t kThreshold = 400; // noise floor
+    size_t first = 0;
+    while (first < pcm.size() && std::abs(pcm[first]) < kThreshold) {
+        first++;
+    }
+    if (first >= pcm.size()) {
+        return pcm;
+    }
+    size_t last = pcm.size() - 1;
+    while (last > first && std::abs(pcm[last]) < kThreshold) {
+        last--;
+    }
+    const size_t kPadding = 3200; // 200ms padding
+    size_t start_idx = (first > kPadding) ? (first - kPadding) : 0;
+    size_t end_idx = (last + kPadding < pcm.size()) ? (last + kPadding) : pcm.size() - 1;
+    return std::vector<int16_t>(pcm.begin() + start_idx, pcm.begin() + end_idx + 1);
+}
+
 std::string Voice_TranscribeGemini(const std::vector<int16_t>& pcm, const VoiceConfig& cfg,
                                    std::wstring* error_out) {
     if (cfg.model.empty()) {
         if (error_out) *error_out = L"no model configured";
         return std::string();
     }
-    std::vector<uint8_t> wav = Voice_BuildWav(pcm, VoiceRecorder::kSampleRate);
+    std::vector<int16_t> trimmed = Voice_TrimSilence(pcm);
+    std::vector<uint8_t> wav = Voice_BuildWav(trimmed, VoiceRecorder::kSampleRate);
     std::string b64 = Voice_Base64Encode(wav.data(), wav.size());
     if (b64.empty()) {
         if (error_out) *error_out = L"could not encode the audio";
         return std::string();
     }
 
-    // ASCII only, no quotes/backslashes: safe to inline in the JSON request.
+    // Fast, concise prompt for ultra-low latency Bengali transcription
     const char* kPrompt =
-        "You are a Bengali (Bangla) speech to text engine. Transcribe the audio "
-        "exactly, in Bengali script (Unicode). Use Bengali punctuation such as "
-        "the dari at the end of a sentence. Do not translate. Write personal "
-        "names and common English words the way they are normally written in "
-        "Bengali. Return ONLY the final sentence wrapped between <FINAL_TEXT> "
-        "and </FINAL_TEXT> tags, with no extra explanation.";
+        "You are an ultra-fast Bengali speech to text transcriber. Transcribe the audio "
+        "accurately into Bengali script (Unicode). Do not translate. Return ONLY the "
+        "transcription wrapped between <FINAL_TEXT> and </FINAL_TEXT> tags without any explanation.";
 
     std::string body = "{\"contents\":[{\"parts\":[{\"text\":\"";
     body += kPrompt;
     body += "\"},{\"inlineData\":{\"mimeType\":\"audio/wav\",\"data\":\"";
     body += b64;
-    body += "\"}}]}],\"generationConfig\":{\"temperature\":0.0,\"maxOutputTokens\":1024}}";
+    body += "\"}}]}],\"generationConfig\":{\"temperature\":0.0,\"maxOutputTokens\":256,\"thinkingConfig\":{\"thinkingBudget\":0}}}";
 
     std::wstring path = L"/v1beta/models/";
     path += std::wstring(cfg.model.begin(), cfg.model.end());
@@ -596,10 +665,6 @@ std::string Voice_TranscribeGemini(const std::vector<int16_t>& pcm, const VoiceC
     }
     return text;
 }
-
-// =====================================================================
-// transcribe
-// =====================================================================
 
 std::string Voice_Transcribe(const std::vector<int16_t>& pcm, const VoiceConfig& cfg,
                              std::wstring* error_out) {

@@ -85,6 +85,7 @@ private:
     void CheckAutoHide();
 
     void InitTooltips(HWND hwnd);
+    void UpdateTooltipRects();
 
     // Actions
     void InsertTodayDate(bool bengali_digits);
