@@ -1002,10 +1002,8 @@ void UpdateTray() {
 
 void ShowTrayMenu() {
     HMENU menu = CreatePopupMenu();
-    AppendMenuW(menu, MF_STRING, 111, L"🪟 টপবার খুলুন ও সামনে আনুন (Open TopBar)");
+    AppendMenuW(menu, MF_STRING, 111, g_topbar.IsVisible() ? L"🪟 টপবার ট্রে-তে পাঠান (Minimize to Tray)" : L"🪟 টপবার খুলুন ও সামনে আনুন (Open TopBar)");
     AppendMenuW(menu, MF_STRING, 112, L"🔄 টপবার স্ক্রিনের কেন্দ্রে রিসেট (Reset TopBar)");
-    AppendMenuW(menu, MF_STRING | (g_topbar.IsVisible() ? MF_CHECKED : 0),
-                109, L"👁️ ভাসমান টপবার লুকান / দেখান (Toggle TopBar)");
     AppendMenuW(menu, MF_STRING, 113, L"🎙️ বাংলা ভয়েস টাইপিং (Bangla Voice Typing) [Ctrl+Alt+V]");
     AppendMenuW(menu, MF_STRING, 110, L"⌨️ অন-স্ক্রিন কিবোর্ড (Virtual Keyboard)");
     AppendMenuW(menu, MF_STRING | (g_host_enabled ? MF_CHECKED : 0), 100,
@@ -1042,11 +1040,16 @@ void ShowTrayMenu() {
     if (command == 0) return;
 
     if (command == 111) {
-        g_show_topbar = true;
-        g_topbar.Show(true);
-        g_topbar.ExpandBar();
-        g_topbar.SetAutoHide(false);
-        g_topbar.SaveCoordinates();
+        if (g_topbar.IsVisible()) {
+            g_show_topbar = false;
+            g_topbar.Show(false);
+            g_topbar.SaveCoordinates();
+        } else {
+            g_show_topbar = true;
+            g_topbar.Show(true);
+            g_topbar.ExpandToFull();
+            g_topbar.SaveCoordinates();
+        }
     } else if (command == 112) {
         int screen_w = GetSystemMetrics(SM_CXSCREEN);
         g_topbar.SetPosition((screen_w - 266) / 2, 10);
@@ -1165,14 +1168,20 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
             return 0;
         case kTrayMessage:
             if (LOWORD(lparam) == WM_LBUTTONUP) {
-                // Mouse left-click on tray icon immediately toggles BN <-> EN
-                TriggerModeToggle();
+                // Single left-click on tray icon: if TopBar is hidden, restore it immediately!
+                if (!g_topbar.IsVisible()) {
+                    g_show_topbar = true;
+                    g_topbar.Show(true);
+                    g_topbar.ExpandToFull();
+                    g_topbar.SaveCoordinates();
+                } else {
+                    TriggerModeToggle();
+                }
             } else if (LOWORD(lparam) == WM_LBUTTONDBLCLK) {
-                // Double-click on tray icon immediately brings TopBar to front
-                g_show_topbar = true;
-                g_topbar.Show(true);
-                g_topbar.ExpandBar();
-                g_topbar.SetAutoHide(false);
+                // Double-click toggles TopBar visibility
+                g_show_topbar = !g_topbar.IsVisible();
+                g_topbar.Show(g_show_topbar);
+                if (g_show_topbar) g_topbar.ExpandToFull();
                 g_topbar.SaveCoordinates();
             } else if (LOWORD(lparam) == WM_RBUTTONUP || LOWORD(lparam) == WM_CONTEXTMENU) {
                 ShowTrayMenu();

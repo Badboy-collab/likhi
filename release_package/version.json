@@ -2,16 +2,14 @@
   "version": "1.1.0",
   "release_date": "2026-10-25",
   "download_url": "https://getlikhi.com/downloads/LikhiSetup.exe",
-  "sha256": "9f1af3c12c12b99b78583a5244d93fa20b2cd33b1c57d8d5f8e33f82d61c2b4c",
-  "file_size": 21103367,
+  "sha256": "b48ded8e4e60924aceffc6d2cb8a907369fc7aabaa1f9af4d44c076bc5ea3926",
+  "file_size": 21105415,
   "changelog": [
-    "Dedicated 1-Click Segmented Mode Controls: Instant 1-click Bangla [বাং], 1-click English [EN], and separate 1-click Translation [বা⇄En] icon (Zero 3-click cycling)",
-    "Vibrant Sunset Orange & Ruby Crimson Palette: Warm, elegant, high-contrast visual design replacing dark slate",
-    "Horizontal Auto-Hide: Core controls (Microphone, Bangla, English, Translation, and >>) permanently stay visible on screen at all times while secondary tools collapse horizontally",
-    "Zero Off-Screen Clamping: TopBar remains safely anchored on screen (pos_y >= 6) with guaranteed front startup recovery",
-    "Smart Control Center Settings & Dashboard: Modernized dashboard with instant mode test and floating bar recovery",
-    "Live Caret Candidate Suggestions Strip with numbered words (1..5), keyboard navigation, and instant commit",
-    "Unified Global Keyboard Shortcut Ctrl+Alt+Space and Banglish->English shortcut Ctrl+Alt+E",
+    "Soft Modern Cyan & Azure Palette: Calming, eye-friendly, beautiful Sky Blue gradient inspired by contemporary controls, replacing harsh colors",
+    "Anywhere Mouse Dragging: Click and drag anywhere on the floating bar to effortlessly move it to any location on screen",
+    "1-Click Minimize to System Tray & 1-Click Taskbar Tray Restore: Instant tray toggle directly from the bar and Windows taskbar notification area",
+    "Dedicated 1-Click Translation Icon [বা⇄En]: Instant 1-click mode switching between Bangla, English, and Banglish->English translation (zero cycling)",
+    "Horizontal Auto-Hide with Expand Arrow (>>): Keeps the 4 core controls (Mic, Bangla, English, Translation) permanently visible on screen while secondary tools collapse into the bar",
     "100% Offline-first local typing engine with zero telemetry"
   ]
 }

@@ -225,6 +225,22 @@ void TypeUnicodeText(const std::wstring& text) {
 
 } // namespace
 
+TopBarWindow::ButtonId TopBarWindow::HitTestButton(POINT pt) const {
+    if (PtInRect(&rc_mic_, pt)) return kBtnMic;
+    if (PtInRect(&rc_mode_bn_, pt)) return kBtnModeBn;
+    if (PtInRect(&rc_mode_en_, pt)) return kBtnModeEn;
+    if (PtInRect(&rc_mode_trans_, pt)) return kBtnModeTrans;
+    if (!is_collapsed_ && !is_compact_mode_) {
+        if (PtInRect(&rc_pause_, pt)) return kBtnPause;
+        if (PtInRect(&rc_dict_, pt)) return kBtnDict;
+        if (PtInRect(&rc_osk_, pt)) return kBtnOsk;
+        if (PtInRect(&rc_script_, pt)) return kBtnScript;
+        if (PtInRect(&rc_settings_, pt)) return kBtnSettings;
+    }
+    if (PtInRect(&rc_power_, pt)) return kBtnPower;
+    return kBtnNone;
+}
+
 TopBarWindow::TopBarWindow()
     : hinst_(nullptr),
       hwnd_(nullptr),
@@ -573,7 +589,7 @@ void TopBarWindow::SaveCoordinates() {
 }
 
 void TopBarWindow::CheckAutoHide() {
-    if (!is_visible_) return;
+    if (!is_visible_ || is_dragging_) return;
 
     POINT pt;
     GetCursorPos(&pt);
@@ -669,18 +685,33 @@ LRESULT TopBarWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             OnTimer(hwnd, wp);
             return 0;
 
+        case WM_NCHITTEST: {
+            POINT pt = {LOWORD(lp), HIWORD(lp)};
+            ScreenToClient(hwnd, &pt);
+            ButtonId btn = HitTestButton(pt);
+            if (btn == kBtnNone) {
+                return HTCAPTION;
+            }
+            return HTCLIENT;
+        }
+
         case WM_LBUTTONDOWN:
             OnLButtonDown(hwnd, LOWORD(lp), HIWORD(lp));
             return 0;
 
         case WM_LBUTTONUP:
-            pressed_btn_ = kBtnNone;
-            InvalidateRect(hwnd, nullptr, FALSE);
+            OnLButtonUp(hwnd, LOWORD(lp), HIWORD(lp));
             return 0;
 
-        case WM_RBUTTONUP:
-            ShowSettingsMenu(hwnd);
+        case WM_RBUTTONUP: {
+            POINT pt = {LOWORD(lp), HIWORD(lp)};
+            if (PtInRect(&rc_power_, pt)) {
+                ShowPowerMenu(hwnd);
+            } else {
+                ShowSettingsMenu(hwnd);
+            }
             return 0;
+        }
 
         case WM_LBUTTONDBLCLK:
             ToggleCompactMode();
@@ -749,22 +780,22 @@ void TopBarWindow::OnPaint(HWND hwnd) {
         g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
         g.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
 
-        // 1. Vibrant Sunset Orange & Ruby Crimson Gradient (Warm & Beautiful)
+        // 1. Signature Soft Sky Blue / Azure Gradient (Kontho-inspired, soft & modern)
         Gdiplus::Rect gRc(0, 0, cr.right, cur_h);
         Gdiplus::LinearGradientBrush bgBrush(
             gRc,
-            Gdiplus::Color(255, 249, 115, 22),  // #F97316 Vibrant Sunset Orange
-            Gdiplus::Color(255, 225, 29, 72),   // #E11D48 Deep Ruby Crimson Red
+            Gdiplus::Color(255, 30, 185, 248),  // #1EB9F8 Soft Sky Cyan Blue
+            Gdiplus::Color(255, 10, 130, 230),  // #0A82E6 Radiant Sky Azure Blue
             Gdiplus::LinearGradientModeVertical
         );
         g.FillRectangle(&bgBrush, gRc);
 
-        // Subtle warm peach highlight border
-        Gdiplus::Pen borderPen(Gdiplus::Color(160, 255, 210, 190), 1.0f);
+        // Subtle soft highlight border
+        Gdiplus::Pen borderPen(Gdiplus::Color(160, 200, 240, 255), 1.0f);
         g.DrawRectangle(&borderPen, 0, 0, cr.right - 1, cur_h - 1);
 
         // Subtle top sheen line
-        Gdiplus::Pen sheenPen(Gdiplus::Color(90, 255, 255, 255), 1.0f);
+        Gdiplus::Pen sheenPen(Gdiplus::Color(110, 255, 255, 255), 1.0f);
         g.DrawLine(&sheenPen, 2, 1, cr.right - 3, 1);
 
         {
@@ -987,7 +1018,7 @@ void TopBarWindow::OnPaint(HWND hwnd) {
                     }
 
                     // Center clear hole
-                    Gdiplus::Pen holePen(Gdiplus::Color(255, 230, 40, 60), 1.0f);
+                    Gdiplus::Pen holePen(Gdiplus::Color(255, 10, 130, 230), 1.0f);
                     g.DrawEllipse(&holePen, cx - 1.6f, cy - 1.6f, 3.2f, 3.2f);
                 }
             }
@@ -1047,32 +1078,58 @@ void TopBarWindow::OnPaint(HWND hwnd) {
 
 void TopBarWindow::OnLButtonDown(HWND hwnd, int x, int y) {
     SetCapture(hwnd);
-    POINT pt = {x, y};
+    is_dragging_ = false;
+    mouse_down_pt_ = {x, y};
+    GetCursorPos(&drag_start_cursor_);
+    drag_start_pos_ = {pos_x_, pos_y_};
 
-    if (PtInRect(&rc_mic_, pt)) {
-        pressed_btn_ = kBtnMic;
+    POINT pt = {x, y};
+    pressed_btn_ = HitTestButton(pt);
+    InvalidateRect(hwnd, nullptr, FALSE);
+}
+
+void TopBarWindow::OnLButtonUp(HWND hwnd, int x, int y) {
+    bool was_dragging = is_dragging_;
+    is_dragging_ = false;
+    ReleaseCapture();
+
+    if (was_dragging) {
+        SaveCoordinates();
+        pressed_btn_ = kBtnNone;
+        InvalidateRect(hwnd, nullptr, FALSE);
+        return;
+    }
+
+    POINT pt = {x, y};
+    ButtonId clicked = HitTestButton(pt);
+    ButtonId target = pressed_btn_;
+    pressed_btn_ = kBtnNone;
+    InvalidateRect(hwnd, nullptr, FALSE);
+
+    if (clicked != target || clicked == kBtnNone) {
+        return;
+    }
+
+    if (clicked == kBtnMic) {
         PlaySoundEffect(3);
         LaunchVoiceInput();
         return;
     }
-    if (PtInRect(&rc_mode_bn_, pt)) {
-        pressed_btn_ = kBtnModeBn;
+    if (clicked == kBtnModeBn) {
         likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kBangla);
         current_mode_ = likhi::ModeTarget::kBangla;
         PlaySoundEffect(1);
         InvalidateRect(hwnd, nullptr, FALSE);
         return;
     }
-    if (PtInRect(&rc_mode_en_, pt)) {
-        pressed_btn_ = kBtnModeEn;
+    if (clicked == kBtnModeEn) {
         likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kEnglish);
         current_mode_ = likhi::ModeTarget::kEnglish;
         PlaySoundEffect(2);
         InvalidateRect(hwnd, nullptr, FALSE);
         return;
     }
-    if (PtInRect(&rc_mode_trans_, pt)) {
-        pressed_btn_ = kBtnModeTrans;
+    if (clicked == kBtnModeTrans) {
         likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kBanglaToEnglish);
         current_mode_ = likhi::ModeTarget::kBanglaToEnglish;
         PlaySoundEffect(2);
@@ -1080,45 +1137,37 @@ void TopBarWindow::OnLButtonDown(HWND hwnd, int x, int y) {
         return;
     }
     if (!is_collapsed_ && !is_compact_mode_) {
-        if (PtInRect(&rc_pause_, pt)) {
-            pressed_btn_ = kBtnPause;
+        if (clicked == kBtnPause) {
             ToggleSuggestions();
             return;
         }
-        if (PtInRect(&rc_dict_, pt)) {
-            pressed_btn_ = kBtnDict;
+        if (clicked == kBtnDict) {
             ShowWordManagerMenu(hwnd);
             return;
         }
-        if (PtInRect(&rc_osk_, pt)) {
-            pressed_btn_ = kBtnOsk;
+        if (clicked == kBtnOsk) {
             LaunchOnScreenKeyboard();
             return;
         }
-        if (PtInRect(&rc_script_, pt)) {
-            pressed_btn_ = kBtnScript;
+        if (clicked == kBtnScript) {
             LaunchConverter();
             return;
         }
-        if (PtInRect(&rc_settings_, pt)) {
-            pressed_btn_ = kBtnSettings;
+        if (clicked == kBtnSettings) {
             ShowSettingsMenu(hwnd);
             return;
         }
     }
-    if (PtInRect(&rc_power_, pt)) {
+    if (clicked == kBtnPower) {
         if (width_ < kNormalWidth) {
             ExpandToFull();
             return;
         }
-        pressed_btn_ = kBtnPower;
-        ShowPowerMenu(hwnd);
+        // Direct click on Power/Tray button minimizes TopBar to System Tray!
+        Show(false);
+        SaveCoordinates();
         return;
     }
-
-    // Dragging anywhere on the bar
-    ReleaseCapture();
-    SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
 }
 
 void TopBarWindow::OnMouseMove(HWND hwnd, int x, int y) {
@@ -1126,6 +1175,26 @@ void TopBarWindow::OnMouseMove(HWND hwnd, int x, int y) {
     tme.dwFlags = TME_LEAVE;
     tme.hwndTrack = hwnd;
     TrackMouseEvent(&tme);
+
+    if (GetCapture() == hwnd) {
+        POINT cur_cursor;
+        GetCursorPos(&cur_cursor);
+        int dx = cur_cursor.x - drag_start_cursor_.x;
+        int dy = cur_cursor.y - drag_start_cursor_.y;
+        if (!is_dragging_ && (abs(dx) > 3 || abs(dy) > 3)) {
+            is_dragging_ = true;
+            pressed_btn_ = kBtnNone;
+            InvalidateRect(hwnd, nullptr, FALSE);
+        }
+        if (is_dragging_) {
+            pos_x_ = drag_start_pos_.x + dx;
+            pos_y_ = drag_start_pos_.y + dy;
+            normal_y_ = pos_y_;
+            SetWindowPos(hwnd, HWND_TOPMOST, pos_x_, pos_y_, width_, height_,
+                         SWP_NOSIZE | SWP_NOACTIVATE);
+            return;
+        }
+    }
 
     // Expand immediately on mouse hover if collapsed or in compact mode
     if (is_collapsed_ || width_ < kNormalWidth) {
@@ -1135,32 +1204,7 @@ void TopBarWindow::OnMouseMove(HWND hwnd, int x, int y) {
     mouse_leave_time_ = 0;
 
     POINT pt = {x, y};
-    ButtonId new_hover = kBtnNone;
-
-    if (PtInRect(&rc_mic_, pt)) {
-        new_hover = kBtnMic;
-    } else if (PtInRect(&rc_mode_bn_, pt)) {
-        new_hover = kBtnModeBn;
-    } else if (PtInRect(&rc_mode_en_, pt)) {
-        new_hover = kBtnModeEn;
-    } else if (PtInRect(&rc_mode_trans_, pt)) {
-        new_hover = kBtnModeTrans;
-    } else if (!is_collapsed_ && !is_compact_mode_) {
-        if (PtInRect(&rc_pause_, pt)) {
-            new_hover = kBtnPause;
-        } else if (PtInRect(&rc_dict_, pt)) {
-            new_hover = kBtnDict;
-        } else if (PtInRect(&rc_osk_, pt)) {
-            new_hover = kBtnOsk;
-        } else if (PtInRect(&rc_script_, pt)) {
-            new_hover = kBtnScript;
-        } else if (PtInRect(&rc_settings_, pt)) {
-            new_hover = kBtnSettings;
-        }
-    }
-    if (PtInRect(&rc_power_, pt)) {
-        new_hover = kBtnPower;
-    }
+    ButtonId new_hover = HitTestButton(pt);
 
     if (new_hover != hovered_btn_) {
         hovered_btn_ = new_hover;

@@ -305,15 +305,15 @@ static void DrawModernButton(LPDRAWITEMSTRUCT pDIS, const wchar_t* text, HFONT h
 
     if (isPrimary) {
         if (isDisabled) {
-            bgColor = RGB(254, 205, 211);
+            bgColor = RGB(186, 230, 253);
             textColor = RGB(156, 163, 175);
             borderColor = bgColor;
         } else if (isPressed) {
-            bgColor = RGB(190, 18, 60);  // Deep Ruby Red
+            bgColor = RGB(3, 105, 161);  // Deep Ruby Red
             textColor = RGB(255, 255, 255);
             borderColor = bgColor;
         } else {
-            bgColor = RGB(225, 29, 72);  // Vibrant Sunset Crimson
+            bgColor = RGB(2, 132, 199);  // Vibrant Sunset Crimson
             textColor = RGB(255, 255, 255);
             borderColor = bgColor;
         }
@@ -323,9 +323,9 @@ static void DrawModernButton(LPDRAWITEMSTRUCT pDIS, const wchar_t* text, HFONT h
             textColor = RGB(156, 163, 175);
             borderColor = RGB(229, 231, 235);
         } else if (isPressed) {
-            bgColor = RGB(254, 226, 226);
-            textColor = RGB(190, 18, 60);
-            borderColor = RGB(254, 205, 211);
+            bgColor = RGB(224, 242, 254);
+            textColor = RGB(3, 105, 161);
+            borderColor = RGB(186, 230, 253);
         } else {
             bgColor = RGB(255, 255, 255);
             textColor = RGB(30, 41, 59);
@@ -391,12 +391,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
             // Color Palette - Likhi Warm Rose & Sunset Crimson Theme
             hBrushBg = CreateSolidBrush(RGB(254, 252, 251));      // Warm clean surface
-            hBrushSidebar = CreateSolidBrush(RGB(255, 241, 242)); // Soft warm rose sidebar
+            hBrushSidebar = CreateSolidBrush(RGB(240, 249, 255)); // Soft warm rose sidebar
             hBrushCard = CreateSolidBrush(RGB(255, 255, 255));    // Pure white elevated card
             hBrushInput = CreateSolidBrush(RGB(255, 255, 255));   // Clean white input
-            hBrushActiveNav = CreateSolidBrush(RGB(225, 29, 72)); // #E11D48 Vibrant Ruby Red
-            hBrushHoverNav = CreateSolidBrush(RGB(254, 226, 226)); // Soft rose hover
-            hBrushAccent = CreateSolidBrush(RGB(249, 115, 22));   // #F97316 Sunset Orange Accent
+            hBrushActiveNav = CreateSolidBrush(RGB(2, 132, 199)); // #E11D48 Vibrant Ruby Red
+            hBrushHoverNav = CreateSolidBrush(RGB(224, 242, 254)); // Soft rose hover
+            hBrushAccent = CreateSolidBrush(RGB(14, 165, 233));   // #F97316 Sunset Orange Accent
 
             // Disable dark frame to match bright warm aesthetic
             BOOL darkMode = FALSE;
@@ -735,7 +735,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     SetTextColor(hdc, RGB(255, 255, 255));
                 } else if (pDIS->itemState & ODS_SELECTED) {
                     FillRect(hdc, &rc, hBrushHoverNav);
-                    SetTextColor(hdc, RGB(225, 29, 72));
+                    SetTextColor(hdc, RGB(2, 132, 199));
                 } else {
                     FillRect(hdc, &rc, hBrushSidebar);
                     SetTextColor(hdc, RGB(71, 85, 105));
@@ -809,7 +809,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 DrawIconEx(hdc, 18, 18, hAppIcon, 48, 48, 0, NULL, DI_NORMAL);
             }
             SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(190, 18, 60)); // Vibrant Ruby Red
+            SetTextColor(hdc, RGB(3, 105, 161)); // Vibrant Ruby Red
             SelectObject(hdc, hFontTitle);
             TextOutW(hdc, 76, 18, L"Likhi (লিখি)", 12);
 
@@ -818,14 +818,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             TextOutW(hdc, 76, 46, L"বাংলা লিখুন, স্বাচ্ছন্দ্যে।", 22);
 
             // 4. Draw Vertical Divider
-            HPEN hPenDivider = CreatePen(PS_SOLID, 1, RGB(254, 205, 211));
+            HPEN hPenDivider = CreatePen(PS_SOLID, 1, RGB(186, 230, 253));
             SelectObject(hdc, hPenDivider);
             MoveToEx(hdc, 235, 0, NULL);
             LineTo(hdc, 235, rcClient.bottom);
             DeleteObject(hPenDivider);
 
             // 5. Draw Content Card Area (Warm rounded card with delicate rose border)
-            HPEN hPenCard = CreatePen(PS_SOLID, 1, RGB(254, 205, 211));
+            HPEN hPenCard = CreatePen(PS_SOLID, 1, RGB(186, 230, 253));
             HBRUSH hOldBr = (HBRUSH)SelectObject(hdc, hBrushCard);
             HPEN hOldPen = (HPEN)SelectObject(hdc, hPenCard);
             RoundRect(hdc, 245, 15, 815, 475, 12, 12);

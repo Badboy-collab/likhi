@@ -34,6 +34,20 @@ public:
         kDockRight = 1
     };
 
+    enum ButtonId {
+        kBtnNone = 0,
+        kBtnMic,
+        kBtnModeBn,      // 1-Click Bangla [বাং]
+        kBtnModeEn,      // 1-Click English [EN]
+        kBtnModeTrans,   // 1-Click Banglish -> English Translation [বা⇄En]
+        kBtnPause,
+        kBtnDict,
+        kBtnOsk,
+        kBtnScript,
+        kBtnSettings,
+        kBtnPower
+    };
+
     void SetVirtualKeyboard(VirtualKeyboardWindow* osk) { osk_window_ = osk; }
     void SetAutoHide(bool enable);
     bool IsAutoHide() const { return auto_hide_enabled_; }
@@ -54,9 +68,11 @@ private:
 
     void OnPaint(HWND hwnd);
     void OnLButtonDown(HWND hwnd, int x, int y);
+    void OnLButtonUp(HWND hwnd, int x, int y);
     void OnMouseMove(HWND hwnd, int x, int y);
     void OnMouseLeave(HWND hwnd);
     void OnTimer(HWND hwnd, UINT_PTR timer_id);
+    ButtonId HitTestButton(POINT pt) const;
     void ShowPowerMenu(HWND hwnd);
     void ShowSettingsMenu(HWND hwnd);
     void ShowWordManagerMenu(HWND hwnd);
@@ -104,21 +120,15 @@ private:
     DWORD mouse_leave_time_;
 
     // Button tracking (Kontho Image 1 Suite: Mic, Mode, Pause, Dict, Mouse/OSK, Script, Settings, Power)
-    enum ButtonId {
-        kBtnNone = 0,
-        kBtnMic,
-        kBtnModeBn,      // 1-Click Bangla [বাং]
-        kBtnModeEn,      // 1-Click English [EN]
-        kBtnModeTrans,   // 1-Click Banglish -> English Translation [বা⇄En]
-        kBtnPause,
-        kBtnDict,
-        kBtnOsk,
-        kBtnScript,
-        kBtnSettings,
-        kBtnPower
-    };
+
     ButtonId hovered_btn_;
     ButtonId pressed_btn_;
+
+    // Drag tracking for smooth dragging anywhere on the bar
+    bool is_dragging_ = false;
+    POINT drag_start_cursor_ = {0, 0};
+    POINT drag_start_pos_ = {0, 0};
+    POINT mouse_down_pt_ = {0, 0};
 
     // Layout rectangles
     RECT rc_mic_;
