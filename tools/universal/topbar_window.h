@@ -61,6 +61,8 @@ public:
     void CollapseToCompact();
     void LaunchVoiceInput();
     void TypeUnicodeString(const std::wstring& text);
+    void LaunchDictionary();
+    void ToggleSuggestions();
 
 private:
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
@@ -94,13 +96,18 @@ private:
     void LaunchOnScreenKeyboard();
     void LaunchConverter();
     void LaunchSettings(const wchar_t* args = nullptr);
-    void LaunchDictionary();
-    void ToggleSuggestions();
+
+    void ShowTooltipCard(ButtonId btn);
+    void HideTooltipCard();
+    static LRESULT CALLBACK TooltipCardWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
     HINSTANCE hinst_;
     HWND hwnd_;
     HWND hwnd_parent_;
     HWND hwnd_tooltip_;
+    HWND hwnd_tooltip_card_ = nullptr;
+    std::wstring tooltip_title_;
+    std::wstring tooltip_desc_;
     VirtualKeyboardWindow* osk_window_;
 
     likhi::ModeTarget current_mode_;

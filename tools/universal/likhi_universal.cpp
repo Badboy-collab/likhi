@@ -1180,33 +1180,55 @@ void UpdateTray() {
 
 void ShowTrayMenu() {
     HMENU menu = CreatePopupMenu();
-    AppendMenuW(menu, MF_STRING, 111, g_topbar.IsVisible() ? L"🪟 টপবার ট্রে-তে পাঠান (Minimize to Tray)" : L"🪟 টপবার খুলুন ও সামনে আনুন (Open TopBar)");
-    AppendMenuW(menu, MF_STRING, 112, L"🔄 টপবার স্ক্রিনের কেন্দ্রে রিসেট (Reset TopBar)");
-    AppendMenuW(menu, MF_STRING, 113, L"🎙️ বাংলা ভয়েস টাইপিং (Bangla Voice Typing) [Ctrl+Alt+V]");
-    AppendMenuW(menu, MF_STRING, 110, L"⌨️ অন-স্ক্রিন কিবোর্ড (Virtual Keyboard)");
-    AppendMenuW(menu, MF_STRING | (g_host_enabled ? MF_CHECKED : 0), 100,
-                L"Universal Mode active");
-    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    bool is_english = (likhi::ModeIpc::Instance().GetMode() == likhi::ModeTarget::kEnglish);
-    AppendMenuW(menu, MF_STRING | (!is_english ? MF_CHECKED : 0),
-                107, L"মোড: বাংলা (Bangla) [Ctrl+Alt+E]");
-    AppendMenuW(menu, MF_STRING | (is_english ? MF_CHECKED : 0),
-                108, L"মোড: English অনুবাদ (Translation) [Ctrl+Alt+E]");
-    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING | (g_mode == InputMode::kAutomatic ? MF_CHECKED : 0),
-                101, L"Automatic (TSF first)");
-    AppendMenuW(menu, MF_STRING | (g_mode == InputMode::kTsfOnly ? MF_CHECKED : 0),
-                102, L"TSF only");
-    AppendMenuW(menu, MF_STRING | (g_mode == InputMode::kUniversalOnly ? MF_CHECKED : 0),
-                103, L"Universal only");
-    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+
+    MENUINFO mi = {sizeof(mi)};
+    mi.cbSize = sizeof(mi);
+    mi.fMask = MIM_BACKGROUND | MIM_APPLYTOSUBMENUS;
+    static HBRUSH s_menuBg = CreateSolidBrush(RGB(255, 255, 255));
+    mi.hbrBack = s_menuBg;
+    SetMenuInfo(menu, &mi);
+
+    // 1. Restore top bar
+    AppendMenuW(menu, MF_STRING, 111, g_topbar.IsVisible() ? L"Hide top bar" : L"Restore top bar");
+
+    // 2. Start Voice Typing
+    AppendMenuW(menu, MF_STRING, 113, L"Start Voice Typing");
+
+    // 3. Typing Mode
+    AppendMenuW(menu, MF_STRING, 115, L"Typing Mode");
+
+    // 4. Typing Options (Submenu)
+    HMENU subTyping = CreatePopupMenu();
+    SetMenuInfo(subTyping, &mi);
+    likhi::ModeTarget curMode = likhi::ModeIpc::Instance().GetMode();
+    AppendMenuW(subTyping, MF_STRING | (curMode == likhi::ModeTarget::kBangla ? MF_CHECKED : 0), 107, L"\u09ac\u09be\u0982\u09b2\u09be (Bangla) [Ctrl+Alt+Space]");
+    AppendMenuW(subTyping, MF_STRING | (curMode == likhi::ModeTarget::kEnglish ? MF_CHECKED : 0), 109, L"English [Ctrl+Alt+Space]");
+    AppendMenuW(subTyping, MF_STRING | (curMode == likhi::ModeTarget::kBanglaToEnglish ? MF_CHECKED : 0), 108, L"\u09ac\u09be\u0982\u09b2\u09bf\u09b6 \u2794 \u0987\u0982\u09b0\u09c7\u099c\u09bf \u0985\u09a8\u09c1\u09ac\u09be\u09a6 [Ctrl+Alt+E]");
+    AppendMenuW(menu, MF_POPUP, (UINT_PTR)subTyping, L"Typing Options");
+
+    // 5. Word Manager
+    AppendMenuW(menu, MF_STRING, 114, L"Word Manager");
+
+    // 6. Options (Submenu)
+    HMENU subOptions = CreatePopupMenu();
+    SetMenuInfo(subOptions, &mi);
+    AppendMenuW(subOptions, MF_STRING, 104, L"Likhi Settings...");
+    AppendMenuW(subOptions, MF_STRING, 112, L"Reset TopBar Position");
+    AppendMenuW(subOptions, MF_STRING, 110, L"On Screen Keyboard");
     if (!g_latest_update_version.empty()) {
-        std::wstring upd_text = L"🚀 Likhi " + g_latest_update_version + L" উপলব্ধ (Update Available)...";
-        AppendMenuW(menu, MF_STRING, 106, upd_text.c_str());
-        AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+        std::wstring upd = L"Check for Update (" + g_latest_update_version + L" available)";
+        AppendMenuW(subOptions, MF_STRING, 106, upd.c_str());
+    } else {
+        AppendMenuW(subOptions, MF_STRING, 106, L"Check for Update");
     }
-    AppendMenuW(menu, MF_STRING, 104, L"Likhi Settings...");
+    AppendMenuW(menu, MF_POPUP, (UINT_PTR)subOptions, L"Options");
+
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+
+    // 7. Restart
+    AppendMenuW(menu, MF_STRING, 116, L"Restart");
+
+    // 8. Exit
     AppendMenuW(menu, MF_STRING, 105, L"Exit");
 
     POINT cursor = {0};
@@ -1218,56 +1240,45 @@ void ShowTrayMenu() {
     if (command == 0) return;
 
     if (command == 111) {
-        if (g_topbar.IsVisible()) {
-            g_show_topbar = false;
-            g_topbar.Show(false);
-            g_topbar.SaveCoordinates();
-        } else {
-            g_show_topbar = true;
-            g_topbar.Show(true);
-            g_topbar.ExpandToFull();
-            g_topbar.SaveCoordinates();
-        }
+        g_show_topbar = !g_topbar.IsVisible();
+        g_topbar.Show(g_show_topbar);
+        if (g_show_topbar) g_topbar.ExpandToFull();
+        g_topbar.SaveCoordinates();
     } else if (command == 112) {
         int screen_w = GetSystemMetrics(SM_CXSCREEN);
-        g_topbar.SetPosition((screen_w - 266) / 2, 10);
+        g_topbar.SetPosition((screen_w - 262) / 2, 12);
         g_show_topbar = true;
         g_topbar.Show(true);
         g_topbar.ExpandBar();
-        g_topbar.SetAutoHide(false);
         g_topbar.SaveCoordinates();
     } else if (command == 110) {
         g_osk.ToggleVisibility();
     } else if (command == 113) {
         g_topbar.LaunchVoiceInput();
-    } else if (command == 109) {
-        g_show_topbar = !g_topbar.IsVisible();
-        g_topbar.Show(g_show_topbar);
-        g_topbar.SaveCoordinates();
-    } else if (command == 100) {
-        g_host_enabled = !g_host_enabled;
-        g_typing.SetEnabled(g_host_enabled && g_mode != InputMode::kTsfOnly);
-        Log(g_host_enabled ? "universal mode resumed" : "universal mode paused");
-        UpdateTray();
+    } else if (command == 114) {
+        g_topbar.LaunchDictionary();
+    } else if (command == 115) {
+        g_topbar.ToggleSuggestions();
+    } else if (command == 116) {
+        wchar_t p[MAX_PATH] = {0};
+        GetModuleFileNameW(nullptr, p, MAX_PATH);
+        ShellExecuteW(nullptr, L"open", p, nullptr, nullptr, SW_SHOWNORMAL);
+        DestroyWindow(g_window);
     } else if (command == 107) {
         likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kBangla);
-        Log("conversion target = bangla");
+        g_topbar.UpdateMode(likhi::ModeTarget::kBangla);
         UpdateTray();
         ShowTransientBadge(false);
-    } else if (command == 108) {
+    } else if (command == 109) {
         likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kEnglish);
-        Log("conversion target = english");
+        g_topbar.UpdateMode(likhi::ModeTarget::kEnglish);
         UpdateTray();
         ShowTransientBadge(true);
-    } else if (command >= 101 && command <= 103) {
-        g_mode = command == 101 ? InputMode::kAutomatic
-               : command == 102 ? InputMode::kTsfOnly
-                                : InputMode::kUniversalOnly;
-        g_typing.SetEnabled(g_host_enabled && g_mode != InputMode::kTsfOnly);
-        Log(g_mode == InputMode::kAutomatic  ? "mode = automatic"
-            : g_mode == InputMode::kTsfOnly  ? "mode = tsf only"
-                                             : "mode = universal only");
+    } else if (command == 108) {
+        likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kBanglaToEnglish);
+        g_topbar.UpdateMode(likhi::ModeTarget::kBanglaToEnglish);
         UpdateTray();
+        ShowTransientBadge(true);
     } else if (command == 104) {
         std::wstring settings = ExeDir() + L"\\bangla_settings.exe";
         if (GetFileAttributesW(settings.c_str()) == INVALID_FILE_ATTRIBUTES) {

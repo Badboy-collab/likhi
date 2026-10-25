@@ -2,8 +2,8 @@
   "version": "1.1.0",
   "release_date": "2026-10-25",
   "download_url": "https://getlikhi.com/downloads/LikhiSetup.exe",
-  "sha256": "18e0d955525cd85d1980571efa8ad1a9af2b93644df91b0af6200b360b667e67",
-  "file_size": 21117191,
+  "sha256": "baf95285f710dec860125fcb4c9c18bfcf2213455078caacc701e98d58d85926",
+  "file_size": 21126919,
   "changelog": [
     "Hand Grab Cursor (IDC_HAND): Intuitive hand cursor on mouse hover over the floating TopBar so you can effortlessly grab and move it anywhere",
     "Instant Bengali Tooltips: Instant on-hover tooltips on all icons explaining their exact function in Bengali (On-Screen Keyboard, Translation, Word Manager, Settings, etc.)",
@@ -13,5 +13,5 @@
     "Horizontal Auto-Hide with Expand Arrow (>>): Keeps the 4 core controls permanently visible while secondary tools collapse into the bar",
     "100% Offline-first local typing engine with zero telemetry"
   ],
-  "size": 21117191
+  "size": 21126919
 }

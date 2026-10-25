@@ -1125,6 +1125,7 @@ void TopBarWindow::OnPaint(HWND hwnd) {
 }
 
 void TopBarWindow::OnLButtonDown(HWND hwnd, int x, int y) {
+    HideTooltipCard();
     SetCapture(hwnd);
     is_dragging_ = false;
     mouse_down_pt_ = {x, y};
@@ -2319,6 +2320,197 @@ void TopBarWindow::InitTooltips(HWND hwnd) {
     AddTool(rc_power_,      9, L"মিনিমাইজ / অপশন মেনু (App Menu)\nটপবার হাইড করে সিস্টেম ট্রে-তে পাঠান অথবা অপশন মেনু দেখুন");
 
     UpdateTooltipRects();
+}
+
+
+LRESULT CALLBACK TopBarWindow::TooltipCardWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    TopBarWindow* self = (TopBarWindow*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+    switch (msg) {
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hwnd, &ps);
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+
+            HDC memdc = CreateCompatibleDC(hdc);
+            HBITMAP membmp = CreateCompatibleBitmap(hdc, rc.right, rc.bottom);
+            HBITMAP oldbmp = (HBITMAP)SelectObject(memdc, membmp);
+
+            HBRUSH bgBrush = CreateSolidBrush(RGB(255, 255, 255));
+            FillRect(memdc, &rc, bgBrush);
+            DeleteObject(bgBrush);
+
+            HPEN pen = CreatePen(PS_SOLID, 1, RGB(209, 213, 219));
+            HPEN oldPen = (HPEN)SelectObject(memdc, pen);
+            HBRUSH nullBr = (HBRUSH)GetStockObject(NULL_BRUSH);
+            HBRUSH oldBr = (HBRUSH)SelectObject(memdc, nullBr);
+            Rectangle(memdc, 0, 0, rc.right, rc.bottom);
+            SelectObject(memdc, oldPen);
+            SelectObject(memdc, oldBr);
+            DeleteObject(pen);
+
+            SetBkMode(memdc, TRANSPARENT);
+
+            if (self) {
+                HFONT hBold = CreateFontW(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                          DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                          CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+                HFONT oldF = (HFONT)SelectObject(memdc, hBold);
+                SetTextColor(memdc, RGB(15, 23, 42));
+
+                RECT rcTitle = {10, 7, rc.right - 10, 24};
+                DrawTextW(memdc, self->tooltip_title_.c_str(), -1, &rcTitle, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
+
+                HFONT hReg = CreateFontW(13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                         CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+                SelectObject(memdc, hReg);
+                SetTextColor(memdc, RGB(71, 85, 105));
+
+                RECT rcDesc = {10, 25, rc.right - 10, rc.bottom - 6};
+                DrawTextW(memdc, self->tooltip_desc_.c_str(), -1, &rcDesc, DT_LEFT | DT_WORDBREAK | DT_NOPREFIX);
+
+                SelectObject(memdc, oldF);
+                DeleteObject(hBold);
+                DeleteObject(hReg);
+            }
+
+            BitBlt(hdc, 0, 0, rc.right, rc.bottom, memdc, 0, 0, SRCCOPY);
+            SelectObject(memdc, oldbmp);
+            DeleteObject(membmp);
+            DeleteDC(memdc);
+
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+        case WM_ERASEBKGND:
+            return 1;
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+void TopBarWindow::ShowTooltipCard(ButtonId btn) {
+    if (!hwnd_ || is_dragging_ || btn == kBtnNone) {
+        HideTooltipCard();
+        return;
+    }
+
+    static bool s_registered = false;
+    const wchar_t kCardClass[] = L"LikhiTooltipCard";
+    if (!s_registered) {
+        WNDCLASSEXW wc = {sizeof(wc)};
+        wc.lpfnWndProc = TooltipCardWndProc;
+        wc.hInstance = hinst_;
+        wc.lpszClassName = kCardClass;
+        wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+        wc.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
+        wc.style = CS_DROPSHADOW;
+        RegisterClassExW(&wc);
+        s_registered = true;
+    }
+
+    if (!hwnd_tooltip_card_) {
+        hwnd_tooltip_card_ = CreateWindowExW(
+            WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+            kCardClass, L"", WS_POPUP,
+            0, 0, 10, 10, hwnd_, nullptr, hinst_, nullptr
+        );
+        if (hwnd_tooltip_card_) {
+            SetWindowLongPtrW(hwnd_tooltip_card_, GWLP_USERDATA, (LONG_PTR)this);
+        }
+    }
+    if (!hwnd_tooltip_card_) return;
+
+    RECT rcBtn = {0};
+    switch (btn) {
+        case kBtnMic:
+            tooltip_title_ = L"Voice Typing:";
+            tooltip_desc_  = L"Click to start voice typing in Bangla, or press [Ctrl+Alt+V].";
+            rcBtn = rc_mic_;
+            break;
+        case kBtnModePill:
+            tooltip_title_ = L"Language Mode:";
+            tooltip_desc_  = L"Switch between Bangla and English typing modes (or press Ctrl+Alt+Space).";
+            rcBtn = rc_mode_pill_;
+            break;
+        case kBtnModeTrans:
+            tooltip_title_ = L"Translation Mode:";
+            tooltip_desc_  = L"Convert Banglish phonetic typing directly into English sentences [Ctrl+Alt+E].";
+            rcBtn = rc_mode_trans_;
+            break;
+        case kBtnPause:
+            tooltip_title_ = L"Typing Mode";
+            tooltip_desc_  = suggestions_paused_
+                ? L"Resume (\u25b6) to display the word suggestion window while typing."
+                : L"Enable (\u25b6) to display the word suggestion window while typing, and pause (\u23f8) when typing sensitive content to avoid displaying text.";
+            rcBtn = rc_pause_;
+            break;
+        case kBtnDict:
+            tooltip_title_ = L"Word Manager:";
+            tooltip_desc_  = L"Add custom words to your personal dictionary and manage learned words.";
+            rcBtn = rc_dict_;
+            break;
+        case kBtnOsk:
+            tooltip_title_ = L"On Screen Keyboard:";
+            tooltip_desc_  = L"Use the mouse to click and type in Bangla, English, special characters, or emojis.";
+            rcBtn = rc_osk_;
+            break;
+        case kBtnScript:
+            tooltip_title_ = L"Character Map / Converter:";
+            tooltip_desc_  = L"Convert text between Unicode and Bijoy, and view Bengali characters.";
+            rcBtn = rc_script_;
+            break;
+        case kBtnSettings:
+            tooltip_title_ = L"Likhi Settings:";
+            tooltip_desc_  = L"Configure keyboard shortcuts, layout, voice typing options, and appearance.";
+            rcBtn = rc_settings_;
+            break;
+        case kBtnPower:
+            if (width_ < kNormalWidth) {
+                tooltip_title_ = L"Expand Top Bar:";
+                tooltip_desc_  = L"Click to expand the full tool bar and access all typing tools.";
+            } else {
+                tooltip_title_ = L"Likhi Menu:";
+                tooltip_desc_  = L"Access options, move to system tray, restart, or exit Likhi.";
+            }
+            rcBtn = rc_power_;
+            break;
+        default:
+            HideTooltipCard();
+            return;
+    }
+
+    int card_w = (btn == kBtnPause || btn == kBtnModeTrans) ? 290 : 250;
+
+    HDC hdc = GetDC(hwnd_tooltip_card_);
+    HFONT hReg = CreateFontW(13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+    HFONT oldF = (HFONT)SelectObject(hdc, hReg);
+    RECT rcCalc = {0, 0, card_w - 20, 1000};
+    DrawTextW(hdc, tooltip_desc_.c_str(), -1, &rcCalc, DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
+    SelectObject(hdc, oldF);
+    DeleteObject(hReg);
+    ReleaseDC(hwnd_tooltip_card_, hdc);
+
+    int card_h = 30 + (rcCalc.bottom - rcCalc.top) + 12;
+
+    POINT pt = {(rcBtn.left + rcBtn.right) / 2 - card_w / 2, rcBtn.bottom + 6};
+    ClientToScreen(hwnd_, &pt);
+
+    int screen_w = GetSystemMetrics(SM_CXSCREEN);
+    if (pt.x < 10) pt.x = 10;
+    if (pt.x + card_w > screen_w - 10) pt.x = screen_w - card_w - 10;
+
+    SetWindowPos(hwnd_tooltip_card_, HWND_TOPMOST, pt.x, pt.y, card_w, card_h,
+                 SWP_SHOWWINDOW | SWP_NOACTIVATE);
+    InvalidateRect(hwnd_tooltip_card_, nullptr, TRUE);
+}
+
+void TopBarWindow::HideTooltipCard() {
+    if (hwnd_tooltip_card_ && IsWindow(hwnd_tooltip_card_)) {
+        ShowWindow(hwnd_tooltip_card_, SW_HIDE);
+    }
 }
 
 void TopBarWindow::UpdateTooltipRects() {

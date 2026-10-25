@@ -28,8 +28,8 @@ import deploy_theme as dt  # reuse the proven FTPS config/connection helpers
 
 DEFAULT_LOCAL = os.path.join(dt.REPO_ROOT, "release_package", "LikhiSetup.exe")
 VERSION_LOCAL = os.path.join(dt.REPO_ROOT, "release_package", "version.json")
-EXPECTED_SIZE = 21117191
-EXPECTED_SHA256 = "18e0d955525cd85d1980571efa8ad1a9af2b93644df91b0af6200b360b667e67"
+EXPECTED_SIZE = 21126919
+EXPECTED_SHA256 = "baf95285f710dec860125fcb4c9c18bfcf2213455078caacc701e98d58d85926"
 EXPECTED_DOCUMENT_ROOT = "/home/shohojba/getlikhi.com"
 EXPECTED_INSTALLER_DIRECTORY = posixpath.join(EXPECTED_DOCUMENT_ROOT, "downloads")
 REMOTE_PATH = "/LikhiSetup.exe"
