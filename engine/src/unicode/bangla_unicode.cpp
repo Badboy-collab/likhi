@@ -274,6 +274,27 @@ std::string UnicodeUtils::CanonicalizeBengali(const std::string& utf8_text) {
             continue;
         }
 
+        // 5. Decomposed Nukta: DDA (0x09A1) + Nukta (0x09BC) -> RRA (0x09DC)
+        if (cp == 0x09A1 && i + 1 < u32.size() && u32[i + 1] == 0x09BC) {
+            canonical.push_back(0x09DC);
+            i++;
+            continue;
+        }
+
+        // 6. Decomposed Nukta: DDHA (0x09A2) + Nukta (0x09BC) -> RHA (0x09DD)
+        if (cp == 0x09A2 && i + 1 < u32.size() && u32[i + 1] == 0x09BC) {
+            canonical.push_back(0x09DD);
+            i++;
+            continue;
+        }
+
+        // 7. Decomposed Nukta: YA (0x09AF) + Nukta (0x09BC) -> YYA (0x09DF)
+        if (cp == 0x09AF && i + 1 < u32.size() && u32[i + 1] == 0x09BC) {
+            canonical.push_back(0x09DF);
+            i++;
+            continue;
+        }
+
         canonical.push_back(cp);
     }
     return Utf32ToUtf8(canonical);

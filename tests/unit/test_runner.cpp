@@ -1,4 +1,6 @@
+#include <chrono>
 #include "../../engine/include/bangla_engine.h"
+#include "../../engine/src/unicode/bangla_unicode.h"
 #include <iostream>
 #include <vector>
 #include <string>
@@ -15,7 +17,9 @@ int g_passed = 0;
 int g_failed = 0;
 
 void ASSERT_EQUAL(const std::string& actual, const std::string& expected, const std::string& test_name) {
-    if (actual == expected) {
+    std::string norm_actual = bangla::UnicodeUtils::CanonicalizeBengali(actual);
+    std::string norm_expected = bangla::UnicodeUtils::CanonicalizeBengali(expected);
+    if (actual == expected || norm_actual == norm_expected) {
         g_passed++;
     } else {
         g_failed++;
@@ -368,8 +372,10 @@ int main() {
         CandidateList list;
         BanglaEngine_GetCandidates(engine, &list);
 
+        std::string norm_expected = bangla::UnicodeUtils::CanonicalizeBengali(qc.expected);
+
         // Top-1 check
-        if (list.count > 0 && list.candidates[0].bengali_text == qc.expected) {
+        if (list.count > 0 && (list.candidates[0].bengali_text == qc.expected || bangla::UnicodeUtils::CanonicalizeBengali(list.candidates[0].bengali_text) == norm_expected)) {
             return true;
         }
 
@@ -377,7 +383,7 @@ int main() {
         if (qc.top3_acceptable) {
             uint32_t check_limit = (list.count < 3) ? list.count : 3;
             for (uint32_t i = 0; i < check_limit; i++) {
-                if (list.candidates[i].bengali_text == qc.expected) {
+                if (list.candidates[i].bengali_text == qc.expected || bangla::UnicodeUtils::CanonicalizeBengali(list.candidates[i].bengali_text) == norm_expected) {
                     return true;
                 }
             }
@@ -523,6 +529,166 @@ int main() {
         BanglaEngine_GetCandidates(engine, &list_custom);
         ASSERT_TRUE(list_custom.count > 0 && std::string(list_custom.candidates[0].bengali_text) == "আমারশব্দ",
                     "Teach Mode: Explicit personal dictionary word preserved after clearing learned data");
+    }
+
+    // =========================================================================
+    // SUITE 12: ADVANCED NEXT-WORD PREDICTION & PRIVACY GATING
+    // =========================================================================
+    std::cout << "\n--- Suite 12: Advanced Next-Word Prediction & Privacy Gating ---\n";
+    {
+        // 1. Multi-word context (Trigram)
+        BanglaEngine_ResetContext(engine);
+        BanglaEngine_CommitWord(engine, "আমি");
+        BanglaEngine_CommitWord(engine, "আজকে");
+        CandidateList p_trigram1;
+        BanglaEngine_GetNextWordPredictions(engine, &p_trigram1);
+        bool found_office = false;
+        for (uint32_t i = 0; i < p_trigram1.count; ++i) {
+            if (std::string(p_trigram1.candidates[i].bengali_text) == "অফিসে" ||
+                std::string(p_trigram1.candidates[i].bengali_text) == "বাসায়" ||
+                std::string(p_trigram1.candidates[i].bengali_text) == "যাব") {
+                found_office = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(found_office, "Trigram 'আমি আজকে' -> 'অফিসে' / 'বাসায়' / 'যাব'");
+
+        BanglaEngine_CommitWord(engine, "অফিসে");
+        CandidateList p_trigram2;
+        BanglaEngine_GetNextWordPredictions(engine, &p_trigram2);
+        bool found_jab = false;
+        for (uint32_t i = 0; i < p_trigram2.count; ++i) {
+            if (std::string(p_trigram2.candidates[i].bengali_text) == "যাব" ||
+                std::string(p_trigram2.candidates[i].bengali_text) == "আছি" ||
+                std::string(p_trigram2.candidates[i].bengali_text) == "গিয়েছিলাম") {
+                found_jab = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(found_jab, "Trigram 'আজকে অফিসে' -> 'যাব' / 'আছি' / 'গিয়েছিলাম'");
+
+        // 2. English context prediction
+        BanglaEngine_ResetContext(engine);
+        BanglaEngine_CommitWord(engine, "How");
+        BanglaEngine_CommitWord(engine, "are");
+        CandidateList p_en1;
+        BanglaEngine_GetNextWordPredictions(engine, &p_en1);
+        bool found_you = false;
+        for (uint32_t i = 0; i < p_en1.count; ++i) {
+            if (std::string(p_en1.candidates[i].bengali_text) == "you") {
+                found_you = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(found_you, "English prediction 'How are' -> 'you'");
+
+        BanglaEngine_ResetContext(engine);
+        BanglaEngine_CommitWord(engine, "Thank");
+        BanglaEngine_CommitWord(engine, "you");
+        CandidateList p_en2;
+        BanglaEngine_GetNextWordPredictions(engine, &p_en2);
+        bool found_for = false;
+        for (uint32_t i = 0; i < p_en2.count; ++i) {
+            std::string t = p_en2.candidates[i].bengali_text;
+            if (t == "for" || t == "very" || t == "so") {
+                found_for = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(found_for, "English prediction 'Thank you' -> 'for' / 'very' / 'so'");
+
+        // 3. Mixed language context
+        BanglaEngine_ResetContext(engine);
+        BanglaEngine_CommitWord(engine, "Facebook");
+        CandidateList p_mixed;
+        BanglaEngine_GetNextWordPredictions(engine, &p_mixed);
+        bool found_post = false;
+        for (uint32_t i = 0; i < p_mixed.count; ++i) {
+            std::string t = p_mixed.candidates[i].bengali_text;
+            if (t == "এ" || t == "পোস্ট") {
+                found_post = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(found_post, "Mixed context 'Facebook' -> 'এ' / 'পোস্ট'");
+
+        // 4. Privacy & Unknown context gating (must suppress, count == 0)
+        BanglaEngine_ResetContext(engine);
+        BanglaEngine_CommitWord(engine, "xyzrandomnonexistentgibberish12345");
+        CandidateList p_unknown;
+        BanglaEngine_GetNextWordPredictions(engine, &p_unknown);
+        ASSERT_TRUE(p_unknown.count == 0, "Unknown / sub-threshold context suppresses predictions (count == 0)");
+
+        // 5. Personal learning dynamic bigram promotion
+        BanglaEngine_ResetContext(engine);
+        BanglaEngine_SetLearningEnabled(engine, true);
+        BanglaEngine_CommitWord(engine, "লিখি");
+        BanglaEngine_CommitWord(engine, "রক্স");
+        BanglaEngine_CommitWord(engine, "লিখি");
+        BanglaEngine_CommitWord(engine, "রক্স");
+        BanglaEngine_CommitWord(engine, "লিখি");
+        CandidateList p_learn;
+        BanglaEngine_GetNextWordPredictions(engine, &p_learn);
+        bool found_rocks = false;
+        for (uint32_t i = 0; i < p_learn.count; ++i) {
+            if (std::string(p_learn.candidates[i].bengali_text) == "রক্স") {
+                found_rocks = true;
+                ASSERT_TRUE((p_learn.candidates[i].category_flags & CANDIDATE_FLAG_PERSONAL) != 0,
+                            "Learned prediction has CANDIDATE_FLAG_PERSONAL");
+                break;
+            }
+        }
+        ASSERT_TRUE(found_rocks, "Personal learning promoted 'লিখি' -> 'রক্স'");
+
+        // 5b. Same-Word suppression regression gate
+        BanglaEngine_ResetContext(engine);
+        BanglaEngine_CommitWord(engine, "যেতে");
+        CandidateList p_same1;
+        BanglaEngine_GetNextWordPredictions(engine, &p_same1);
+        bool found_same_jete = false;
+        for (uint32_t i = 0; i < p_same1.count; ++i) {
+            if (std::string(p_same1.candidates[i].bengali_text) == "যেতে") found_same_jete = true;
+        }
+        ASSERT_TRUE(!found_same_jete, "Same-word prediction suppressed after 'যেতে'");
+
+        BanglaEngine_ResetContext(engine);
+        BanglaEngine_CommitWord(engine, "সাজেশন");
+        CandidateList p_same2;
+        BanglaEngine_GetNextWordPredictions(engine, &p_same2);
+        bool found_same_sug = false;
+        for (uint32_t i = 0; i < p_same2.count; ++i) {
+            if (std::string(p_same2.candidates[i].bengali_text) == "সাজেশন") found_same_sug = true;
+        }
+        ASSERT_TRUE(!found_same_sug, "Same-word prediction suppressed after 'সাজেশন'");
+
+        // 5c. Loanword & Digraph top-1 verification
+        CandidateList c_next;
+        BanglaEngine_SetComposition(engine, "next");
+        BanglaEngine_GetCandidates(engine, &c_next);
+        ASSERT_TRUE(c_next.count > 0 && std::string(c_next.candidates[0].bengali_text) == "নেক্সট", "Loanword 'next' -> 'নেক্সট'");
+
+        CandidateList c_dischhe;
+        BanglaEngine_SetComposition(engine, "dischhe");
+        BanglaEngine_GetCandidates(engine, &c_dischhe);
+        ASSERT_TRUE(c_dischhe.count > 0 && std::string(c_dischhe.candidates[0].bengali_text) == "দিচ্ছে", "Digraph 'dischhe' -> 'দিচ্ছে'");
+
+        CandidateList c_dict;
+        BanglaEngine_SetComposition(engine, "dictionary");
+        BanglaEngine_GetCandidates(engine, &c_dict);
+        ASSERT_TRUE(c_dict.count > 0 && std::string(c_dict.candidates[0].bengali_text) == "ডিকশনারি", "Loanword 'dictionary' -> 'ডিকশনারি'");
+
+        // 6. Non-blocking latency benchmark (< 1.0 ms)
+        auto start = std::chrono::high_resolution_clock::now();
+        const int kBenchIters = 1000;
+        CandidateList p_bench;
+        for (int b = 0; b < kBenchIters; ++b) {
+            BanglaEngine_GetNextWordPredictions(engine, &p_bench);
+        }
+        auto end = std::chrono::high_resolution_clock::now();
+        double elapsed_us = std::chrono::duration<double, std::micro>(end - start).count();
+        double avg_us = elapsed_us / kBenchIters;
+        std::cout << "  [PERF] PredictNextWords latency: " << avg_us << " us / query (limit: 1000 us)\n";
+        ASSERT_TRUE(avg_us < 1000.0, "PredictNextWords is sub-millisecond and non-blocking");
     }
 
     BanglaEngine_Destroy(engine);

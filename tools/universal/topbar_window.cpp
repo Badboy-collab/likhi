@@ -253,7 +253,7 @@ TopBarWindow::TopBarWindow()
       pos_y_(12),
       normal_y_(12),
       is_visible_(true),
-      auto_hide_enabled_(false),
+      auto_hide_enabled_(true),
       is_collapsed_(false),
       is_hovered_(false),
       is_compact_mode_(false),
@@ -482,6 +482,7 @@ void TopBarWindow::ToggleCompactMode() {
 }
 
 void TopBarWindow::ExpandToFull() {
+    HideTooltipCard();
     is_collapsed_ = false;
     width_ = kNormalWidth;
     height_ = kNormalHeight;
@@ -513,6 +514,7 @@ void TopBarWindow::ExpandToFull() {
 }
 
 void TopBarWindow::CollapseToCompact() {
+    HideTooltipCard();
     is_collapsed_ = true;
     width_ = kCollapsedWidth; // 160px
     height_ = kNormalHeight;
@@ -578,7 +580,7 @@ void TopBarWindow::LoadCoordinates() {
 
     if (content.find("\"topbar_autohide\": false") != std::string::npos) {
         auto_hide_enabled_ = false;
-    } else if (content.find("\"topbar_autohide\": true") != std::string::npos) {
+    } else {
         auto_hide_enabled_ = true;
     }
 
@@ -642,11 +644,21 @@ void TopBarWindow::CheckAutoHide() {
         return;
     }
 
-    POINT pt;
-    GetCursorPos(&pt);
+    POINT pt = {0};
+    if (!GetCursorPos(&pt)) return;
 
     bool mouse_in_zone = (pt.y >= (pos_y_ - 8) && pt.y <= (pos_y_ + height_ + 10) &&
                           pt.x >= (pos_x_ - 10) && pt.x <= (pos_x_ + width_ + 10));
+
+    if (!mouse_in_zone && hwnd_tooltip_card_ && IsWindowVisible(hwnd_tooltip_card_)) {
+        RECT rcCard = {0};
+        GetWindowRect(hwnd_tooltip_card_, &rcCard);
+        if (PtInRect(&rcCard, pt)) {
+            mouse_in_zone = true;
+        } else {
+            HideTooltipCard();
+        }
+    }
 
     if (mouse_in_zone) {
         if (is_collapsed_ || width_ < kNormalWidth) {
@@ -704,7 +716,6 @@ LRESULT TopBarWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         pos_y_ = normal_y_;
         Show(true);
         ExpandBar();
-        SetAutoHide(false);
         SetWindowPos(hwnd_, HWND_TOPMOST, pos_x_, normal_y_, width_, height_, SWP_SHOWWINDOW);
         SetForegroundWindow(hwnd_);
         SaveCoordinates();
@@ -717,7 +728,6 @@ LRESULT TopBarWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         pos_y_ = 10;
         Show(true);
         ExpandBar();
-        SetAutoHide(false);
         SetWindowPos(hwnd_, HWND_TOPMOST, pos_x_, normal_y_, width_, height_, SWP_SHOWWINDOW);
         SetForegroundWindow(hwnd_);
         SaveCoordinates();
@@ -1138,6 +1148,7 @@ void TopBarWindow::OnLButtonDown(HWND hwnd, int x, int y) {
 }
 
 void TopBarWindow::OnLButtonUp(HWND hwnd, int x, int y) {
+    HideTooltipCard();
     bool was_dragging = is_dragging_;
     is_dragging_ = false;
     ReleaseCapture();
@@ -1269,50 +1280,43 @@ void TopBarWindow::OnMouseMove(HWND hwnd, int x, int y) {
     if (new_hover != hovered_btn_) {
         hovered_btn_ = new_hover;
         InvalidateRect(hwnd, nullptr, FALSE);
+        if (hovered_btn_ != kBtnNone && !is_dragging_) {
+            ShowTooltipCard(hovered_btn_);
+        } else {
+            HideTooltipCard();
+        }
+    } else if (hovered_btn_ != kBtnNone && (!hwnd_tooltip_card_ || !IsWindowVisible(hwnd_tooltip_card_)) && !is_dragging_) {
+        ShowTooltipCard(hovered_btn_);
     }
 }
 
 void TopBarWindow::OnMouseLeave(HWND hwnd) {
+    POINT cur = {0};
+    if (GetCursorPos(&cur)) {
+        RECT rcWnd = {0};
+        GetWindowRect(hwnd, &rcWnd);
+        if (PtInRect(&rcWnd, cur)) {
+            // Spurious mouseleave: cursor is physically still on TopBar
+            return;
+        }
+        if (hwnd_tooltip_card_ && IsWindowVisible(hwnd_tooltip_card_)) {
+            RECT rcCard = {0};
+            GetWindowRect(hwnd_tooltip_card_, &rcCard);
+            if (PtInRect(&rcCard, cur)) {
+                // Cursor moved into tooltip card: don't dismiss
+                return;
+            }
+        }
+    }
     hovered_btn_ = kBtnNone;
     pressed_btn_ = kBtnNone;
     is_hovered_ = false;
     mouse_leave_time_ = GetTickCount();
+    HideTooltipCard();
     InvalidateRect(hwnd, nullptr, FALSE);
 }
 
-enum MenuIconType {
-    kIconTray = 0,
-    kIconUpdate,
-    kIconRestart,
-    kIconExit,
-    kIconEngLayout,
-    kIconEngEnc,
-    kIconBnLayout,
-    kIconBnEnc,
-    kIconConverter,
-    kIconKeyboard,
-    kIconSettings,
-    kIconDict,
-    kIconAbout,
-    kIconHelp,
-    kIconCompact,
-    kIconAutoHide,
-    kIconAddWord,
-    kIconInfo,
-    kIconVersion,
-    kIconLogs,
-    kIconKey,
-    kIconClean,
-    kIconMap,
-    kIconDownload,
-    kIconGithub,
-    kIconFacebook,
-    kIconYoutube,
-    kIconWhatsapp,
-    kIconTelegram,
-    kIconEmail,
-    kIconCount
-};
+
 
 static HBITMAP s_menuIcons[kIconCount] = {nullptr};
 
@@ -1380,6 +1384,7 @@ HBITMAP GetMenuIconBitmap(MenuIconType type) {
             case kIconWhatsapp:   bgCol = Gdiplus::Color(255, 37, 211, 102); break;
             case kIconTelegram:   bgCol = Gdiplus::Color(255, 0, 136, 204); break;
             case kIconEmail:      bgCol = Gdiplus::Color(255, 99, 102, 241); break;
+            case kIconMic:        bgCol = Gdiplus::Color(255, 239, 68, 68); break;
             default:              bgCol = Gdiplus::Color(255, 0, 122, 240); break;
         }
 
@@ -1598,6 +1603,11 @@ HBITMAP GetMenuIconBitmap(MenuIconType type) {
             g.DrawRectangle(&whitePen, 2.5f, 4.0f, 11.0f, 8.0f);
             g.DrawLine(&whitePen, 2.5f, 4.0f, 8.0f, 8.5f);
             g.DrawLine(&whitePen, 13.5f, 4.0f, 8.0f, 8.5f);
+        } else if (type == kIconMic) {
+            g.FillRectangle(&whiteBrush, 6.0f, 3.5f, 4.0f, 5.5f);
+            g.DrawArc(&whitePen, 4.5f, 4.5f, 7.0f, 6.0f, 0.0f, 180.0f);
+            g.DrawLine(&whitePen, 8.0f, 10.5f, 8.0f, 13.0f);
+            g.DrawLine(&whitePen, 6.0f, 13.0f, 10.0f, 13.0f);
         }
     }
 
@@ -2326,6 +2336,11 @@ void TopBarWindow::InitTooltips(HWND hwnd) {
 LRESULT CALLBACK TopBarWindow::TooltipCardWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     TopBarWindow* self = (TopBarWindow*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
     switch (msg) {
+        case WM_NCCREATE: {
+            CREATESTRUCTW* cs = (CREATESTRUCTW*)lp;
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)cs->lpCreateParams);
+            return DefWindowProcW(hwnd, msg, wp, lp);
+        }
         case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hwnd, &ps);
@@ -2413,7 +2428,7 @@ void TopBarWindow::ShowTooltipCard(ButtonId btn) {
         hwnd_tooltip_card_ = CreateWindowExW(
             WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
             kCardClass, L"", WS_POPUP,
-            0, 0, 10, 10, hwnd_, nullptr, hinst_, nullptr
+            0, 0, 10, 10, hwnd_, nullptr, hinst_, (LPVOID)this
         );
         if (hwnd_tooltip_card_) {
             SetWindowLongPtrW(hwnd_tooltip_card_, GWLP_USERDATA, (LONG_PTR)this);
@@ -2499,11 +2514,19 @@ void TopBarWindow::ShowTooltipCard(ButtonId btn) {
     ClientToScreen(hwnd_, &pt);
 
     int screen_w = GetSystemMetrics(SM_CXSCREEN);
+    int screen_h = GetSystemMetrics(SM_CYSCREEN);
     if (pt.x < 10) pt.x = 10;
     if (pt.x + card_w > screen_w - 10) pt.x = screen_w - card_w - 10;
+    if (pt.y + card_h > screen_h - 10) {
+        POINT ptAbove = {(rcBtn.left + rcBtn.right) / 2 - card_w / 2, rcBtn.top - card_h - 6};
+        ClientToScreen(hwnd_, &ptAbove);
+        pt.y = ptAbove.y;
+    }
 
     SetWindowPos(hwnd_tooltip_card_, HWND_TOPMOST, pt.x, pt.y, card_w, card_h,
-                 SWP_SHOWWINDOW | SWP_NOACTIVATE);
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    ShowWindow(hwnd_tooltip_card_, SW_SHOWNOACTIVATE);
+    UpdateWindow(hwnd_tooltip_card_);
     InvalidateRect(hwnd_tooltip_card_, nullptr, TRUE);
 }
 

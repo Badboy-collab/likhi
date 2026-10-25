@@ -164,7 +164,7 @@ struct BanglaEngine {
                     std::string prev, cur;
                     uint32_t count = 0;
                     if (std::getline(ss, prev, '\t') && std::getline(ss, cur, '\t') && (ss >> count)) {
-                        if (!prev.empty() && !cur.empty() && count > 0) {
+                        if (!prev.empty() && !cur.empty() && prev != cur && count > 0) {
                             user_bigrams_[prev][cur] += count;
                         }
                     }
@@ -241,6 +241,23 @@ const char* BanglaEngine_GetComposition(const BanglaEngine* engine) {
 void BanglaEngine_CommitWord(BanglaEngine* engine, const char* bengali_word) {
     if (!engine || !bengali_word) return;
     engine->sentence_history.push_back(bengali_word);
+    if (engine->sentence_history.size() > 20) {
+        engine->sentence_history.erase(engine->sentence_history.begin());
+    }
+
+    if (engine->learning_enabled && engine->sentence_history.size() >= 2) {
+        const std::string& prev = engine->sentence_history[engine->sentence_history.size() - 2];
+        if (!prev.empty() && prev != bengali_word) {
+            engine->user_bigrams_[prev][bengali_word]++;
+            if (engine->sentence_history.size() >= 3) {
+                const std::string& prev_prev = engine->sentence_history[engine->sentence_history.size() - 3];
+                if (!prev_prev.empty() && prev_prev != prev) {
+                    engine->user_bigrams_[prev_prev + " " + prev][bengali_word]++;
+                }
+            }
+        }
+    }
+
     engine->personal_dict.IncrementFrequency(bengali_word);
     engine->composition.clear();
 }
@@ -668,19 +685,86 @@ void BanglaEngine_GetNextWordPredictions(BanglaEngine* engine, CandidateList* ou
     }
 
     std::string prev_word = engine->sentence_history.back();
+    std::string prev_prev_word = engine->sentence_history.size() >= 2 
+                                 ? engine->sentence_history[engine->sentence_history.size() - 2] 
+                                 : "";
+
     std::vector<bangla::ScoredCandidate> predictions = engine->context_ranker.PredictNextWords(
         prev_word,
         engine->lexicon,
-        engine->config.max_candidates
+        engine->config.max_candidates,
+        prev_prev_word
     );
 
-    out_list->count = static_cast<uint32_t>(predictions.size());
-    for (uint32_t i = 0; i < out_list->count; i++) {
-        strncpy(out_list->candidates[i].bengali_text, predictions[i].bengali_text.c_str(), sizeof(out_list->candidates[i].bengali_text) - 1);
-        strncpy(out_list->candidates[i].roman_origin, "", sizeof(out_list->candidates[i].roman_origin) - 1);
-        out_list->candidates[i].score = predictions[i].final_score;
-        out_list->candidates[i].category_flags = predictions[i].category_flags;
-        out_list->candidates[i].auto_correct_recommended = false;
+    std::vector<bangla::ScoredCandidate> merged;
+    std::vector<std::string> seen;
+    seen.push_back(prev_word); // NEVER suggest the same word that was just committed!
+
+    // Personal Learning boost: merge user-learned transitions if enabled
+    if (engine->learning_enabled && !engine->user_bigrams_.empty()) {
+        if (!prev_prev_word.empty()) {
+            std::string tri_k = prev_prev_word + " " + prev_word;
+            auto it_u_tri = engine->user_bigrams_.find(tri_k);
+            if (it_u_tri != engine->user_bigrams_.end()) {
+                for (const auto& kv : it_u_tri->second) {
+                    if (std::find(seen.begin(), seen.end(), kv.first) != seen.end()) continue;
+                    bangla::ScoredCandidate sc;
+                    sc.bengali_text = kv.first;
+                    sc.roman_origin = "";
+                    sc.phonetic_score = 0.0f;
+                    sc.unigram_score = 0.0f;
+                    sc.bigram_score = 0.98f;
+                    sc.personal_score = std::min(1.0f, 0.5f + std::log10((float)kv.second + 1.0f) / 3.0f);
+                    sc.final_score = std::max(0.95f, sc.personal_score);
+                    sc.category_flags = CANDIDATE_FLAG_PREDICTION | CANDIDATE_FLAG_CONTEXTUAL | CANDIDATE_FLAG_PERSONAL;
+                    sc.auto_correct_recommended = false;
+                    merged.push_back(sc);
+                    seen.push_back(kv.first);
+                }
+            }
+        }
+
+        auto it_u = engine->user_bigrams_.find(prev_word);
+        if (it_u != engine->user_bigrams_.end()) {
+            for (const auto& kv : it_u->second) {
+                if (std::find(seen.begin(), seen.end(), kv.first) != seen.end()) continue;
+                bangla::ScoredCandidate sc;
+                sc.bengali_text = kv.first;
+                sc.roman_origin = "";
+                sc.phonetic_score = 0.0f;
+                sc.unigram_score = 0.0f;
+                sc.bigram_score = 0.90f;
+                sc.personal_score = std::min(1.0f, 0.4f + std::log10((float)kv.second + 1.0f) / 3.0f);
+                sc.final_score = std::max(0.85f, sc.personal_score);
+                sc.category_flags = CANDIDATE_FLAG_PREDICTION | CANDIDATE_FLAG_CONTEXTUAL | CANDIDATE_FLAG_PERSONAL;
+                sc.auto_correct_recommended = false;
+                merged.push_back(sc);
+                seen.push_back(kv.first);
+            }
+        }
+    }
+
+    for (const auto& p : predictions) {
+        if (p.bengali_text == prev_word) continue;
+        if (std::find(seen.begin(), seen.end(), p.bengali_text) != seen.end()) continue;
+        merged.push_back(p);
+        seen.push_back(p.bengali_text);
+    }
+
+    std::stable_sort(merged.begin(), merged.end(), [](const bangla::ScoredCandidate& a, const bangla::ScoredCandidate& b) {
+        return a.final_score > b.final_score;
+    });
+
+    uint32_t limit = static_cast<uint32_t>(engine->config.max_candidates);
+    out_list->count = 0;
+    for (size_t i = 0; i < merged.size() && out_list->count < limit; i++) {
+        if (merged[i].final_score < 0.20f) continue;
+        strncpy(out_list->candidates[out_list->count].bengali_text, merged[i].bengali_text.c_str(), sizeof(out_list->candidates[out_list->count].bengali_text) - 1);
+        strncpy(out_list->candidates[out_list->count].roman_origin, "", sizeof(out_list->candidates[out_list->count].roman_origin) - 1);
+        out_list->candidates[out_list->count].score = merged[i].final_score;
+        out_list->candidates[out_list->count].category_flags = merged[i].category_flags;
+        out_list->candidates[out_list->count].auto_correct_recommended = false;
+        out_list->count++;
     }
 }
 
@@ -855,7 +939,7 @@ bool BanglaEngine_LearnWord(BanglaEngine* engine, const char* roman_key, const c
 
     bool ok = engine->personal_dict.AddWord(roman_key, bengali_word, /*auto_learned=*/true);
 
-    if (!prev.empty()) {
+    if (!prev.empty() && prev != bengali_word) {
         engine->user_bigrams_[prev][bengali_word]++;
     }
 

@@ -48,6 +48,20 @@ _CONSONANT_ALTS = {
 }
 
 
+def normalize_bengali_unicode(text):
+    if not text:
+        return text
+    # Normalize decomposed Nukta characters to standard precomposed Bengali codepoints:
+    # U+09A1 (ড) + U+09BC (়) -> U+09DC (ড়)
+    # U+09A2 (ঢ) + U+09BC (়) -> U+09DD (ঢ়)
+    # U+09AF (য) + U+09BC (়) -> U+09DF (য়)
+    text = text.replace('\u09a1\u09bc', '\u09dc')
+    text = text.replace('\u09a2\u09bc', '\u09dd')
+    text = text.replace('\u09af\u09bc', '\u09df')
+    # Composite Kar E + Kar AA (U+09C7 + U+09BE) -> Kar O (U+09CB)
+    text = text.replace('\u09c7\u09be', '\u09cb')
+    return text
+
 def generate_phonetic_keys(bengali_word):
     """Generates the canonical Banglish romanization key for a Bengali word."""
     roman = []
@@ -105,7 +119,8 @@ def build_large_lexicon():
     def add_word(b_word, r_key, freq, cat="general"):
         if not b_word or '\u09cd\u09cd' in b_word or b_word.endswith('\u09cd'):
             return
-        rk = r_key if r_key else generate_phonetic_keys(b_word)
+        b_word = normalize_bengali_unicode(b_word)
+        rk = r_key.strip().replace(" ", "") if r_key else generate_phonetic_keys(b_word)
         pair = (b_word, rk)
         if pair not in words_dict or freq > words_dict[pair][0]:
             words_dict[pair] = (freq, cat)
@@ -140,7 +155,8 @@ def build_large_lexicon():
         ("ব্যাংক", 820000), ("হিসাব", 800000), ("কার্ড", 780000), ("ঋণ", 740000),
         ("লাভ", 800000), ("ক্ষতি", 780000), ("মূল্য", 800000), ("দর", 780000),
         ("চাকরি", 840000), ("ব্যবসা", 820000), ("বেতন", 800000), ("কর্মকর্তা", 780000),
-        ("কর্মচারী", 760000), ("মালিক", 780000), ("গ্রাহক", 800000), ("সেবা", 820000)
+        ("কর্মচারী", 760000), ("মালিক", 780000), ("গ্রাহক", 800000), ("সেবা", 820000),
+        ("বাদ", 950000), ("অংশ", 920000), ("লাস্ট", 900000), ("লক্ষ্য", 900000), ("লক্ষ", 880000), ("শুধু", 950000), ("জেমিনি", 900000), ("সাজেশন", 900000), ("অপশন", 900000)
     ]
 
     # Additional vocabulary roots across fields (2,000 stems)
@@ -186,17 +202,13 @@ def build_large_lexicon():
     for stem in expanded_stems_list:
         core_nouns.append((stem, 680000))
 
-    # Extended Noun Suffix Matrix (36 productive suffixes)
+    # Curated Productive Noun Suffix Matrix (Natural conversational suffixes only)
     noun_suffixes = [
-        ("", 0), ("ে", -40000), ("ের", -30000), ("েতে", -60000), ("তে", -50000),
-        ("য়", -45000), ("কে", -35000), ("রে", -70000), ("টা", -30000), ("টি", -35000),
-        ("খানা", -75000), ("খানি", -80000), ("গুলো", -40000), ("গুলি", -50000),
-        ("গুলার", -60000), ("গুলোর", -55000), ("গুলারে", -70000), ("গুলোতে", -65000),
-        ("গুলিতে", -70000), ("রা", -45000), ("দের", -40000), ("দেরকে", -55000),
-        ("দেরই", -65000), ("সহ", -60000), ("ছাড়া", -55000), ("মাত্র", -65000),
-        ("টাই", -45000), ("টিতেই", -55000), ("টার", -40000), ("টির", -45000),
-        ("ভাবেই", -50000), ("মূলক", -55000), ("সমূহ", -50000), ("সমূহের", -55000),
-        ("সমূহে", -60000), ("ভাবে", -40000)
+        ("", 0), ("ে", -40000), ("ের", -30000), ("তে", -50000),
+        ("য়", -45000), ("কে", -35000), ("টা", -30000), ("টি", -35000),
+        ("গুলো", -40000), ("গুলোর", -55000), ("গুলোতে", -65000),
+        ("রা", -45000), ("দের", -40000), ("সহ", -60000), ("ছাড়া", -55000),
+        ("মাত্র", -65000), ("টার", -40000), ("টির", -45000), ("ভাবে", -40000)
     ]
 
     for noun, base_freq in core_nouns:
@@ -444,7 +456,20 @@ def build_large_lexicon():
         ("বিকালে", "bikale", 990000),
         ("শুরু", "shuru", 995000), ("শুরু", "suru", 995000),
         ("লাগবে", "lagbe", 990000),
-        ("দাও", "dao", 995000),
+        ("দাও", "daw", 995000), ("দাও", "dao", 995000),
+        ("যাও", "jaw", 995000), ("যাও", "jao", 995000),
+        ("নাও", "naw", 995000), ("নাও", "nao", 995000),
+        ("খাও", "khaw", 995000), ("খাও", "khao", 995000),
+        ("পাও", "paw", 995000), ("পাও", "pao", 995000),
+        ("চাও", "chaw", 995000), ("চাও", "chao", 995000),
+        ("বাদ", "bad", 1000000),
+        ("লাস্ট", "last", 1000000),
+        ("অংশ", "onsho", 990000), ("অংশ", "ongsho", 990000),
+        ("লক্ষ্য", "lokhho", 990000), ("লক্ষ্য", "lokkho", 990000),
+        ("লক্ষ", "lokho", 990000), ("লক্ষ", "lokkho", 990000),
+        ("জেমিনি", "gemini", 990000), ("জেমিনি", "gimini", 990000),
+        ("সাজেশন", "suggestion", 990000), ("সাজেশন", "sajeshon", 990000),
+        ("অপশন", "option", 990000), ("অপশন", "opshon", 990000),
         ("দিচ্ছি", "dicchi", 990000), ("দিচ্ছি", "dissi", 990000),
         ("দিচ্ছো", "diccho", 990000), ("দিচ্ছো", "disso", 990000),
         ("দিবেন", "diben", 990000), ("দেবেন", "deben", 990000), ("দিব", "dibo", 990000),
@@ -865,13 +890,17 @@ def main():
         pair_set = set(pairs)
         kept = {}
         for (b, r, fr, cat) in entries:
+            b = normalize_bengali_unicode(b)
+            r = r.strip().replace(" ", "")
             if (b, r) in pair_set:
                 continue
             key = (b, r)
             if key not in kept or fr > kept[key][0]:
                 kept[key] = (fr, cat)
-        for (r, b) in pairs:
-            kept[(b, r)] = (base_score - len(kept) * 10, category)
+        for i, (r, b) in enumerate(pairs):
+            b = normalize_bengali_unicode(b)
+            r = r.strip().replace(" ", "")
+            kept[(b, r)] = (base_score - i * 10, category)
         return [(b, r, fr, cat) for (b, r), (fr, cat) in kept.items()]
 
     # Words Google Input Tools has already confirmed: kept on disk so the same

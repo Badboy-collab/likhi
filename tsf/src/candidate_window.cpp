@@ -99,6 +99,7 @@ CandidateWindow::CandidateWindow()
       conversion_mode_(ConversionTarget::kBangla),
       bn_hovered_(false),
       en_hovered_(false),
+      is_prediction_mode_(false),
       voice_state_(VoiceState::Off) {
     memset(&caret_rect_, 0, sizeof(RECT));
     memset(&mode_bar_rect_, 0, sizeof(RECT));
@@ -340,6 +341,7 @@ void CandidateWindow::Hide() {
     if (is_visible_ && hwnd_) {
         ShowWindow(hwnd_, SW_HIDE);
         is_visible_ = false;
+        is_prediction_mode_ = false;
         candidates_.clear();
         candidate_item_rects_.clear();
         last_width_ = 0;
@@ -408,6 +410,21 @@ void CandidateWindow::OnPaint(HWND hWnd) {
         capsule_rect.top += 1;
         capsule_rect.bottom -= 1;
 
+        if (is_prediction_mode_) {
+            HBRUSH capsule_bg = CreateSolidBrush(RGB(232, 240, 254)); // Soft Google Blue
+            HPEN capsule_pen = CreatePen(PS_SOLID, 1, RGB(194, 218, 255));
+            HGDIOBJ old_bg = SelectObject(memDC, capsule_bg);
+            HGDIOBJ old_pn = SelectObject(memDC, capsule_pen);
+            RoundRect(memDC, capsule_rect.left, capsule_rect.top, capsule_rect.right, capsule_rect.bottom, 14, 14);
+            SelectObject(memDC, old_bg);
+            SelectObject(memDC, old_pn);
+            DeleteObject(capsule_bg);
+            DeleteObject(capsule_pen);
+
+            SelectObject(memDC, hfont_mode_);
+            SetTextColor(memDC, RGB(26, 115, 232));
+            DrawTextW(memDC, L"\u2728 \u09aa\u09b0\u09ac\u09b0\u09cd\u09a4\u09c0 \u09b6\u09ac\u09cd\u09a6 (Next Word)", -1, &capsule_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        } else {
         HBRUSH capsule_bg = CreateSolidBrush(RGB(241, 243, 244)); // Google Light Gray Capsule
         HPEN capsule_pen = CreatePen(PS_SOLID, 1, RGB(232, 234, 237));
         HGDIOBJ old_bg = SelectObject(memDC, capsule_bg);
@@ -498,6 +515,7 @@ void CandidateWindow::OnPaint(HWND hWnd) {
             SelectObject(memDC, hfont_mode_);
         }
         DrawTextW(memDC, L"English", -1, &en_r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        }
 
         // Subtle hairline separator below mode bar
         HPEN sep_pen = CreatePen(PS_SOLID, 1, RGB(232, 234, 237));

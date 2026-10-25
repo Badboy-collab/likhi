@@ -174,6 +174,85 @@ void ContextRanker::LoadDefaultBigrams() {
     AddBigram("কম্পিউটার", "চালু", 8000);
     AddBigram("ইন্টারনেট", "সংযোগ", 8500);
     AddBigram("ভিডিও", "কল", 8500);
+
+    // Trigram multi-word fluent contexts
+    AddBigram("আমি আজকে", "অফিসে", 9500);
+    AddBigram("আমি আজকে", "বাসায়", 9000);
+    AddBigram("আমি আজকে", "যাব", 8800);
+    AddBigram("আমি আজকে", "কাজ", 8000);
+
+    AddBigram("আজকে অফিসে", "যাব", 9500);
+    AddBigram("আজকে অফিসে", "আছি", 9000);
+    AddBigram("আজকে অফিসে", "গিয়েছিলাম", 8800);
+    AddBigram("আজকে অফিসে", "কাজ", 8500);
+
+    AddBigram("অফিসে", "যাব", 9500);
+    AddBigram("অফিসে", "আছি", 9000);
+    AddBigram("অফিসে", "গিয়েছিলাম", 8800);
+    AddBigram("বাসায়", "আছি", 9200);
+    AddBigram("বাসায়", "যাব", 9000);
+
+    // English single and multi-word contexts
+    AddBigram("How are", "you", 9800);
+    AddBigram("How are", "we", 9000);
+    AddBigram("How are", "they", 8800);
+
+    AddBigram("Thank you", "for", 9500);
+    AddBigram("Thank you", "very", 9200);
+    AddBigram("Thank you", "so", 9000);
+    AddBigram("Thank you", "much", 8800);
+
+    AddBigram("How", "are", 9800);
+    AddBigram("How", "is", 9000);
+    AddBigram("are", "you", 9800);
+    AddBigram("are", "we", 9000);
+    AddBigram("are", "they", 8800);
+
+    AddBigram("Thank", "you", 9900);
+    AddBigram("you", "for", 9500);
+    AddBigram("you", "very", 9200);
+    AddBigram("you", "so", 9000);
+
+    AddBigram("Good", "morning", 9500);
+    AddBigram("Good", "night", 9200);
+    AddBigram("Good", "afternoon", 9000);
+    AddBigram("Good", "evening", 9000);
+    AddBigram("Good", "job", 8800);
+    AddBigram("Good", "luck", 8800);
+
+    AddBigram("I", "am", 9500);
+    AddBigram("I", "will", 9200);
+    AddBigram("I", "have", 9000);
+    AddBigram("I", "can", 8800);
+
+    AddBigram("am", "fine", 9200);
+    AddBigram("am", "ready", 9000);
+    AddBigram("am", "here", 8800);
+
+    AddBigram("will", "be", 9200);
+    AddBigram("will", "go", 9000);
+    AddBigram("will", "do", 8800);
+
+    AddBigram("See", "you", 9500);
+    AddBigram("See you", "later", 9500);
+    AddBigram("See you", "soon", 9200);
+    AddBigram("See you", "tomorrow", 9000);
+
+    AddBigram("Nice to", "meet", 9800);
+    AddBigram("meet", "you", 9800);
+
+    AddBigram("Have a", "nice", 9500);
+    AddBigram("Have a", "great", 9200);
+    AddBigram("Have a", "good", 9000);
+
+    // Mixed-language contexts
+    AddBigram("Facebook", "এ", 9500);
+    AddBigram("Facebook", "ব্যবহার", 9200);
+    AddBigram("Facebook", "পোস্ট", 9000);
+    AddBigram("computer", "চালু", 9200);
+    AddBigram("computer", "স্লো", 9000);
+    AddBigram("mobile", "নাম্বার", 9200);
+    AddBigram("internet", "সংযোগ", 9200);
 }
 
 float ContextRanker::ComputeBigramProb(const std::string& prev_word, const std::string& cur_word) const {
@@ -344,36 +423,69 @@ std::vector<ScoredCandidate> ContextRanker::RankCandidates(
 std::vector<ScoredCandidate> ContextRanker::PredictNextWords(
     const std::string& prev_word,
     const LexiconTrie& lexicon,
-    size_t max_predictions
+    size_t max_predictions,
+    const std::string& prev_prev_word
 ) const {
     std::vector<ScoredCandidate> predictions;
     if (prev_word.empty()) return predictions;
 
+    std::unordered_map<std::string, float> candidate_scores;
+    std::unordered_map<std::string, uint32_t> candidate_flags;
+
+    // 1. Trigram search (2-word context: prev_prev + " " + prev_word)
+    if (!prev_prev_word.empty()) {
+        std::string trigram_key = prev_prev_word + " " + prev_word;
+        auto it_tri = bigrams_.find(trigram_key);
+        if (it_tri != bigrams_.end()) {
+            for (const auto& pair : it_tri->second) {
+                float tri_score = std::min(1.0f, 0.40f + std::log10(static_cast<float>(pair.second) + 1.0f) / 3.0f);
+                candidate_scores[pair.first] = tri_score;
+                candidate_flags[pair.first] = CANDIDATE_FLAG_PREDICTION | CANDIDATE_FLAG_CONTEXTUAL;
+            }
+        }
+    }
+
+    // 2. Bigram search (immediate previous word)
     auto it = bigrams_.find(prev_word);
     if (it != bigrams_.end()) {
         for (const auto& pair : it->second) {
-            ScoredCandidate sc;
-            sc.bengali_text = pair.first;
-            sc.roman_origin = "";
-            sc.phonetic_score = 0.0f;
-            sc.unigram_score = 0.0f;
-            sc.bigram_score = std::min(1.0f, std::log10(static_cast<float>(pair.second) + 1.0f) / 4.0f);
-            sc.personal_score = 0.0f;
-            sc.final_score = sc.bigram_score;
-            sc.category_flags = CANDIDATE_FLAG_PREDICTION | CANDIDATE_FLAG_CONTEXTUAL;
-            sc.auto_correct_recommended = false;
-
-            const LexiconEntry* entry = lexicon.Find(pair.first);
-            if (entry) {
-                sc.unigram_score = std::min(1.0f, std::log10(static_cast<float>(entry->frequency) + 1.0f) / 6.0f);
-                sc.final_score = (0.70f * sc.bigram_score) + (0.30f * sc.unigram_score);
+            float bi_score = std::min(1.0f, std::log10(static_cast<float>(pair.second) + 1.0f) / 4.0f);
+            if (candidate_scores.find(pair.first) != candidate_scores.end()) {
+                candidate_scores[pair.first] = std::max(candidate_scores[pair.first], bi_score + 0.10f);
+            } else {
+                candidate_scores[pair.first] = bi_score;
+                candidate_flags[pair.first] = CANDIDATE_FLAG_PREDICTION | CANDIDATE_FLAG_CONTEXTUAL;
             }
+        }
+    }
 
+    // 3. Assemble and rank
+    for (const auto& kv : candidate_scores) {
+        if (kv.first == prev_word) continue; // NEVER suggest the same word as next-word prediction!
+        ScoredCandidate sc;
+        sc.bengali_text = kv.first;
+        sc.roman_origin = "";
+        sc.phonetic_score = 0.0f;
+        sc.bigram_score = kv.second;
+        sc.personal_score = 0.0f;
+        sc.final_score = kv.second;
+        sc.category_flags = candidate_flags[kv.first];
+        sc.auto_correct_recommended = false;
+
+        const LexiconEntry* entry = lexicon.Find(kv.first);
+        if (entry) {
+            sc.unigram_score = std::min(1.0f, std::log10(static_cast<float>(entry->frequency) + 1.0f) / 6.0f);
+            sc.final_score = (0.75f * sc.bigram_score) + (0.25f * sc.unigram_score);
+        } else {
+            sc.unigram_score = 0.0f;
+        }
+
+        if (sc.final_score >= 0.20f) {
             predictions.push_back(sc);
         }
     }
 
-    std::sort(predictions.begin(), predictions.end(), [](const ScoredCandidate& a, const ScoredCandidate& b) {
+    std::stable_sort(predictions.begin(), predictions.end(), [](const ScoredCandidate& a, const ScoredCandidate& b) {
         return a.final_score > b.final_score;
     });
 

@@ -43,7 +43,8 @@ public:
     std::vector<ScoredCandidate> PredictNextWords(
         const std::string& prev_word,
         const LexiconTrie& lexicon,
-        size_t max_predictions = 5
+        size_t max_predictions = 5,
+        const std::string& prev_prev_word = ""
     ) const;
 
 private:

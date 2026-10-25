@@ -104,22 +104,80 @@ void PhoneticParser::ExpandState(const std::string& roman, const ParseState& sta
     };
 
     // 1. Check Specific Multi-character Clusters & Digraphs
-    if (MatchPrefix(roman, pos, "cch") || MatchPrefix(roman, pos, "chch") || MatchPrefix(roman, pos, "cchh") || MatchPrefix(roman, pos, "chh") || MatchPrefix(roman, pos, "cch")) {
+    // 1a. Banglish clusters for চ্ছ: shchh, schh, shch, sch, cch, chch, cchh, chh
+    // (Guard against English "school" -> "স্কুল")
+    bool is_school = MatchPrefix(roman, pos, "school");
+    if (!is_school && (MatchPrefix(roman, pos, "shchh") || MatchPrefix(roman, pos, "schh") ||
+        MatchPrefix(roman, pos, "shch") || MatchPrefix(roman, pos, "sch") ||
+        MatchPrefix(roman, pos, "cch") || MatchPrefix(roman, pos, "chch") ||
+        MatchPrefix(roman, pos, "cchh") || MatchPrefix(roman, pos, "chh"))) {
+        size_t consumed = 3;
+        if (MatchPrefix(roman, pos, "shchh")) consumed = 5;
+        else if (MatchPrefix(roman, pos, "schh") || MatchPrefix(roman, pos, "shch") ||
+                 MatchPrefix(roman, pos, "chch") || MatchPrefix(roman, pos, "cchh")) consumed = 4;
+        else if (MatchPrefix(roman, pos, "sch")) consumed = 3;
+
         ParseState s = state;
         if (state.in_consonant && state.last_consonant != 0) {
             s.bengali.push_back(HASANT);
         }
         s.bengali += {CONSONANT_CA, HASANT, CONSONANT_CHA}; // চ্ছ
-        size_t consumed = 3;
-        if (MatchPrefix(roman, pos, "chch") || MatchPrefix(roman, pos, "cchh")) consumed = 4;
         s.roman_pos = pos + consumed;
         s.penalty += 0.0f;
         s.in_consonant = true;
         s.last_consonant = CONSONANT_CHA;
         next_states.push_back(s);
+
+        ParseState s2 = state;
+        if (state.in_consonant && state.last_consonant != 0) {
+            s2.bengali.push_back(HASANT);
+        }
+        s2.bengali.push_back(CONSONANT_CHA); // ছ
+        s2.roman_pos = pos + consumed;
+        s2.penalty += 0.03f;
+        s2.in_consonant = true;
+        s2.last_consonant = CONSONANT_CHA;
+        next_states.push_back(s2);
         return;
     }
-    if (MatchPrefix(roman, pos, "kkh")) {
+
+    // 1b. English loanword cluster: xt -> ক্সট (e.g. next -> নেক্সট, text -> টেক্সট)
+    if (MatchPrefix(roman, pos, "xt")) {
+        ParseState s = state;
+        if (state.in_consonant && state.last_consonant != 0) {
+            s.bengali.push_back(HASANT);
+        }
+        s.bengali += {CONSONANT_KA, HASANT, CONSONANT_SA, HASANT, CONSONANT_TTA}; // ক্সট
+        s.roman_pos = pos + 2;
+        s.penalty += 0.0f;
+        s.in_consonant = true;
+        s.last_consonant = CONSONANT_TTA;
+        next_states.push_back(s);
+
+        ParseState s2 = state;
+        if (state.in_consonant && state.last_consonant != 0) {
+            s2.bengali.push_back(HASANT);
+        }
+        s2.bengali += {CONSONANT_KA, HASANT, CONSONANT_SA, HASANT, CONSONANT_TA}; // ক্সত
+        s2.roman_pos = pos + 2;
+        s2.penalty += 0.04f;
+        s2.in_consonant = true;
+        s2.last_consonant = CONSONANT_TA;
+        next_states.push_back(s2);
+        return;
+    }
+
+    // 1c. English loanword suffix: tion -> শন (e.g. dictionary, option, action, station)
+    if (MatchPrefix(roman, pos, "tion")) {
+        ParseState s = state;
+        s.bengali += {CONSONANT_SHA, CONSONANT_NA}; // শন
+        s.roman_pos = pos + 4;
+        s.penalty += 0.01f;
+        s.in_consonant = true;
+        s.last_consonant = CONSONANT_NA;
+        next_states.push_back(s);
+    }
+    if (MatchPrefix(roman, pos, "kkh") || MatchPrefix(roman, pos, "khh")) {
         ParseState s = state;
         if (state.in_consonant && state.last_consonant != 0) {
             s.bengali.push_back(HASANT);
@@ -130,6 +188,27 @@ void PhoneticParser::ExpandState(const std::string& roman, const ParseState& sta
         s.in_consonant = true;
         s.last_consonant = CONSONANT_SSA;
         next_states.push_back(s);
+        return;
+    }
+    if (MatchPrefix(roman, pos, "nsh") || MatchPrefix(roman, pos, "ngsh")) {
+        size_t c_len = MatchPrefix(roman, pos, "ngsh") ? 4 : 3;
+        ParseState s = state;
+        s.bengali.push_back(ANUSVARA); // ং
+        s.bengali.push_back(CONSONANT_SHA); // শ
+        s.roman_pos = pos + c_len;
+        s.penalty += 0.0f;
+        s.in_consonant = true;
+        s.last_consonant = CONSONANT_SHA;
+        next_states.push_back(s);
+
+        ParseState s2 = state;
+        s2.bengali.push_back(ANUSVARA); // ং
+        s2.bengali.push_back(CONSONANT_SA); // স
+        s2.roman_pos = pos + c_len;
+        s2.penalty += 0.02f;
+        s2.in_consonant = true;
+        s2.last_consonant = CONSONANT_SA;
+        next_states.push_back(s2);
         return;
     }
     if (MatchPrefix(roman, pos, "ggan") || MatchPrefix(roman, pos, "gyan")) {
@@ -253,8 +332,85 @@ void PhoneticParser::ExpandState(const std::string& roman, const ParseState& sta
         append_consonant(CONSONANT_RHA, 2, 0.05f); // ঢ়
         return;
     }
+    if (MatchPrefix(roman, pos, "st") && !MatchPrefix(roman, pos, "sth")) {
+        // Branch 1: ষ্ট (ষ + ট) — very common in English loanwords (last, test, post, best, fast, list, cost)
+        // and Bengali words (কষ্ট, নষ্ট, মিষ্টি, সৃষ্টি, দৃষ্টি)
+        ParseState s_sh_tt = state;
+        if (state.in_consonant && state.last_consonant != 0) {
+            s_sh_tt.bengali.push_back(HASANT);
+        }
+        s_sh_tt.bengali.push_back(CONSONANT_SSA);
+        s_sh_tt.bengali.push_back(HASANT);
+        s_sh_tt.bengali.push_back(CONSONANT_TTA);
+        s_sh_tt.roman_pos = pos + 2;
+        s_sh_tt.penalty += 0.0f;
+        s_sh_tt.in_consonant = true;
+        s_sh_tt.last_consonant = CONSONANT_TTA;
+        next_states.push_back(s_sh_tt);
+
+        // Branch 2: স্ত (স + ত) — Sanskrit/Tatsama words (বিস্তার, স্মৃতি, স্তর, রাস্তা)
+        ParseState s_s_t = state;
+        if (state.in_consonant && state.last_consonant != 0) {
+            s_s_t.bengali.push_back(HASANT);
+        }
+        s_s_t.bengali.push_back(CONSONANT_SA);
+        s_s_t.bengali.push_back(HASANT);
+        s_s_t.bengali.push_back(CONSONANT_TA);
+        s_s_t.roman_pos = pos + 2;
+        s_s_t.penalty += 0.01f;
+        s_s_t.in_consonant = true;
+        s_s_t.last_consonant = CONSONANT_TA;
+        next_states.push_back(s_s_t);
+
+        // Branch 3: স্ট (স + ট) — Modern transliterated loanwords (স্টাফ, স্টাইল, স্টেশন)
+        ParseState s_s_tt = state;
+        if (state.in_consonant && state.last_consonant != 0) {
+            s_s_tt.bengali.push_back(HASANT);
+        }
+        s_s_tt.bengali.push_back(CONSONANT_SA);
+        s_s_tt.bengali.push_back(HASANT);
+        s_s_tt.bengali.push_back(CONSONANT_TTA);
+        s_s_tt.roman_pos = pos + 2;
+        s_s_tt.penalty += 0.02f;
+        s_s_tt.in_consonant = true;
+        s_s_tt.last_consonant = CONSONANT_TTA;
+        next_states.push_back(s_s_tt);
+        return;
+    }
 
     // 3. Digraph Vowels
+    if (MatchPrefix(roman, pos, "aw") || MatchPrefix(roman, pos, "ao")) {
+        // e.g. daw -> দাও, khao -> খাও, jao -> যাও, nao -> নাও, pao -> পাও, chao -> চাও
+        ParseState s = state;
+        if (state.in_consonant) {
+            s.bengali.push_back(KAR_AA);
+        } else {
+            s.bengali.push_back(VOWEL_AA);
+        }
+        s.bengali.push_back(VOWEL_O);
+        s.roman_pos = pos + 2;
+        s.penalty += 0.0f;
+        s.in_consonant = false;
+        s.last_consonant = 0;
+        next_states.push_back(s);
+
+        if (MatchPrefix(roman, pos, "aw")) {
+            // Alternative: আকার + ব (e.g. দাব)
+            ParseState s_b = state;
+            if (state.in_consonant) {
+                s_b.bengali.push_back(KAR_AA);
+            } else {
+                s_b.bengali.push_back(VOWEL_AA);
+            }
+            s_b.bengali.push_back(CONSONANT_BA);
+            s_b.roman_pos = pos + 2;
+            s_b.penalty += 0.08f;
+            s_b.in_consonant = true;
+            s_b.last_consonant = CONSONANT_BA;
+            next_states.push_back(s_b);
+        }
+        return;
+    }
     if (MatchPrefix(roman, pos, "aa")) {
         append_vowel(VOWEL_AA, KAR_AA, 2, 0.0f);
         return;
@@ -402,6 +558,15 @@ void PhoneticParser::ExpandState(const std::string& roman, const ParseState& sta
             append_consonant(CONSONANT_HA, 1, 0.0f);
             break;
         case 'w': case 'W':
+            if (!state.in_consonant && !state.bengali.empty()) {
+                ParseState s_o = state;
+                s_o.bengali.push_back(VOWEL_O);
+                s_o.roman_pos = pos + 1;
+                s_o.penalty += 0.0f;
+                s_o.in_consonant = false;
+                s_o.last_consonant = 0;
+                next_states.push_back(s_o);
+            }
             append_consonant(CONSONANT_BA, 1, 0.05f);
             break;
         case 'x': case 'X': {

@@ -34,6 +34,7 @@
 // ============================================================================
 
 #include <windows.h>
+#include <tlhelp32.h>
 #include <gdiplus.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -98,6 +99,7 @@ bool g_host_enabled = true;        // settings.json "universal_mode"
 bool g_personal_learning = true;   // settings.json "personal_learning"
 bool g_auto_check_update = true;   // settings.json "auto_check_update" (enabled by default)
 bool g_english_translation_enabled = true; // settings.json "english_translation"
+bool g_next_word_prediction = true;        // settings.json "next_word_prediction" or "word_prediction"
 likhi::ConversionTarget g_conversion_target = likhi::ConversionTarget::kBangla;
 likhi::TranslationService g_translation_service;
 bool g_tray1_added = false;
@@ -108,6 +110,7 @@ likhi::universal::TopBarWindow g_topbar;
 likhi::universal::VirtualKeyboardWindow g_osk;
 bangla_tsf::CandidateWindow g_candidate_window;
 std::vector<std::wstring> g_current_candidates;
+bool g_is_predicting_next_word = false;
 static POINT g_last_click_pt = {0, 0};
 bool g_show_topbar = true;
 int g_topbar_x = -1;
@@ -204,6 +207,14 @@ void LoadSettings() {
     if (text.find("\"auto_check_update\": true") != std::string::npos) g_auto_check_update = true;
     if (text.find("\"english_translation\": false") != std::string::npos) g_english_translation_enabled = false;
     if (text.find("\"english_translation\": true") != std::string::npos) g_english_translation_enabled = true;
+    if (text.find("\"next_word_prediction\": false") != std::string::npos ||
+        text.find("\"word_prediction\": false") != std::string::npos) {
+        g_next_word_prediction = false;
+    }
+    if (text.find("\"next_word_prediction\": true") != std::string::npos ||
+        text.find("\"word_prediction\": true") != std::string::npos) {
+        g_next_word_prediction = true;
+    }
     if (text.find("\"show_topbar\": false") != std::string::npos) g_show_topbar = false;
     if (text.find("\"show_topbar\": true") != std::string::npos) g_show_topbar = true;
     if (text.find("\"topbar_autohide\": true") != std::string::npos) g_topbar.SetAutoHide(true);
@@ -358,9 +369,11 @@ void ResetIfFocusChanged() {
         g_last_foreground = foreground;
         g_typing.Reset();  // the caret belongs to another window now
         if (g_candidate_window.IsVisible()) {
+            g_candidate_window.SetPredictionMode(false);
             g_candidate_window.Hide();
             g_current_candidates.clear();
         }
+        g_is_predicting_next_word = false;
     }
 }
 
@@ -509,11 +522,46 @@ RECT GetCurrentCaretRect() {
     return rc;
 }
 
+void ShowNextWordPredictions();
+
 void CommitCandidateByIndex(size_t index) {
-    if (index >= g_current_candidates.size() || !g_typing.has_pending()) {
+    if (index >= g_current_candidates.size()) {
+        g_candidate_window.SetPredictionMode(false);
         g_candidate_window.Hide();
         g_current_candidates.clear();
         g_typing.Reset();
+        g_is_predicting_next_word = false;
+        return;
+    }
+
+    if (g_is_predicting_next_word) {
+        std::wstring replacement = g_current_candidates[index];
+        g_candidate_window.SetPredictionMode(false);
+        g_candidate_window.Hide();
+        g_current_candidates.clear();
+        g_is_predicting_next_word = false;
+
+        std::vector<INPUT> inputs;
+        AppendUnicode(inputs, replacement);
+        AppendUnicode(inputs, L" ");
+        if (!inputs.empty()) {
+            SendInput((UINT)inputs.size(), inputs.data(), sizeof(INPUT));
+        }
+
+        if (g_engine && !replacement.empty()) {
+            BanglaEngine_CommitWord(g_engine, NarrowUtf8(replacement).c_str());
+        }
+
+        ShowNextWordPredictions();
+        return;
+    }
+
+    if (!g_typing.has_pending()) {
+        g_candidate_window.SetPredictionMode(false);
+        g_candidate_window.Hide();
+        g_current_candidates.clear();
+        g_typing.Reset();
+        g_is_predicting_next_word = false;
         return;
     }
 
@@ -552,14 +600,77 @@ void CommitCandidateByIndex(size_t index) {
     if (!replacement.empty() && g_engine && !is_en_mode) {
         BanglaEngine_LearnWord(g_engine, NarrowUtf8(roman).c_str(),
                                NarrowUtf8(replacement).c_str());
+        BanglaEngine_CommitWord(g_engine, NarrowUtf8(replacement).c_str());
     }
 
+    g_candidate_window.SetPredictionMode(false);
     g_candidate_window.Hide();
     g_current_candidates.clear();
     g_typing.Reset();
+
+    if (!is_en_mode && !is_trans_mode && !replacement.empty()) {
+        ShowNextWordPredictions();
+    }
+}
+
+void ShowNextWordPredictions() {
+    g_is_predicting_next_word = false;
+    if (!g_next_word_prediction || !g_engine || !ShouldHandleNow()) {
+        if (g_candidate_window.IsVisible()) {
+            g_candidate_window.SetPredictionMode(false);
+            g_candidate_window.Hide();
+        }
+        g_current_candidates.clear();
+        return;
+    }
+
+    likhi::ModeTarget cur_mode = likhi::ModeIpc::Instance().GetMode();
+    if (cur_mode == likhi::ModeTarget::kEnglish) {
+        if (g_candidate_window.IsVisible()) {
+            g_candidate_window.SetPredictionMode(false);
+            g_candidate_window.Hide();
+        }
+        g_current_candidates.clear();
+        return;
+    }
+
+    CandidateList preds;
+    BanglaEngine_GetNextWordPredictions(g_engine, &preds);
+    if (preds.count == 0) {
+        if (g_candidate_window.IsVisible()) {
+            g_candidate_window.SetPredictionMode(false);
+            g_candidate_window.Hide();
+        }
+        g_current_candidates.clear();
+        return;
+    }
+
+    g_current_candidates.clear();
+    for (size_t i = 0; i < (size_t)preds.count; ++i) {
+        std::wstring w = WidenUtf8(preds.candidates[i].bengali_text);
+        if (!w.empty() && std::find(g_current_candidates.begin(), g_current_candidates.end(), w) == g_current_candidates.end()) {
+            g_current_candidates.push_back(w);
+            if (g_current_candidates.size() >= 5) break;
+        }
+    }
+
+    if (g_current_candidates.empty()) {
+        if (g_candidate_window.IsVisible()) {
+            g_candidate_window.SetPredictionMode(false);
+            g_candidate_window.Hide();
+        }
+        return;
+    }
+
+    g_is_predicting_next_word = true;
+    g_candidate_window.SetPredictionMode(true);
+    RECT caret_rc = GetCurrentCaretRect();
+    g_candidate_window.ShowCandidates(g_current_candidates, 0, caret_rc);
 }
 
 void UpdateCandidateWindow() {
+    g_is_predicting_next_word = false;
+    g_candidate_window.SetPredictionMode(false);
     if (!g_engine || !g_typing.has_pending() || !ShouldHandleNow()) {
         if (g_candidate_window.IsVisible()) {
             g_candidate_window.Hide();
@@ -575,10 +686,11 @@ void UpdateCandidateWindow() {
     BanglaEngine_GetCandidates(g_engine, &list);
 
     g_current_candidates.clear();
-    for (size_t i = 0; i < (size_t)list.count && i < 5; ++i) {
+    for (size_t i = 0; i < (size_t)list.count; ++i) {
         std::wstring cand = WidenUtf8(list.candidates[i].bengali_text);
-        if (!cand.empty()) {
+        if (!cand.empty() && std::find(g_current_candidates.begin(), g_current_candidates.end(), cand) == g_current_candidates.end()) {
             g_current_candidates.push_back(cand);
+            if (g_current_candidates.size() >= 5) break;
         }
     }
     bool has_roman = false;
@@ -643,10 +755,17 @@ void ApplyReplace(const Decision& decision) {
         // visible in Word and the other way round.
         BanglaEngine_LearnWord(g_engine, NarrowUtf8(decision.roman).c_str(),
                                NarrowUtf8(replacement).c_str());
+        BanglaEngine_CommitWord(g_engine, NarrowUtf8(replacement).c_str());
     }
     if (g_candidate_window.IsVisible()) {
+        g_candidate_window.SetPredictionMode(false);
         g_candidate_window.Hide();
         g_current_candidates.clear();
+    }
+    g_is_predicting_next_word = false;
+
+    if (!is_en_mode && !is_trans_mode && !replacement.empty()) {
+        ShowNextWordPredictions();
     }
 }
 
@@ -665,7 +784,7 @@ void TriggerModeToggle() {
     bool is_en = (m == likhi::ModeTarget::kEnglish);
     Log(is_en ? "hotkey: english mode" : "hotkey: bangla mode");
     UpdateTray();
-    ShowTransientBadge(is_en);
+    // ShowTransientBadge(is_en);
     g_topbar.UpdateMode(m);
     g_typing.Reset();
     if (g_candidate_window.IsVisible()) {
@@ -686,7 +805,7 @@ void TriggerTranslationToggle() {
     bool is_en = (m == likhi::ModeTarget::kEnglish);
     Log(m == likhi::ModeTarget::kBanglaToEnglish ? "hotkey: english conversion mode" : "hotkey: bangla mode");
     UpdateTray();
-    ShowTransientBadge(is_en);
+    // ShowTransientBadge(is_en);
     g_topbar.UpdateMode(m);
     g_typing.Reset();
     if (g_candidate_window.IsVisible()) {
@@ -724,7 +843,60 @@ LRESULT CALLBACK KeyboardHookProc(int code, WPARAM wparam, LPARAM lparam) {
 
             ResetIfFocusChanged();
             if (ShouldHandleNow()) {
-                if (g_candidate_window.IsVisible() && g_typing.has_pending()) {
+                if (g_is_predicting_next_word) {
+                    if (g_candidate_window.IsVisible()) {
+                        if (key->vkCode == VK_ESCAPE && !is_ctrl && !is_alt && !is_win) {
+                            g_candidate_window.SetPredictionMode(false);
+                            g_candidate_window.Hide();
+                            g_current_candidates.clear();
+                            g_is_predicting_next_word = false;
+                            return 1;
+                        }
+                        if ((key->vkCode == VK_SPACE || key->vkCode == VK_BACK) && !is_ctrl && !is_alt && !is_win) {
+                            g_candidate_window.SetPredictionMode(false);
+                            g_candidate_window.Hide();
+                            g_current_candidates.clear();
+                            g_is_predicting_next_word = false;
+                            return CallNextHookEx(nullptr, code, wparam, lparam);
+                        }
+                        if (key->vkCode == VK_DOWN && !is_ctrl && !is_alt && !is_win) {
+                            g_candidate_window.SelectNext();
+                            return 1;
+                        }
+                        if (key->vkCode == VK_UP && !is_ctrl && !is_alt && !is_win) {
+                            g_candidate_window.SelectPrev();
+                            return 1;
+                        }
+                        if ((key->vkCode == VK_RETURN || (key->vkCode == VK_TAB && !is_shift)) && !is_ctrl && !is_alt && !is_win) {
+                            size_t sel = g_candidate_window.GetSelectedIndex();
+                            if (sel < g_current_candidates.size()) {
+                                CommitCandidateByIndex(sel);
+                                return 1;
+                            }
+                        }
+                        if (!is_ctrl && !is_alt && !is_win && !is_shift) {
+                            if (key->vkCode >= '1' && key->vkCode <= '5') {
+                                size_t idx = (size_t)(key->vkCode - '1');
+                                if (idx < g_current_candidates.size()) {
+                                    CommitCandidateByIndex(idx);
+                                    return 1;
+                                }
+                            } else if (key->vkCode >= VK_NUMPAD1 && key->vkCode <= VK_NUMPAD5) {
+                                size_t idx = (size_t)(key->vkCode - VK_NUMPAD1);
+                                if (idx < g_current_candidates.size()) {
+                                    CommitCandidateByIndex(idx);
+                                    return 1;
+                                }
+                            }
+                        }
+                    }
+                    // User started typing a new character or pressed another key:
+                    // Immediately dismiss next-word prediction mode without conflicting with present typing!
+                    g_is_predicting_next_word = false;
+                    g_candidate_window.SetPredictionMode(false);
+                    g_candidate_window.Hide();
+                    g_current_candidates.clear();
+                } else if (g_candidate_window.IsVisible() && g_typing.has_pending()) {
                     if (key->vkCode == VK_DOWN && !is_ctrl && !is_alt && !is_win) {
                         g_candidate_window.SelectNext();
                         return 1;
@@ -787,9 +959,11 @@ LRESULT CALLBACK KeyboardHookProc(int code, WPARAM wparam, LPARAM lparam) {
             } else {
                 g_typing.Reset();
                 if (g_candidate_window.IsVisible()) {
+                    g_candidate_window.SetPredictionMode(false);
                     g_candidate_window.Hide();
                     g_current_candidates.clear();
                 }
+                g_is_predicting_next_word = false;
             }
         }
     }
@@ -1058,13 +1232,13 @@ HICON CreateHotkeyTrayIcon() {
     DeleteObject(brand_pen);
 
     SetBkMode(mem_dc, TRANSPARENT);
-    SetTextColor(mem_dc, RGB(56, 189, 248));
-    HFONT font = CreateFontW(-11, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+    SetTextColor(mem_dc, RGB(255, 255, 255));
+    HFONT font = CreateFontW(-12, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                              DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+                             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Nirmala UI");
     HGDIOBJ of = SelectObject(mem_dc, font);
-    RECT tr = {0, 0, cx, cy};
-    DrawTextW(mem_dc, L"L", -1, &tr, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    RECT tr = {0, -1, cx, cy};
+    DrawTextW(mem_dc, L"\u09b2", -1, &tr, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     SelectObject(mem_dc, of);
     DeleteObject(font);
 
@@ -1102,15 +1276,43 @@ HICON CreateHotkeyTrayIcon() {
 
 void ShowLanguagePinMenu() {
     HMENU menu = CreatePopupMenu();
+
+    MENUINFO mi = {sizeof(mi)};
+    mi.cbSize = sizeof(mi);
+    mi.fMask = MIM_BACKGROUND | MIM_APPLYTOSUBMENUS;
+    static HBRUSH s_menuBg = CreateSolidBrush(RGB(255, 255, 255));
+    mi.hbrBack = s_menuBg;
+    SetMenuInfo(menu, &mi);
+
     likhi::ModeTarget m = likhi::ModeIpc::Instance().GetMode();
+
     AppendMenuW(menu, MF_STRING | (m == likhi::ModeTarget::kBangla ? MF_CHECKED : 0),
-                201, L"\u09ac\u09be\u0982\u09b2\u09be (Bangla) [Ctrl+Alt+Space]");
+                201, L"\u09ac\u09be\u0982\u09b2\u09be (Bangla Phonetic)\tCtrl+Alt+Space");
     AppendMenuW(menu, MF_STRING | (m == likhi::ModeTarget::kEnglish ? MF_CHECKED : 0),
-                202, L"English [Ctrl+Alt+Space]");
+                202, L"English (Standard US)\tCtrl+Alt+Space");
     AppendMenuW(menu, MF_STRING | (m == likhi::ModeTarget::kBanglaToEnglish ? MF_CHECKED : 0),
-                203, L"\u09ac\u09be\u0982\u09b2\u09bf\u09b6 \u2794 English \u0985\u09a8\u09c1\u09ac\u09be\u09a6 [Ctrl+Alt+E]");
+                203, L"\u09ac\u09be\u0982\u09b2\u09bf\u09b6 \u2794 \u0987\u0982\u09b0\u09c7\u099c\u09bf \u0985\u09a8\u09c1\u09ac\u09be\u09a6\tCtrl+Alt+E");
+
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, 204, g_topbar.IsVisible() ? L"\u099f\u09aa\u09ac\u09be\u09b0 \u09b2\u09c1\u0995\u09be\u09a8 (Hide TopBar)" : L"\u099f\u09aa\u09ac\u09be\u09b0 \u09a6\u09c7\u0996\u09be\u09a8 (Show TopBar)");
+
+    AppendMenuW(menu, MF_STRING, 204, g_topbar.IsVisible() ? L"\u099f\u09aa\u09ac\u09be\u09b0 \u09b2\u09c1\u0995\u09be\u09a8 (Hide TopBar)" : L"\u099f\u09aa\u09ac\u09be\u09b0 \u09a6\u09c7\u0996\u09be\u09a8 (Restore TopBar)");
+    AppendMenuW(menu, MF_STRING, 205, L"\u099f\u09aa\u09ac\u09be\u09b0 \u0995\u09c7\u09a8\u09cd\u09a6্\u09b0\u09c7 \u09b0\u09bf\u09b8\u09c7\u099f (Reset Position)");
+
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+
+    AppendMenuW(menu, MF_STRING, 206, L"\u09ac\u09be\u0982\u09b2\u09be \u09ad\u09af\u09bc\u09c7\u09b8 \u099f\u09be\u0987\u09aa\u09bf\u0982\tCtrl+Alt+V");
+    AppendMenuW(menu, MF_STRING, 207, L"\u0985\u09a8-\u09b8\u09cd\u0995\u09cd\u09b0\u09c0\u09a8 \u0995\u09bf\u09ac\u09cb\u09b0\u09cd\u09a1 (Virtual Keyboard)");
+    AppendMenuW(menu, MF_STRING, 208, L"\u09b8\u09c7\u099f\u09bf\u0982\u09b8 \u0993 \u0985\u09aa\u09b6\u09a8...");
+
+    // Set colorful icon badges
+    likhi::universal::SetMenuItemIcon(menu, 201, false, likhi::universal::kIconBnLayout);
+    likhi::universal::SetMenuItemIcon(menu, 202, false, likhi::universal::kIconEngLayout);
+    likhi::universal::SetMenuItemIcon(menu, 203, false, likhi::universal::kIconConverter);
+    likhi::universal::SetMenuItemIcon(menu, 204, false, likhi::universal::kIconTray);
+    likhi::universal::SetMenuItemIcon(menu, 205, false, likhi::universal::kIconRestart);
+    likhi::universal::SetMenuItemIcon(menu, 206, false, likhi::universal::kIconMic);
+    likhi::universal::SetMenuItemIcon(menu, 207, false, likhi::universal::kIconKeyboard);
+    likhi::universal::SetMenuItemIcon(menu, 208, false, likhi::universal::kIconSettings);
 
     POINT cursor = {0};
     GetCursorPos(&cursor);
@@ -1118,6 +1320,8 @@ void ShowLanguagePinMenu() {
     const UINT cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON,
                                     cursor.x, cursor.y, 0, g_window, nullptr);
     DestroyMenu(menu);
+    if (cmd == 0) return;
+
     if (cmd == 201) {
         likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kBangla);
         g_topbar.UpdateMode(likhi::ModeTarget::kBangla);
@@ -1135,6 +1339,23 @@ void ShowLanguagePinMenu() {
         g_topbar.Show(g_show_topbar);
         if (g_show_topbar) g_topbar.ExpandToFull();
         g_topbar.SaveCoordinates();
+    } else if (cmd == 205) {
+        int screen_w = GetSystemMetrics(SM_CXSCREEN);
+        g_topbar.SetPosition((screen_w - 262) / 2, 12);
+        g_show_topbar = true;
+        g_topbar.Show(true);
+        g_topbar.ExpandBar();
+        g_topbar.SaveCoordinates();
+    } else if (cmd == 206) {
+        g_topbar.LaunchVoiceInput();
+    } else if (cmd == 207) {
+        g_osk.ToggleVisibility();
+    } else if (cmd == 208) {
+        std::wstring settings = ExeDir() + L"\\bangla_settings.exe";
+        if (GetFileAttributesW(settings.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            settings = ExeDir() + L"\\..\\release_package\\bangla_settings.exe";
+        }
+        ShellExecuteW(nullptr, L"open", settings.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     }
 }
 
@@ -1189,30 +1410,37 @@ void ShowTrayMenu() {
     SetMenuInfo(menu, &mi);
 
     // 1. Restore top bar
-    AppendMenuW(menu, MF_STRING, 111, g_topbar.IsVisible() ? L"Hide top bar" : L"Restore top bar");
+    AppendMenuW(menu, MF_STRING, 111, L"Restore top bar");
 
     // 2. Start Voice Typing
     AppendMenuW(menu, MF_STRING, 113, L"Start Voice Typing");
 
-    // 3. Typing Mode
-    AppendMenuW(menu, MF_STRING, 115, L"Typing Mode");
+    // 3. Mic Options (Submenu matching circled screenshot)
+    HMENU subMic = CreatePopupMenu();
+    SetMenuInfo(subMic, &mi);
+    AppendMenuW(subMic, MF_STRING, 120, L"Microphone Settings...");
+    AppendMenuW(subMic, MF_STRING | MF_CHECKED, 121, L"Default Input Device");
+    AppendMenuW(menu, MF_POPUP, (UINT_PTR)subMic, L"Mic Options");
 
-    // 4. Typing Options (Submenu)
+    // 4. Typing Mode
+    AppendMenuW(menu, MF_STRING | (g_host_enabled ? MF_CHECKED : 0), 115, L"Typing Mode");
+
+    // 5. Typing Options (Submenu)
     HMENU subTyping = CreatePopupMenu();
     SetMenuInfo(subTyping, &mi);
     likhi::ModeTarget curMode = likhi::ModeIpc::Instance().GetMode();
-    AppendMenuW(subTyping, MF_STRING | (curMode == likhi::ModeTarget::kBangla ? MF_CHECKED : 0), 107, L"\u09ac\u09be\u0982\u09b2\u09be (Bangla) [Ctrl+Alt+Space]");
-    AppendMenuW(subTyping, MF_STRING | (curMode == likhi::ModeTarget::kEnglish ? MF_CHECKED : 0), 109, L"English [Ctrl+Alt+Space]");
-    AppendMenuW(subTyping, MF_STRING | (curMode == likhi::ModeTarget::kBanglaToEnglish ? MF_CHECKED : 0), 108, L"\u09ac\u09be\u0982\u09b2\u09bf\u09b6 \u2794 \u0987\u0982\u09b0\u09c7\u099c\u09bf \u0985\u09a8\u09c1\u09ac\u09be\u09a6 [Ctrl+Alt+E]");
+    AppendMenuW(subTyping, MF_STRING | (curMode == likhi::ModeTarget::kBangla ? MF_CHECKED : 0), 107, L"\u09ac\u09be\u0982\u09b2\u09be (Bangla)");
+    AppendMenuW(subTyping, MF_STRING | (curMode == likhi::ModeTarget::kEnglish ? MF_CHECKED : 0), 109, L"English");
+    AppendMenuW(subTyping, MF_STRING | (curMode == likhi::ModeTarget::kBanglaToEnglish ? MF_CHECKED : 0), 108, L"\u09ac\u09be\u0982\u09b2\u09bf\u09b6 \u2794 \u0987\u0982\u09b0\u09c7\u099c\u09bf \u0985\u09a8\u09c1\u09ac\u09be\u09a6");
     AppendMenuW(menu, MF_POPUP, (UINT_PTR)subTyping, L"Typing Options");
 
-    // 5. Word Manager
+    // 6. Word Manager
     AppendMenuW(menu, MF_STRING, 114, L"Word Manager");
 
-    // 6. Options (Submenu)
+    // 7. Options (Submenu)
     HMENU subOptions = CreatePopupMenu();
     SetMenuInfo(subOptions, &mi);
-    AppendMenuW(subOptions, MF_STRING, 104, L"Likhi Settings...");
+    AppendMenuW(subOptions, MF_STRING, 104, L"Settings...");
     AppendMenuW(subOptions, MF_STRING, 112, L"Reset TopBar Position");
     AppendMenuW(subOptions, MF_STRING, 110, L"On Screen Keyboard");
     if (!g_latest_update_version.empty()) {
@@ -1225,11 +1453,17 @@ void ShowTrayMenu() {
 
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
 
-    // 7. Restart
+    // 8. Restart
     AppendMenuW(menu, MF_STRING, 116, L"Restart");
 
-    // 8. Exit
+    // 9. Exit
     AppendMenuW(menu, MF_STRING, 105, L"Exit");
+
+    // Attach colorful icons matching the circled screenshot
+    likhi::universal::SetMenuItemIcon(menu, 111, false, likhi::universal::kIconTray);
+    likhi::universal::SetMenuItemIcon(menu, 113, false, likhi::universal::kIconMic);
+    likhi::universal::SetMenuItemIcon(menu, 116, false, likhi::universal::kIconRestart);
+    likhi::universal::SetMenuItemIcon(menu, 105, false, likhi::universal::kIconExit);
 
     POINT cursor = {0};
     GetCursorPos(&cursor);
@@ -1268,18 +1502,15 @@ void ShowTrayMenu() {
         likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kBangla);
         g_topbar.UpdateMode(likhi::ModeTarget::kBangla);
         UpdateTray();
-        ShowTransientBadge(false);
     } else if (command == 109) {
         likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kEnglish);
         g_topbar.UpdateMode(likhi::ModeTarget::kEnglish);
         UpdateTray();
-        ShowTransientBadge(true);
     } else if (command == 108) {
         likhi::ModeIpc::Instance().SetMode(likhi::ModeTarget::kBanglaToEnglish);
         g_topbar.UpdateMode(likhi::ModeTarget::kBanglaToEnglish);
         UpdateTray();
-        ShowTransientBadge(true);
-    } else if (command == 104) {
+    } else if (command == 104 || command == 120) {
         std::wstring settings = ExeDir() + L"\\bangla_settings.exe";
         if (GetFileAttributesW(settings.c_str()) == INVALID_FILE_ATTRIBUTES) {
             settings = ExeDir() + L"\\..\\release_package\\bangla_settings.exe";
@@ -1296,7 +1527,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
     if (message == likhi::ModeIpc::GetBroadcastMessage()) {
         bool is_en = (likhi::ModeIpc::Instance().GetMode() == likhi::ModeTarget::kEnglish);
         UpdateTray();
-        ShowTransientBadge(is_en);
+        // ShowTransientBadge(is_en);
         g_topbar.UpdateMode(likhi::ModeIpc::Instance().GetMode());
         return 0;
     }
@@ -1507,6 +1738,24 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command_line, int) {
     g_instance = instance;
 
     Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+    // If running from Program Files and a newer user-level build exists in AppData, delegate to it!
+    wchar_t exePathPf[MAX_PATH] = {0};
+    GetModuleFileNameW(nullptr, exePathPf, MAX_PATH);
+    if (wcsstr(exePathPf, L"Program Files") != nullptr) {
+        wchar_t appdataDir[MAX_PATH] = {0};
+        if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, appdataDir))) {
+            std::wstring adUni = std::wstring(appdataDir) + L"\\PC-Bangla-Typing-App\\likhi_universal.exe";
+            WIN32_FILE_ATTRIBUTE_DATA pfData = {0}, adData = {0};
+            if (GetFileAttributesExW(exePathPf, GetFileExInfoStandard, &pfData) &&
+                GetFileAttributesExW(adUni.c_str(), GetFileExInfoStandard, &adData)) {
+                if (CompareFileTime(&adData.ftLastWriteTime, &pfData.ftLastWriteTime) > 0) {
+                    ShellExecuteW(nullptr, L"open", adUni.c_str(), command_line, nullptr, SW_SHOW);
+                    return 0;
+                }
+            }
+        }
+    }
+
     ULONG_PTR gdiplusToken = 0;
     Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, nullptr);
 
@@ -1548,13 +1797,51 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command_line, int) {
             ShowWindow(hTopBar, SW_SHOWNORMAL);
             BringWindowToTop(hTopBar);
             SetForegroundWindow(hTopBar);
+            if (g_engine) BanglaEngine_Destroy(g_engine);
+            if (single) CloseHandle(single);
+            if (gdiplusToken) Gdiplus::GdiplusShutdown(gdiplusToken);
+            return 0;
         }
-        if (g_engine) BanglaEngine_Destroy(g_engine);
-        if (single) CloseHandle(single);
-        if (gdiplusToken) {
-            Gdiplus::GdiplusShutdown(gdiplusToken);
+
+        // Wait up to 500ms to see if TopBar window appears
+        for (int i = 0; i < 5; ++i) {
+            Sleep(100);
+            hTopBar = FindWindowW(L"LikhiFloatingTopBar", nullptr);
+            if (hTopBar) {
+                int screen_w = GetSystemMetrics(SM_CXSCREEN);
+                PostMessageW(hTopBar, likhi::ModeIpc::GetShowTopBarMessage(), 0, 0);
+                SetWindowPos(hTopBar, HWND_TOPMOST, (screen_w - 262) / 2, 12, 262, 24, SWP_SHOWWINDOW);
+                ShowWindow(hTopBar, SW_SHOWNORMAL);
+                BringWindowToTop(hTopBar);
+                SetForegroundWindow(hTopBar);
+                if (g_engine) BanglaEngine_Destroy(g_engine);
+                if (single) CloseHandle(single);
+                if (gdiplusToken) Gdiplus::GdiplusShutdown(gdiplusToken);
+                return 0;
+            }
         }
-        return 0;
+
+        // No topbar exists! The previously running instance is headless or stuck.
+        // Terminate any orphaned likhi_universal.exe instance and take over!
+        DWORD myPid = GetCurrentProcessId();
+        HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (hSnap != INVALID_HANDLE_VALUE) {
+            PROCESSENTRY32W pe = { sizeof(pe) };
+            if (Process32FirstW(hSnap, &pe)) {
+                do {
+                    if (pe.th32ProcessID != myPid && _wcsicmp(pe.szExeFile, L"likhi_universal.exe") == 0) {
+                        HANDLE hP = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
+                        if (hP) {
+                            TerminateProcess(hP, 0);
+                            CloseHandle(hP);
+                        }
+                    }
+                } while (Process32NextW(hSnap, &pe));
+            }
+            CloseHandle(hSnap);
+        }
+        Sleep(100);
+        // Continue startup cleanly as active host!
     }
 
     WNDCLASSEXW window_class = {0};
@@ -1683,7 +1970,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command_line, int) {
     g_keyboard_hook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHookProc, instance, 0);
     g_mouse_hook = SetWindowsHookExW(WH_MOUSE_LL, MouseHookProc, instance, 0);
     Log("universal host started (hook=" + std::string(g_keyboard_hook ? "ok" : "FAILED") + ")");
-
     MSG message;
     while (GetMessageW(&message, nullptr, 0, 0) > 0) {
         TranslateMessage(&message);

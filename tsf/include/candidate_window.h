@@ -29,6 +29,9 @@ public:
     void SelectNext();
     void SelectPrev();
 
+    void SetPredictionMode(bool is_pred) { is_prediction_mode_ = is_pred; }
+    bool IsPredictionMode() const { return is_prediction_mode_; }
+
     // ---- microphone row (voice input) ----------------------------------
     // Off       : no microphone row at all
     // Ready     : idle microphone button (clickable, same as Ctrl+Alt+V)
@@ -113,6 +116,7 @@ private:
     RECT en_btn_rect_;
     bool bn_hovered_;
     bool en_hovered_;
+    bool is_prediction_mode_;
 
     // Voice (microphone) state. Declared last so the constructor's init list
     // order matches the declaration order.

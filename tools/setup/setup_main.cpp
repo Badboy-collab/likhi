@@ -113,6 +113,24 @@ static void WriteUniversalAutostart(const std::wstring& installDir, bool dry) {
                        (DWORD)((quoted.size() + 1) * sizeof(wchar_t)));
         RegCloseKey(keyM);
     }
+
+    // Also create startup shortcut in user Startup folder for 100% startup guarantee
+    wchar_t startupDir[MAX_PATH] = {0};
+    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_STARTUP, nullptr, 0, startupDir))) {
+        std::wstring linkPath = std::wstring(startupDir) + L"\\Likhi.lnk";
+        IShellLinkW* psl = nullptr;
+        if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_IShellLinkW, (void**)&psl))) {
+            psl->SetPath(exe.c_str());
+            psl->SetWorkingDirectory(installDir.c_str());
+            psl->SetDescription(L"Likhi Bangla Typing Host and TopBar");
+            IPersistFile* ppf = nullptr;
+            if (SUCCEEDED(psl->QueryInterface(IID_IPersistFile, (void**)&ppf))) {
+                ppf->Save(linkPath.c_str(), TRUE);
+                ppf->Release();
+            }
+            psl->Release();
+        }
+    }
 }
 
 static void RemoveUniversalAutostart(bool dry) {
@@ -121,6 +139,11 @@ static void RemoveUniversalAutostart(bool dry) {
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, kUniversalRunKey, 0, KEY_SET_VALUE, &key) == ERROR_SUCCESS) {
         RegDeleteValueW(key, kUniversalRunValue);
         RegCloseKey(key);
+    }
+    wchar_t startupDir[MAX_PATH] = {0};
+    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_STARTUP, nullptr, 0, startupDir))) {
+        std::wstring linkPath = std::wstring(startupDir) + L"\\Likhi.lnk";
+        DeleteFileW(linkPath.c_str());
     }
 }
 
@@ -660,7 +683,7 @@ static int DoInstall() {
                        << "  \"launch_startup\": true,\n"
                        << "  \"auto_check_update\": true,\n"
                        << "  \"show_topbar\": true,\n"
-                       << "  \"topbar_autohide\": false,\n"
+                       << "  \"topbar_autohide\": true,\n"
                        << "  \"input_mode\": \"universal\"\n"
                        << "}\n";
             }

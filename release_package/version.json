@@ -2,16 +2,16 @@
   "version": "1.1.0",
   "release_date": "2026-10-25",
   "download_url": "https://getlikhi.com/downloads/LikhiSetup.exe",
-  "sha256": "baf95285f710dec860125fcb4c9c18bfcf2213455078caacc701e98d58d85926",
-  "file_size": 21126919,
+  "sha256": "38036f02392bcf668b448d26f1c64dba854445556ca63702b79d05194650924b",
+  "file_size": 20420568,
   "changelog": [
-    "Hand Grab Cursor (IDC_HAND): Intuitive hand cursor on mouse hover over the floating TopBar so you can effortlessly grab and move it anywhere",
-    "Instant Bengali Tooltips: Instant on-hover tooltips on all icons explaining their exact function in Bengali (On-Screen Keyboard, Translation, Word Manager, Settings, etc.)",
-    "Ultra-Fast Voice Typing: Real-time Voice Activity Detection (VAD) auto-stops recording after 600ms silence, streaming trimmed audio to Gemini for near-instant typing",
-    "Soft Modern Sky Blue / Azure Gradient: Aesthetic, eye-friendly palette replacing harsh colors",
-    "Dedicated 1-Click Translation Icon [🌐]: Seamless instant 1-click mode switching between Bangla, English, and Banglish->English translation",
-    "Horizontal Auto-Hide with Expand Arrow (>>): Keeps the 4 core controls permanently visible while secondary tools collapse into the bar",
-    "100% Offline-first local typing engine with zero telemetry"
+    "Next-Word Prediction (পরবর্তী শব্দ সাজেশন): High-precision local bigram and context prediction right after words, with automatic dismissal when typing new letters",
+    "Curated Lexicon Cleanup: 86K+ authentic Bengali dictionary with slang and incorrect spellings purged",
+    "Kontho-Style Hover Tooltip Cards (LikhiTooltipCard): Dedicated pure-white cards with drop shadow, bold title, and comprehensive descriptions on hovering over TopBar icons",
+    "Restored TopBar Auto-Hide: Automatically collapses to compact mode (160px) when inactive and smoothly expands on hover, with dual-layer startup protection across PC restarts",
+    "1-Click Banglish -> English Translation Mode [Ctrl+Alt+E] with instant audio cues",
+    "Ultra-Fast Voice Typing [Ctrl+Alt+V] with real-time Voice Activity Detection (VAD)",
+    "100% Offline-first local typing engine with zero telemetry and zero IME pollution"
   ],
-  "size": 21126919
+  "size": 20420568
 }

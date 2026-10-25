@@ -162,5 +162,42 @@ private:
     bangla_tsf::VoiceConfig voice_config_;
 };
 
+enum MenuIconType {
+    kIconTray = 0,
+    kIconUpdate,
+    kIconRestart,
+    kIconExit,
+    kIconEngLayout,
+    kIconEngEnc,
+    kIconBnLayout,
+    kIconBnEnc,
+    kIconConverter,
+    kIconKeyboard,
+    kIconSettings,
+    kIconDict,
+    kIconAbout,
+    kIconHelp,
+    kIconCompact,
+    kIconAutoHide,
+    kIconAddWord,
+    kIconInfo,
+    kIconVersion,
+    kIconLogs,
+    kIconKey,
+    kIconClean,
+    kIconMap,
+    kIconDownload,
+    kIconGithub,
+    kIconFacebook,
+    kIconYoutube,
+    kIconWhatsapp,
+    kIconTelegram,
+    kIconEmail,
+    kIconMic,
+    kIconCount
+};
+
+void SetMenuItemIcon(HMENU hMenu, UINT idOrPos, bool byPos, MenuIconType iconType);
+
 } // namespace universal
 } // namespace likhi

@@ -92,7 +92,7 @@ std::vector<LexiconEntry> LexiconTrie::SearchPrefix(const std::string& prefix, s
         ++it;
     }
 
-    std::sort(results.begin(), results.end(), [](const LexiconEntry& a, const LexiconEntry& b) {
+    std::stable_sort(results.begin(), results.end(), [](const LexiconEntry& a, const LexiconEntry& b) {
         return a.frequency > b.frequency;
     });
 
@@ -139,7 +139,7 @@ std::vector<LexiconEntry> LexiconTrie::SearchRoman(const std::string& roman_pref
         }
     }
 
-    std::sort(results.begin(), results.end(), [](const LexiconEntry& a, const LexiconEntry& b) {
+    std::stable_sort(results.begin(), results.end(), [](const LexiconEntry& a, const LexiconEntry& b) {
         return a.frequency > b.frequency;
     });
 

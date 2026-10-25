@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <tlhelp32.h>
 #include <windowsx.h>
 #include <commctrl.h>
 #include <uxtheme.h>
@@ -14,9 +15,7 @@
 #include "update_service.h"
 #include "likhi_mode_ipc.h"
 
-#pragma comment(lib, "uxtheme.lib")
-#pragma comment(lib, "dwmapi.lib")
-#pragma comment(lib, "comctl32.lib")
+
 
 static std::wstring ToBengaliDigits(const std::wstring& s) {
     std::wstring res;
@@ -109,7 +108,7 @@ struct AppSettings {
     // 0 = automatic (TSF where it works, universal elsewhere), 1 = tsf_only, 2 = universal
     int input_mode = 0;
     bool show_topbar = true;
-    bool topbar_autohide = false;
+    bool topbar_autohide = true;
     int topbar_x = -1;
     int topbar_y = 10;
 };
@@ -714,8 +713,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             hLblStatus = CreateWindowW(L"STATIC", L"Likhi প্রস্তুত।", WS_VISIBLE | WS_CHILD | SS_LEFT, 25, 492, 480, 26, hWnd, (HMENU)IDC_LBL_STATUS, NULL, NULL);
             SendMessage(hLblStatus, WM_SETFONT, (WPARAM)hFontBody, TRUE);
 
-            HWND hBtnSave = CreateWindowW(L"BUTTON", L"সংরক্ষণ করুন (Save)", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 520, 485, 180, 40, hWnd, (HMENU)IDC_BTN_SAVE, NULL, NULL);
-            HWND hBtnClose = CreateWindowW(L"BUTTON", L"বন্ধ করুন", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 710, 485, 100, 40, hWnd, (HMENU)IDC_BTN_CLOSE, NULL, NULL);
+            CreateWindowW(L"BUTTON", L"সংরক্ষণ করুন (Save)", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 520, 485, 180, 40, hWnd, (HMENU)IDC_BTN_SAVE, NULL, NULL);
+            CreateWindowW(L"BUTTON", L"বন্ধ করুন", WS_VISIBLE | WS_CHILD | BS_OWNERDRAW, 710, 485, 100, 40, hWnd, (HMENU)IDC_BTN_CLOSE, NULL, NULL);
 
             SwitchSection(hWnd, g_active_section);
             break;
@@ -886,96 +885,87 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 break;
             }
 
-            if (wmId == IDC_BTN_SHOW_TOPBAR) {
+            if (wmId == IDC_BTN_SHOW_TOPBAR || wmId == IDC_BTN_RESET_TOPBAR) {
                 g_settings.show_topbar = true;
-                g_settings.topbar_autohide = false;
-                SaveSettings();
-                HWND hChk = GetDlgItem(hWnd, IDC_CHK_ALWAYS_TOPBAR);
-                if (hChk) SendMessage(hChk, BM_SETCHECK, BST_CHECKED, 0);
-
-                HWND hTopBar = FindWindowW(L"LikhiFloatingTopBar", nullptr);
-                if (!hTopBar) {
-                    wchar_t exePath[MAX_PATH] = {0};
-                    GetModuleFileNameW(nullptr, exePath, MAX_PATH);
-                    std::wstring dir = exePath;
-                    size_t slash = dir.find_last_of(L"\\/");
-                    if (slash != std::wstring::npos) dir = dir.substr(0, slash);
-                    std::wstring uniPath = dir + L"\\likhi_universal.exe";
-                    if (GetFileAttributesW(uniPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
-                        ShellExecuteW(nullptr, L"open", uniPath.c_str(), nullptr, dir.c_str(), SW_SHOW);
-                    } else {
-                        wchar_t appdata[MAX_PATH] = {0};
-                        if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, appdata))) {
-                            std::wstring adUni = std::wstring(appdata) + L"\\PC-Bangla-Typing-App\\likhi_universal.exe";
-                            if (GetFileAttributesW(adUni.c_str()) != INVALID_FILE_ATTRIBUTES) {
-                                ShellExecuteW(nullptr, L"open", adUni.c_str(), nullptr, nullptr, SW_SHOW);
-                            }
-                        }
-                    }
-                }
-                PostMessageW(HWND_BROADCAST, likhi::ModeIpc::GetShowTopBarMessage(), 0, 0);
-                for (int attempt = 0; attempt < 10; ++attempt) {
-                    hTopBar = FindWindowW(L"LikhiFloatingTopBar", nullptr);
-                    if (hTopBar) {
-                        ShowWindow(hTopBar, SW_SHOW);
-                        SetWindowPos(hTopBar, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-                        SetForegroundWindow(hTopBar);
-                        break;
-                    }
-                    Sleep(100);
-                }
-                SetWindowTextW(hLblStatus, L"🪟 টপবার সফলভাবে স্ক্রিনে চালু ও প্রদর্শন করা হয়েছে!");
-                break;
-            } else if (wmId == IDC_BTN_RESET_TOPBAR) {
-                g_settings.show_topbar = true;
-                g_settings.topbar_autohide = false;
+                // preserve topbar_autohide
                 int screen_w = GetSystemMetrics(SM_CXSCREEN);
-                g_settings.topbar_x = (screen_w - 242) / 2;
-                g_settings.topbar_y = 6;
+                if (wmId == IDC_BTN_RESET_TOPBAR || g_settings.topbar_x < 10 || g_settings.topbar_x > screen_w - 272) {
+                    g_settings.topbar_x = (screen_w - 262) / 2;
+                    g_settings.topbar_y = 12;
+                }
                 SaveSettings();
                 HWND hChk = GetDlgItem(hWnd, IDC_CHK_ALWAYS_TOPBAR);
-                if (hChk) SendMessage(hChk, BM_SETCHECK, BST_CHECKED, 0);
+                if (hChk) SendMessage(hChk, BM_SETCHECK, !g_settings.topbar_autohide ? BST_CHECKED : BST_UNCHECKED, 0);
 
                 HWND hTopBar = FindWindowW(L"LikhiFloatingTopBar", nullptr);
-                if (!hTopBar) {
-                    wchar_t exePath[MAX_PATH] = {0};
-                    GetModuleFileNameW(nullptr, exePath, MAX_PATH);
-                    std::wstring dir = exePath;
-                    size_t slash = dir.find_last_of(L"\\/");
-                    if (slash != std::wstring::npos) dir = dir.substr(0, slash);
-                    std::wstring uniPath = dir + L"\\likhi_universal.exe";
-                    if (GetFileAttributesW(uniPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
-                        ShellExecuteW(nullptr, L"open", uniPath.c_str(), nullptr, dir.c_str(), SW_SHOW);
-                    } else {
-                        wchar_t appdata[MAX_PATH] = {0};
-                        if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, appdata))) {
-                            std::wstring adUni = std::wstring(appdata) + L"\\PC-Bangla-Typing-App\\likhi_universal.exe";
-                            if (GetFileAttributesW(adUni.c_str()) != INVALID_FILE_ATTRIBUTES) {
-                                ShellExecuteW(nullptr, L"open", adUni.c_str(), nullptr, nullptr, SW_SHOW);
-                            }
+                if (hTopBar) {
+                    ShowWindow(hTopBar, SW_SHOWNORMAL);
+                    SetWindowPos(hTopBar, HWND_TOPMOST, g_settings.topbar_x, g_settings.topbar_y, 262, 24, SWP_SHOWWINDOW);
+                    BringWindowToTop(hTopBar);
+                    SetForegroundWindow(hTopBar);
+                    PostMessageW(hTopBar, likhi::ModeIpc::GetShowTopBarMessage(), 0, 0);
+                    SetWindowTextW(hLblStatus, L"🪟 টপবার সফলভাবে দৃশ্যমান করা হয়েছে!");
+                } else {
+                    // TopBar window does NOT exist. If an old/stuck likhi_universal is holding the mutex, terminate it!
+                    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+                    if (hSnap != INVALID_HANDLE_VALUE) {
+                        PROCESSENTRY32W pe = { sizeof(pe) };
+                        if (Process32FirstW(hSnap, &pe)) {
+                            do {
+                                if (_wcsicmp(pe.szExeFile, L"likhi_universal.exe") == 0) {
+                                    HANDLE hP = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
+                                    if (hP) {
+                                        TerminateProcess(hP, 0);
+                                        CloseHandle(hP);
+                                    }
+                                }
+                            } while (Process32NextW(hSnap, &pe));
+                        }
+                        CloseHandle(hSnap);
+                    }
+                    Sleep(200);
+
+                    // Launch the fresh likhi_universal.exe
+                    wchar_t appdata[MAX_PATH] = {0};
+                    std::wstring uniPath;
+                    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, appdata))) {
+                        std::wstring adUni = std::wstring(appdata) + L"\\PC-Bangla-Typing-App\\likhi_universal.exe";
+                        if (GetFileAttributesW(adUni.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                            uniPath = adUni;
                         }
                     }
-                }
-                PostMessageW(HWND_BROADCAST, likhi::ModeIpc::GetResetTopBarMessage(), 0, 0);
-                for (int attempt = 0; attempt < 10; ++attempt) {
-                    hTopBar = FindWindowW(L"LikhiFloatingTopBar", nullptr);
-                    if (hTopBar) {
-                        ShowWindow(hTopBar, SW_SHOW);
-                        SetWindowPos(hTopBar, HWND_TOPMOST, (screen_w - 242) / 2, 6, 242, 24, SWP_SHOWWINDOW);
-                        SetForegroundWindow(hTopBar);
-                        break;
+                    if (uniPath.empty()) {
+                        wchar_t exePath[MAX_PATH] = {0};
+                        GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+                        std::wstring dir = exePath;
+                        size_t slash = dir.find_last_of(L"\\/");
+                        if (slash != std::wstring::npos) dir = dir.substr(0, slash);
+                        uniPath = dir + L"\\likhi_universal.exe";
                     }
-                    Sleep(100);
-                }
-                SetWindowTextW(hLblStatus, L"🔄 টপবার স্ক্রিনের কেন্দ্রবিন্দুতে রিসেট করা হয়েছে।");
-                break;
-            } else if (wmId == IDC_CHK_ALWAYS_TOPBAR) {
-                HWND hChk = GetDlgItem(hWnd, IDC_CHK_ALWAYS_TOPBAR);
-                bool always_show = (SendMessage(hChk, BM_GETCHECK, 0, 0) == BST_CHECKED);
-                g_settings.topbar_autohide = !always_show;
-                SaveSettings();
-                if (always_show) {
-                    PostMessageW(HWND_BROADCAST, likhi::ModeIpc::GetShowTopBarMessage(), 0, 0);
+
+                    if (!uniPath.empty()) {
+                        ShellExecuteW(nullptr, L"open", uniPath.c_str(), nullptr, nullptr, SW_SHOW);
+                    }
+
+                    // Wait for window to appear
+                    bool appeared = false;
+                    for (int attempt = 0; attempt < 25; ++attempt) {
+                        Sleep(100);
+                        hTopBar = FindWindowW(L"LikhiFloatingTopBar", nullptr);
+                        if (hTopBar) {
+                            ShowWindow(hTopBar, SW_SHOWNORMAL);
+                            SetWindowPos(hTopBar, HWND_TOPMOST, g_settings.topbar_x, g_settings.topbar_y, 262, 24, SWP_SHOWWINDOW);
+                            BringWindowToTop(hTopBar);
+                            SetForegroundWindow(hTopBar);
+                            appeared = true;
+                            break;
+                        }
+                    }
+                    if (appeared) {
+                        SetWindowTextW(hLblStatus, L"🪟 টপবার সফলভাবে চালু ও প্রদর্শন করা হয়েছে!");
+                    } else {
+                        SetWindowTextW(hLblStatus, L"⚠️ টপবার চালু করা হয়েছে (ট্রে আইকন প্রস্তুত)।");
+                    }
                 }
                 break;
             } else if (wmId == IDC_BTN_REMOVE_TSF) {
@@ -984,55 +974,24 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 std::wstring dir = exePath;
                 size_t slash = dir.find_last_of(L"\\/");
                 if (slash != std::wstring::npos) dir = dir.substr(0, slash);
-                std::wstring dllPath = dir + L"\\bangla_tsf.dll";
-                if (GetFileAttributesW(dllPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
-                    typedef HRESULT (STDAPICALLTYPE *DllUnregFn)();
-                    HMODULE hDll = LoadLibraryW(dllPath.c_str());
-                    if (hDll) {
-                        DllUnregFn pFn = (DllUnregFn)GetProcAddress(hDll, "DllUnregisterServer");
-                        if (pFn) pFn();
-                        FreeLibrary(hDll);
-                    }
+                std::wstring regExe = dir + L"\\likhi_setup.exe";
+
+                // Fallback to release_package or install dir if not found next to settings
+                if (GetFileAttributesW(regExe.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                    regExe = L"C:\\Program Files\\Likhi\\likhi_setup.exe";
                 }
-                HKEY hKey = nullptr;
-                if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Control Panel\\International\\User Profile", 0, KEY_ALL_ACCESS, &hKey) == ERROR_SUCCESS) {
-                    wchar_t buf[1024] = {0};
-                    DWORD sz = sizeof(buf);
-                    if (RegQueryValueExW(hKey, L"Languages", nullptr, nullptr, (LPBYTE)buf, &sz) == ERROR_SUCCESS) {
-                        std::vector<std::wstring> langs;
-                        const wchar_t* p = buf;
-                        while (*p) {
-                            std::wstring s(p);
-                            if (s != L"bn-BD" && s != L"bn" && s != L"bn-IN") {
-                                langs.push_back(s);
-                            }
-                            p += s.length() + 1;
-                        }
-                        if (langs.empty()) langs.push_back(L"en-US");
-                        std::vector<wchar_t> multi_sz;
-                        for (const auto& l : langs) {
-                            for (wchar_t c : l) multi_sz.push_back(c);
-                            multi_sz.push_back(L'\0');
-                        }
-                        multi_sz.push_back(L'\0');
-                        RegSetValueExW(hKey, L"Languages", 0, REG_MULTI_SZ, (const BYTE*)multi_sz.data(), (DWORD)(multi_sz.size() * sizeof(wchar_t)));
-                    }
-                    RegCloseKey(hKey);
+
+                if (GetFileAttributesW(regExe.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                    ShellExecuteW(nullptr, L"runas", regExe.c_str(), L"--clean-tsf", nullptr, SW_SHOW);
+                    SetWindowTextW(hLblStatus, L"🧹 টিএসএফ প্রোফাইল অপসারণ কমান্ড পাঠানো হয়েছে।");
+                } else {
+                    // Direct registry cleanup via powershell elevation
+                    ShellExecuteW(nullptr, L"runas", L"powershell.exe",
+                        L"-WindowStyle Hidden -Command \"Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\CTF\\TIP\\{B4F1470A-7E59-4D6F-B937-2A581F7D4E12}\\LanguageProfile\\0x00000445\\{B4F1470B-7E59-4D6F-B937-2A581F7D4E12}' -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue; [Microsoft.VisualBasic.Interaction]::MsgBox('উইন্ডোজ টিএসএফ লেআউট পরিষ্কার সম্পন্ন!', 64, 'Likhi Clean Layout')\"",
+                        nullptr, SW_HIDE);
+                    SetWindowTextW(hLblStatus, L"🧹 টিএসএফ লেআউট পরিষ্কার কমান্ড কার্যকর করা হয়েছে।");
                 }
-                RegDeleteTreeW(HKEY_CURRENT_USER, L"Control Panel\\International\\User Profile\\bn-BD");
-
-                g_settings.input_mode = 2;
-                SaveSettings();
-
-                SetWindowTextW(hLblStatus, L"✅ উইন্ডোজ কীবোর্ড লেআউট সরানো হয়েছে! Likhi এখন বিশুদ্ধ ট্রে আইকন মোডে রয়েছে।");
-                MessageBoxW(hWnd,
-                    L"উইন্ডোজের কীবোর্ড তালিকা (Win + Space) থেকে Likhi সফলভাবে সরানো হয়েছে।\n\n"
-                    L"এখন Likhi কণ্ঠ (Kontho)-এর মতো বিশুদ্ধ নোটিফিকেশন ট্রে আইকন ও টপবার মোডে চলবে। যেকোনো অ্যাপে বাংলা লিখতে F12 বা Ctrl+Alt+Space ব্যবহার করুন।",
-                    L"স্বাধীন ট্রে আইকন মোড (Icon Mode Active)", MB_OK | MB_ICONINFORMATION);
-                break;
-            }
-
-            if (wmId == IDC_BTN_SAVE) {
+            } else if (wmId == IDC_BTN_SAVE) {
                 HWND hChkLikhi = GetDlgItem(hWnd, IDC_CHK_ENABLE_LIKHI);
                 HWND hChkStart = GetDlgItem(hWnd, IDC_CHK_STARTUP);
                 HWND hChkAutoUpd = GetDlgItem(hWnd, IDC_CHK_AUTO_UPDATE);
@@ -1060,6 +1019,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 g_settings.online_suggestions = (SendMessage(GetDlgItem(hWnd, IDC_CHK_ONLINE_SUG), BM_GETCHECK, 0, 0) == BST_CHECKED);
                 g_settings.personal_learning = (SendMessage(GetDlgItem(hWnd, IDC_CHK_PERS_LEARN), BM_GETCHECK, 0, 0) == BST_CHECKED);
 
+                HWND hChkTop = GetDlgItem(hWnd, IDC_CHK_ALWAYS_TOPBAR);
+                if (hChkTop) {
+                    g_settings.show_topbar = (SendMessage(hChkTop, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                    g_settings.topbar_autohide = !g_settings.show_topbar;
+                }
+
                 if (SendMessage(GetDlgItem(hWnd, IDC_RADIO_CAND3), BM_GETCHECK, 0, 0) == BST_CHECKED) g_settings.max_candidates = 3;
                 else if (SendMessage(GetDlgItem(hWnd, IDC_RADIO_CAND4), BM_GETCHECK, 0, 0) == BST_CHECKED) g_settings.max_candidates = 4;
                 else g_settings.max_candidates = 5;
@@ -1075,7 +1040,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 else g_settings.input_mode = 0;
 
                 SaveSettings();
-                SetWindowTextW(hLblStatus, L"✅ সেটিংস সফলভাবে সংরক্ষিত হয়েছে!");
+                SetWindowTextW(hLblStatus, L"✅ সেটিংস সফলভাবে সংরক্ষণ করা হয়েছে!");
             } else if (wmId == IDC_BTN_RESET_LEARN) {
                 int confirm = MessageBoxW(hWnd,
                     L"আপনি কি নিশ্চিত যে আপনি টাইপিং থেকে স্বয়ংক্রিয়ভাবে শেখা অভ্যাসসমূহ রিসেট করতে চান?\n\n(আপনার নিজস্ব কাস্টম শব্দভাণ্ডার/Personal Dictionary সম্পূর্ণ নিরাপদ ও অক্ষত থাকবে।)",
@@ -1090,7 +1055,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     MessageBoxW(hWnd, L"ব্যক্তিগত শেখা অভ্যাস সফলভাবে রিসেট করা হয়েছে।\n\nআপনার নিজস্ব কাস্টম শব্দভাণ্ডার সম্পূর্ণ অক্ষত রয়েছে।", L"Likhi Personal Learning", MB_OK | MB_ICONINFORMATION);
                 }
             } else if (wmId == IDC_BTN_CLOSE) {
-                PostQuitMessage(0);
+                DestroyWindow(hWnd);
             } else if (wmId == IDC_BTN_ADD_WORD) {
                 wchar_t r_buf[128] = {0}, b_buf[128] = {0};
                 GetWindowTextW(hEditRoman, r_buf, 128);
