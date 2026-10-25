@@ -29,7 +29,7 @@ import deploy_theme as dt  # reuse the proven FTPS config/connection helpers
 DEFAULT_LOCAL = os.path.join(dt.REPO_ROOT, "release_package", "LikhiSetup.exe")
 VERSION_LOCAL = os.path.join(dt.REPO_ROOT, "release_package", "version.json")
 EXPECTED_SIZE = 21117191
-EXPECTED_SHA256 = "0c7491bbcfd2709c3562fe2637384a3db2ded1ed8db58a8de71ade07746f2def"
+EXPECTED_SHA256 = "18e0d955525cd85d1980571efa8ad1a9af2b93644df91b0af6200b360b667e67"
 EXPECTED_DOCUMENT_ROOT = "/home/shohojba/getlikhi.com"
 EXPECTED_INSTALLER_DIRECTORY = posixpath.join(EXPECTED_DOCUMENT_ROOT, "downloads")
 REMOTE_PATH = "/LikhiSetup.exe"
@@ -147,6 +147,9 @@ def main():
     ftp = None
     try:
         ftp = dt.connect_ftp(config)
+        ftp.timeout = 300
+        if getattr(ftp, 'sock', None):
+            ftp.sock.settimeout(300)
         print("\n  [OK] Connected (FTPS).")
         dt.ensure_remote_dir(ftp, config["remote_dir"])
 
@@ -163,7 +166,7 @@ def main():
                 def on_chunk(chunk):
                     bf.write(chunk)
                     bak_digest.update(chunk)
-                ftp.retrbinary(f"RETR {remote_path}", on_chunk)
+                ftp.retrbinary(f"RETR {remote_path}", on_chunk, blocksize=65536)
             print(f"  [BACKUP] Saved to {bak_path}")
             print(f"  [BACKUP] Old remote SHA-256: {bak_digest.hexdigest()}")
 
@@ -176,7 +179,7 @@ def main():
             print(f"  [BACKUP] Saved remote version.json to {v_bak_path}")
 
         with open(args.file, "rb") as f:
-            ftp.storbinary(f"STOR {remote_name}", f)
+            ftp.storbinary(f"STOR {remote_name}", f, blocksize=65536)
         print(f"  [OK] Uploaded {remote_name}")
 
         if os.path.exists(VERSION_LOCAL):

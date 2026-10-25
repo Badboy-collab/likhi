@@ -108,6 +108,7 @@ likhi::universal::TopBarWindow g_topbar;
 likhi::universal::VirtualKeyboardWindow g_osk;
 bangla_tsf::CandidateWindow g_candidate_window;
 std::vector<std::wstring> g_current_candidates;
+static POINT g_last_click_pt = {0, 0};
 bool g_show_topbar = true;
 int g_topbar_x = -1;
 int g_topbar_y = 10;
@@ -460,24 +461,50 @@ RECT GetCurrentCaretRect() {
         DWORD thread_id = GetWindowThreadProcessId(fg, nullptr);
         GUITHREADINFO gti = {sizeof(GUITHREADINFO)};
         if (GetGUIThreadInfo(thread_id, &gti)) {
-            if (gti.hwndCaret) {
+            // 1. Genuine Win32 Caret (Notepad, Word, native inputs)
+            if (gti.hwndCaret && (gti.rcCaret.left != 0 || gti.rcCaret.top != 0 ||
+                                  gti.rcCaret.right != 0 || gti.rcCaret.bottom != 0)) {
                 rc = gti.rcCaret;
                 ClientToScreen(gti.hwndCaret, (LPPOINT)&rc.left);
                 ClientToScreen(gti.hwndCaret, (LPPOINT)&rc.right);
+                return rc;
             } else if (gti.hwndFocus) {
-                GetWindowRect(gti.hwndFocus, &rc);
-                rc.bottom = rc.top + 20;
-                rc.right = rc.left + 5;
+                RECT rcFocus = {0};
+                GetWindowRect(gti.hwndFocus, &rcFocus);
+                int fw = rcFocus.right - rcFocus.left;
+                int fh = rcFocus.bottom - rcFocus.top;
+                // Only treat hwndFocus as an edit box if it has reasonable control dimensions!
+                // In Chrome, Edge, Electron, hwndFocus is the whole 1920x1000 web canvas!
+                if (fw > 15 && fh > 10 && !(fw > 400 && fh > 250)) {
+                    rc = rcFocus;
+                    rc.bottom = rc.top + (fh > 40 ? 25 : fh);
+                    rc.right = rc.left + 5;
+                    return rc;
+                }
             }
         }
     }
-    if (rc.left == 0 && rc.right == 0 && rc.top == 0 && rc.bottom == 0) {
-        POINT pt;
-        GetCursorPos(&pt);
+
+    // 2. Chrome / Edge / Gemini / Web fallback: Use the exact click point where the user focused the input!
+    if (fg && (g_last_click_pt.x != 0 || g_last_click_pt.y != 0)) {
+        RECT fg_rc = {0};
+        GetWindowRect(fg, &fg_rc);
+        if (PtInRect(&fg_rc, g_last_click_pt)) {
+            rc.left = g_last_click_pt.x;
+            rc.top = g_last_click_pt.y;
+            rc.right = g_last_click_pt.x + 2;
+            rc.bottom = g_last_click_pt.y + 24;
+            return rc;
+        }
+    }
+
+    // 3. Fallback to current cursor position
+    POINT pt;
+    if (GetCursorPos(&pt)) {
         rc.left = pt.x;
         rc.top = pt.y;
         rc.right = pt.x + 2;
-        rc.bottom = pt.y + 20;
+        rc.bottom = pt.y + 24;
     }
     return rc;
 }
@@ -775,7 +802,12 @@ LRESULT CALLBACK MouseHookProc(int code, WPARAM wparam, LPARAM lparam) {
     if (code == HC_ACTION) {
         const MSLLHOOKSTRUCT* ms = reinterpret_cast<MSLLHOOKSTRUCT*>(lparam);
         switch (wparam) {
-            case WM_LBUTTONDOWN: case WM_RBUTTONDOWN: case WM_MBUTTONDOWN:
+            case WM_LBUTTONDOWN:
+                if (ms) {
+                    g_last_click_pt = ms->pt;
+                }
+                // fall through
+            case WM_RBUTTONDOWN: case WM_MBUTTONDOWN:
             case WM_MOUSEWHEEL:  case WM_MOUSEHWHEEL: {
                 if (ms && g_candidate_window.IsVisible()) {
                     HWND pt_wnd = WindowFromPoint(ms->pt);

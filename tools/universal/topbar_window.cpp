@@ -382,6 +382,7 @@ bool TopBarWindow::Initialize(HINSTANCE hInstance, HWND parentHwnd) {
 
     InitTooltips(hwnd_);
     SetTimer(hwnd_, kTimerAutoHide, 100, nullptr);
+    ExpandToFull();
 
     return true;
 }
@@ -634,6 +635,12 @@ void TopBarWindow::SaveCoordinates() {
 
 void TopBarWindow::CheckAutoHide() {
     if (!is_visible_ || is_dragging_) return;
+    if (!auto_hide_enabled_ && !is_compact_mode_) {
+        if (is_collapsed_ || width_ < kNormalWidth) {
+            ExpandToFull();
+        }
+        return;
+    }
 
     POINT pt;
     GetCursorPos(&pt);

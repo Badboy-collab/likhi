@@ -2,7 +2,7 @@
   "version": "1.1.0",
   "release_date": "2026-10-25",
   "download_url": "https://getlikhi.com/downloads/LikhiSetup.exe",
-  "sha256": "0c7491bbcfd2709c3562fe2637384a3db2ded1ed8db58a8de71ade07746f2def",
+  "sha256": "18e0d955525cd85d1980571efa8ad1a9af2b93644df91b0af6200b360b667e67",
   "file_size": 21117191,
   "changelog": [
     "Hand Grab Cursor (IDC_HAND): Intuitive hand cursor on mouse hover over the floating TopBar so you can effortlessly grab and move it anywhere",

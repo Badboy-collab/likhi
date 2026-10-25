@@ -1009,3 +1009,16 @@ shunbo	শুনবো
 dekhbo	দেখব
 dekhbo	দেখবো
 
+topbar	টপবার
+top	টপ
+jamon	যেমন
+jemor	যেমন
+dorkar	দরকার
+porishrom	পরিশ্রম
+porishromi	পরিশ্রমী
+bhalobashi	ভালোবাসি
+bhalobasho	ভালোবাসো
+bhalobasha	ভালোবাসা
+likhi	লিখি
+app	অ্যাপ
+apps	অ্যাপস
